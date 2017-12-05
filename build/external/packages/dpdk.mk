@@ -201,10 +201,11 @@ $(B)/custom-config: $(B)/.patch.ok Makefile
 	$(call set,RTE_LIBRTE_MLX5_DLOPEN_DEPS,$(DPDK_MLX5_PMD_DLOPEN_DEPS))
 	$(call set,RTE_LIBRTE_PMD_TAP,$(DPDK_TAP_PMD))
 	$(call set,RTE_LIBRTE_PMD_FAILSAFE,$(DPDK_FAILSAFE_PMD))
+	@# required for UPF
+	$(call set,RTE_LIBRTE_ACL,y)
 	@# not needed
 	$(call set,RTE_LIBRTE_CFGFILE,n)
 	$(call set,RTE_LIBRTE_LPM,n)
-	$(call set,RTE_LIBRTE_ACL,n)
 	$(call set,RTE_LIBRTE_POWER,n)
 	$(call set,RTE_LIBRTE_DISTRIBUTOR,n)
 	$(call set,RTE_LIBRTE_PORT,n)
