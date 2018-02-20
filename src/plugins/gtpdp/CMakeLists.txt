@@ -111,6 +111,7 @@ if(DPDK_INCLUDE_DIR AND DPDK_LIB)
     gtpu_encap.c
     gtpu_decap.c
     gtpdp_if_input.c
+    gtpdp_classify.c
     pfcp.c
     gtpdp_sx.c
     gtpdp_sx_api.c
