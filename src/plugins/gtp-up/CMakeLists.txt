@@ -103,33 +103,33 @@ if(DPDK_INCLUDE_DIR AND DPDK_LIB)
     message(STATUS "DPDK depends on libmnl (Mellanox PMD requirement)")
   endif()
   set(DPDK_LINK_FLAGS "${DPDK_LINK_FLAGS} -Wl,-lnuma")
-  add_vpp_plugin(gtpu
+  add_vpp_plugin(gtp_up
     SOURCES
     node.c
-    gtpdp.c
-    gtpdp_api.c
+    gtp_up.c
+    gtp_up_api.c
     gtpu_encap.c
     gtpu_decap.c
-    gtpdp_if_input.c
-    gtpdp_classify.c
+    gtp_up_if_input.c
+    gtp_up_classify.c
     pfcp.c
-    gtpdp_sx.c
-    gtpdp_sx_api.c
-    gtpdp_sx_server.c
+    gtp_up_sx.c
+    gtp_up_sx_api.c
+    gtp_up_sx_server.c
 
     API_FILES
-    gtpdp.api
+    gtp_up.api
 
     INSTALL_HEADERS
-    gtpdp.h
-    gtpdp_all_api_h.h
-    gtpdp_msg_enum.h
+    gtp_up.h
+    gtp_up_all_api_h.h
+    gtp_up_msg_enum.h
     pfcp.h
-    gtpdp_sx.h
-    gtpdp_sx_api.h
+    gtp_up_sx.h
+    gtp_up_sx_api.h
 
     API_TEST_SOURCES
-    gtpdp_test.c
+    gtp_up_test.c
   )
 else()
   message(WARNING "DPDK not found - GTP UPF disabled")
