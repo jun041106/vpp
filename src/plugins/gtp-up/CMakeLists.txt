@@ -115,6 +115,7 @@ if(DPDK_INCLUDE_DIR AND DPDK_LIB)
     pfcp.c
     gtp_up_sx.c
     gtp_up_sx_api.c
+    gtp_up_sx_input.c
     gtp_up_sx_server.c
 
     API_FILES
