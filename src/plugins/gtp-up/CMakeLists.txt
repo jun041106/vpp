@@ -117,6 +117,7 @@ if(DPDK_INCLUDE_DIR AND DPDK_LIB)
     gtp_up_sx_api.c
     gtp_up_sx_input.c
     gtp_up_sx_server.c
+    gtp_up_http_redirect_server.c
 
     API_FILES
     gtp_up.api
@@ -128,6 +129,7 @@ if(DPDK_INCLUDE_DIR AND DPDK_LIB)
     pfcp.h
     gtp_up_sx.h
     gtp_up_sx_api.h
+    gtp_up_http_redirect_server.h
 
     API_TEST_SOURCES
     gtp_up_test.c
