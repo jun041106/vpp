@@ -2,7 +2,7 @@ FROM ubuntu:xenial AS build-env
 
 RUN mkdir /src && \
     apt-get update && apt-get dist-upgrade -yy && apt install -yy build-essential sudo
-ADD . /src/vpp
+ADD .. /src/vpp
 RUN cd /src/vpp && ls -lR && \
     make UNATTENDED=yes install-dep && \
     make pkg-deb V=1
