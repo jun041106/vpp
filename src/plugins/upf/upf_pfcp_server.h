@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-#ifndef _GTP_UP_SX_SERVER_H
-#define _GTP_UP_SX_SERVER_H
+#ifndef _UPF_SX_SERVER_H
+#define _UPF_SX_SERVER_H
 
 #include <time.h>
 #include "pfcp.h"
@@ -71,11 +71,11 @@ extern vlib_node_registration_t sx6_input_node;
 
 #define UDP_DST_PORT_SX 8805
 
-void gtp_up_sx_send_data (sx_msg_t * msg);
-void gtp_up_sx_server_notify (sx_msg_t * msg);
+void upf_pfcp_send_data (sx_msg_t * msg);
+void upf_pfcp_server_notify (sx_msg_t * msg);
 
-void gtp_up_sx_handle_input (vlib_main_t * vm, vlib_buffer_t *b, int is_ip4);
+void upf_pfcp_handle_input (vlib_main_t * vm, vlib_buffer_t *b, int is_ip4);
 
 clib_error_t * sx_server_main_init (vlib_main_t * vm);
 
-#endif /* _GTP_UP_SX_SERVER_H */
+#endif /* _UPF_SX_SERVER_H */

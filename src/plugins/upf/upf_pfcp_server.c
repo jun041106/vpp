@@ -14,7 +14,7 @@
  */
 
 /** @file
-    udp gtp_up_sx server
+    udp upf_pfcp server
 */
 
 #include <vnet/ip/ip.h>
@@ -27,8 +27,8 @@
 
 #include <vppinfra/bihash_template.c>
 
-#include "gtp_up_sx_server.h"
-#include "gtp_up_sx_api.h"
+#include "upf_pfcp_server.h"
+#include "upf_pfcp_api.h"
 
 #if CLIB_DEBUG > 0
 #define gtp_debug clib_warning
@@ -47,7 +47,7 @@ sx_server_main_t sx_server_main;
 
 #define MAX_HDRS_LEN    100	/* Max number of bytes for headers */
 
-void gtp_up_sx_send_data (sx_msg_t * msg)
+void upf_pfcp_send_data (sx_msg_t * msg)
 {
   vlib_main_t *vm = vlib_get_main ();
   vlib_buffer_free_list_t *fl;
@@ -124,7 +124,7 @@ sx_process (vlib_main_t * vm,
 	      {
 		sx_msg_t * msg = (sx_msg_t *)event_data[i];
 
-		gtp_up_sx_handle_msg(msg);
+		upf_pfcp_handle_msg(msg);
 		sx_msg_free(msg);
 	      }
 	    break;
@@ -136,7 +136,7 @@ sx_process (vlib_main_t * vm,
 	      {
 		sx_msg_t * msg = (sx_msg_t *)event_data[i];
 
-		gtp_up_sx_send_data(msg);
+		upf_pfcp_send_data(msg);
 		sx_msg_free(msg);
 	      }
 	    break;
@@ -163,7 +163,7 @@ sx_process (vlib_main_t * vm,
   return (0);
 }
 
-void gtp_up_sx_handle_input (vlib_main_t * vm, vlib_buffer_t *b, int is_ip4)
+void upf_pfcp_handle_input (vlib_main_t * vm, vlib_buffer_t *b, int is_ip4)
 {
   sx_server_main_t *sx = &sx_server_main;
   udp_header_t *udp;
@@ -212,7 +212,7 @@ void gtp_up_sx_handle_input (vlib_main_t * vm, vlib_buffer_t *b, int is_ip4)
 }
 
 void
-gtp_up_sx_server_notify(sx_msg_t * msg)
+upf_pfcp_server_notify(sx_msg_t * msg)
 {
   sx_server_main_t *sx = &sx_server_main;
   vlib_main_t *vm = sx->vlib_main;

@@ -22,7 +22,7 @@
 #include <vnet/vnet.h>
 #include <vnet/pg/pg.h>
 #include <vppinfra/error.h>
-#include <gtp-up/gtp_up.h>
+#include <upf/upf.h>
 
 typedef struct
 {
@@ -30,7 +30,7 @@ typedef struct
   u32 sw_if_index;
   u8 new_src_mac[6];
   u8 new_dst_mac[6];
-} gtp_up_trace_t;
+} upf_trace_t;
 
 static u8 *
 format_mac_address (u8 * s, va_list * args)
@@ -41,13 +41,13 @@ format_mac_address (u8 * s, va_list * args)
 }
 
 /* packet trace format function */
-static u8 * format_gtp_up_trace (u8 * s, va_list * args)
+static u8 * format_upf_trace (u8 * s, va_list * args)
 {
   CLIB_UNUSED (vlib_main_t * vm) = va_arg (*args, vlib_main_t *);
   CLIB_UNUSED (vlib_node_t * node) = va_arg (*args, vlib_node_t *);
-  gtp_up_trace_t * t = va_arg (*args, gtp_up_trace_t *);
+  upf_trace_t * t = va_arg (*args, upf_trace_t *);
 
-  s = format (s, "GTP_UP: sw_if_index %d, next index %d\n",
+  s = format (s, "UPF: sw_if_index %d, next index %d\n",
 	      t->sw_if_index, t->next_index);
   s = format (s, "  new src %U -> new dst %U",
 	      format_mac_address, t->new_src_mac,
@@ -55,29 +55,29 @@ static u8 * format_gtp_up_trace (u8 * s, va_list * args)
   return s;
 }
 
-vlib_node_registration_t gtp_up_node;
+vlib_node_registration_t upf_node;
 
-#define foreach_gtp_up_error \
+#define foreach_upf_error \
 _(SWAPPED, "Mac swap packets processed")
 
 typedef enum {
-#define _(sym,str) GTP_UP_ERROR_##sym,
-  foreach_gtp_up_error
+#define _(sym,str) UPF_ERROR_##sym,
+  foreach_upf_error
 #undef _
-  GTP_UP_N_ERROR,
-} gtp_up_error_t;
+  UPF_N_ERROR,
+} upf_error_t;
 
-static char * gtp_up_error_strings[] = {
+static char * upf_error_strings[] = {
 #define _(sym,string) string,
-  foreach_gtp_up_error
+  foreach_upf_error
 #undef _
 };
 
 typedef enum
 {
-  GTP_UP_NEXT_INTERFACE_OUTPUT,
-  GTP_UP_N_NEXT,
-} gtp_up_next_t;
+  UPF_NEXT_INTERFACE_OUTPUT,
+  UPF_N_NEXT,
+} upf_next_t;
 
 #define foreach_mac_address_offset              \
 _(0)                                            \
@@ -88,12 +88,12 @@ _(4)                                            \
 _(5)
 
 static uword
-gtp_up_node_fn (vlib_main_t * vm,
+upf_node_fn (vlib_main_t * vm,
 		  vlib_node_runtime_t * node,
 		  vlib_frame_t * frame)
 {
   u32 n_left_from, * from, * to_next;
-  gtp_up_next_t next_index;
+  upf_next_t next_index;
   u32 pkts_swapped = 0;
 
   from = vlib_frame_vector_args (frame);
@@ -109,8 +109,8 @@ gtp_up_node_fn (vlib_main_t * vm,
 
       while (n_left_from >= 4 && n_left_to_next >= 2)
 	{
-	  u32 next0 = GTP_UP_NEXT_INTERFACE_OUTPUT;
-	  u32 next1 = GTP_UP_NEXT_INTERFACE_OUTPUT;
+	  u32 next0 = UPF_NEXT_INTERFACE_OUTPUT;
+	  u32 next1 = UPF_NEXT_INTERFACE_OUTPUT;
 	  u32 sw_if_index0, sw_if_index1;
 	  u8 tmp0[6], tmp1[6];
 	  ethernet_header_t *en0, *en1;
@@ -182,7 +182,7 @@ gtp_up_node_fn (vlib_main_t * vm,
 	    {
 	      if (b0->flags & VLIB_BUFFER_IS_TRACED)
 		{
-		    gtp_up_trace_t *t =
+		    upf_trace_t *t =
 		      vlib_add_trace (vm, node, b0, sizeof (*t));
 		    t->sw_if_index = sw_if_index0;
 		    t->next_index = next0;
@@ -193,7 +193,7 @@ gtp_up_node_fn (vlib_main_t * vm,
 		  }
 		if (b1->flags & VLIB_BUFFER_IS_TRACED)
 		  {
-		    gtp_up_trace_t *t =
+		    upf_trace_t *t =
 		      vlib_add_trace (vm, node, b1, sizeof (*t));
 		    t->sw_if_index = sw_if_index1;
 		    t->next_index = next1;
@@ -214,7 +214,7 @@ gtp_up_node_fn (vlib_main_t * vm,
 	{
 	  u32 bi0;
 	  vlib_buffer_t * b0;
-	  u32 next0 = GTP_UP_NEXT_INTERFACE_OUTPUT;
+	  u32 next0 = UPF_NEXT_INTERFACE_OUTPUT;
 	  u32 sw_if_index0;
 	  u8 tmp0[6];
 	  ethernet_header_t *en0;
@@ -254,7 +254,7 @@ gtp_up_node_fn (vlib_main_t * vm,
 
 	  if (PREDICT_FALSE((node->flags & VLIB_NODE_FLAG_TRACE)
 			    && (b0->flags & VLIB_BUFFER_IS_TRACED))) {
-	    gtp_up_trace_t *t =
+	    upf_trace_t *t =
 	       vlib_add_trace (vm, node, b0, sizeof (*t));
 	    t->sw_if_index = sw_if_index0;
 	    t->next_index = next0;
@@ -275,28 +275,28 @@ gtp_up_node_fn (vlib_main_t * vm,
       vlib_put_next_frame (vm, node, next_index, n_left_to_next);
     }
 
-  vlib_node_increment_counter (vm, gtp_up_node.index,
-			       GTP_UP_ERROR_SWAPPED, pkts_swapped);
+  vlib_node_increment_counter (vm, upf_node.index,
+			       UPF_ERROR_SWAPPED, pkts_swapped);
   return frame->n_vectors;
 }
 
 /* *INDENT-OFF* */
-VLIB_REGISTER_NODE (gtp_up_node) =
+VLIB_REGISTER_NODE (upf_node) =
 {
-  .function = gtp_up_node_fn,
-  .name = "gtp_up",
+  .function = upf_node_fn,
+  .name = "upf",
   .vector_size = sizeof (u32),
-  .format_trace = format_gtp_up_trace,
+  .format_trace = format_upf_trace,
   .type = VLIB_NODE_TYPE_INTERNAL,
 
-  .n_errors = ARRAY_LEN(gtp_up_error_strings),
-  .error_strings = gtp_up_error_strings,
+  .n_errors = ARRAY_LEN(upf_error_strings),
+  .error_strings = upf_error_strings,
 
-  .n_next_nodes = GTP_UP_N_NEXT,
+  .n_next_nodes = UPF_N_NEXT,
 
   /* edit / add dispositions here */
   .next_nodes = {
-	[GTP_UP_NEXT_INTERFACE_OUTPUT] = "interface-output",
+	[UPF_NEXT_INTERFACE_OUTPUT] = "interface-output",
   },
 };
 /* *INDENT-ON* */

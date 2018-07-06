@@ -1,5 +1,5 @@
 /*
- * gtp_up.c - 3GPP TS 29.244 GTP-U UP plug-in header file
+ * upf.c - 3GPP TS 29.244 GTP-U UP plug-in header file
  *
  * Copyright (c) 2017 Travelping GmbH
  *
@@ -15,8 +15,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#ifndef __included_gtp_up_h__
-#define __included_gtp_up_h__
+#ifndef __included_upf_h__
+#define __included_upf_h__
 
 #include <vnet/vnet.h>
 #include <vnet/ip/ip.h>
@@ -245,18 +245,18 @@ typedef struct {
   pfcp_f_teid_t teid;
   pfcp_ue_ip_address_t ue_addr;
   acl_rule_t acl;
-} gtp_up_pdi_t;
+} upf_pdi_t;
 
 /* Packet Detection Rules */
 typedef struct {
   u32 id;
   u16 precedence;
 
-  gtp_up_pdi_t pdi;
+  upf_pdi_t pdi;
   u8 outer_header_removal;
   u16 far_id;
   u16 *urr_ids;
-} gtp_up_pdr_t;
+} upf_pdr_t;
 
 /* Forward Action Rules - Forwarding Parameters */
 typedef struct {
@@ -278,7 +278,7 @@ typedef struct {
 
   u32 peer_idx;
   u8 * rewrite;
-} gtp_up_far_forward_t;
+} upf_far_forward_t;
 
 /* Forward Action Rules */
 typedef struct {
@@ -291,10 +291,10 @@ typedef struct {
 #define FAR_DUPLICATE  0x0010
 
     union {
-	gtp_up_far_forward_t forward;
+	upf_far_forward_t forward;
 	u16 bar_id;
     };
-} gtp_up_far_t;
+} upf_far_t;
 
 /* Counter */
 
@@ -309,7 +309,7 @@ enum {
 typedef struct {
     u64 bytes;
     u64 pkts;
-} gtp_up_cnt_t;
+} upf_cnt_t;
 
 /* Usage Reporting Rules */
 typedef struct {
@@ -331,12 +331,12 @@ typedef struct {
     struct {
       vlib_combined_counter_main_t volume;
     } measurement;
-} gtp_up_urr_t;
+} upf_urr_t;
 
 typedef struct {
   struct rte_acl_ctx *ip4;
   struct rte_acl_ctx *ip6;
-} gtp_up_acl_ctx_t;
+} upf_acl_ctx_t;
 
 typedef struct {
   int fib_index;
@@ -351,13 +351,13 @@ typedef struct {
 
   struct rules {
     /* vector of Packet Detection Rules */
-    gtp_up_pdr_t *pdr;
-    gtp_up_far_t *far;
-    gtp_up_urr_t *urr;
+    upf_pdr_t *pdr;
+    upf_far_t *far;
+    upf_urr_t *urr;
     uint32_t flags;
 #define SX_SDF_IPV4    0x0001
 #define SX_SDF_IPV6    0x0002
-    gtp_up_acl_ctx_t sdf[2];
+    upf_acl_ctx_t sdf[2];
 #define UL_SDF 0
 #define DL_SDF 1
 
@@ -378,13 +378,13 @@ typedef struct {
   /* vnet intfc index */
   u32 sw_if_index;
   u32 hw_if_index;
-} gtp_up_session_t;
+} upf_session_t;
 
 
 typedef enum
 {
 #define gtpu_error(n,s) GTPU_ERROR_##n,
-#include <gtp-up/gtpu_error.def>
+#include <upf/gtpu_error.def>
 #undef gtpu_error
   GTPU_N_ERROR,
 } gtpu_input_error_t;
@@ -416,39 +416,39 @@ typedef struct {
    * The tunnels sibling index on the FIB entry's dependency list.
    */
   u32 sibling_index;
-} gtp_up_peer_t;
+} upf_peer_t;
 
 typedef struct {
   ip46_address_t ip;
   u32 teid;
   u32 mask;
-} gtp_up_nwi_ip_res_t;
+} upf_nwi_ip_res_t;
 
 typedef struct {
   u8 * name;
 
   u32 intf_sw_if_index[INTF_NUM];
-  gtp_up_nwi_ip_res_t * ip_res;
+  upf_nwi_ip_res_t * ip_res;
   uword * ip_res_index_by_ip;
-} gtp_up_nwi_t;
+} upf_nwi_t;
 
 typedef struct {
   pfcp_node_id_t node_id;
   pfcp_recovery_time_stamp_t recovery_time_stamp;
-} gtp_up_node_assoc_t;
+} upf_node_assoc_t;
 
-#define GTP_UP_MAPPING_BUCKETS      1024
-#define GTP_UP_MAPPING_MEMORY_SIZE  64 << 20
+#define UPF_MAPPING_BUCKETS      1024
+#define UPF_MAPPING_MEMORY_SIZE  64 << 20
 
 typedef struct {
   /* vector of network instances */
-  gtp_up_nwi_t *nwis;
+  upf_nwi_t *nwis;
   uword *nwi_index_by_name;
   uword *nwi_index_by_sw_if_index;
   u8 *intf_type_by_sw_if_index;
 
   /* vector of encap tunnel instances */
-  gtp_up_session_t *sessions;
+  upf_session_t *sessions;
 
   /* lookup tunnel by key */
   uword *session_by_id;   /* keyed session id */
@@ -464,11 +464,11 @@ typedef struct {
   u32 *session_index_by_sw_if_index;
 
   /* list of remote GTP-U peer ref count used to stack FIB DPO objects */
-  gtp_up_peer_t * peers;
+  upf_peer_t * peers;
   uword * peer_index_by_ip;	/* remote GTP-U peer keyed on it's ip addr and vrf */
 
   /* vector of associated PFCP nodes */
-  gtp_up_node_assoc_t *nodes;
+  upf_node_assoc_t *nodes;
   /* lookup PFCP nodes */
   uword *node_index_by_ip;
   uword *node_index_by_fqdn;
@@ -490,24 +490,24 @@ typedef struct {
   vlib_main_t * vlib_main;
   vnet_main_t * vnet_main;
   ethernet_main_t * ethernet_main;
-} gtp_up_main_t;
+} upf_main_t;
 
-extern const fib_node_vft_t gtp_up_vft;
-extern gtp_up_main_t gtp_up_main;
+extern const fib_node_vft_t upf_vft;
+extern upf_main_t upf_main;
 
-extern vlib_node_registration_t gtp_up_node;
-extern vlib_node_registration_t gtp_up_if_input_node;
+extern vlib_node_registration_t upf_node;
+extern vlib_node_registration_t upf_if_input_node;
 extern vlib_node_registration_t gtpu4_input_node;
 extern vlib_node_registration_t gtpu6_input_node;
-extern vlib_node_registration_t gtp_up4_encap_node;
-extern vlib_node_registration_t gtp_up6_encap_node;
+extern vlib_node_registration_t upf4_encap_node;
+extern vlib_node_registration_t upf6_encap_node;
 
-int gtp_up_enable_disable (gtp_up_main_t * sm, u32 sw_if_index,
+int upf_enable_disable (upf_main_t * sm, u32 sw_if_index,
 			  int enable_disable);
-u8 * format_gtp_up_encap_trace (u8 * s, va_list * args);
-void gtpu_send_end_marker(gtp_up_far_forward_t * forward);
+u8 * format_upf_encap_trace (u8 * s, va_list * args);
+void gtpu_send_end_marker(upf_far_forward_t * forward);
 
-#endif /* __included_gtp_up_h__ */
+#endif /* __included_upf_h__ */
 
 /*
  * fd.io coding-style-patch-verification: ON

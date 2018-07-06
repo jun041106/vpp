@@ -20,8 +20,8 @@
 
 #include <vlib/vlib.h>
 #include <vnet/pg/pg.h>
-#include <gtp-up/gtp_up.h>
-#include <gtp-up/gtp_up_sx.h>
+#include <upf/upf.h>
+#include <upf/upf_pfcp.h>
 
 #if CLIB_DEBUG > 0
 #define gtp_debug clib_warning
@@ -76,7 +76,7 @@ gtpu_input (vlib_main_t * vm,
 	     u8 is_ip4)
 {
   u32 n_left_from, next_index, * from, * to_next;
-  gtp_up_main_t * gtm = &gtp_up_main;
+  upf_main_t * gtm = &upf_main;
   vnet_main_t * vnm = gtm->vnet_main;
   vnet_interface_main_t * im = &vnm->interface_main;
   u32 last_session_index = ~0;
@@ -114,7 +114,7 @@ gtpu_input (vlib_main_t * vm,
 	  gtpu_header_t * gtpu0, * gtpu1;
 	  u32 gtpu_hdr_len0 = 0, gtpu_hdr_len1 =0 ;
 	  u32 session_index0, session_index1;
-	  gtp_up_session_t * t0, * t1;
+	  upf_session_t * t0, * t1;
 	  gtpu4_tunnel_key_t key4_0, key4_1;
 	  u32 error0, error1;
 	  u32 sw_if_index0, sw_if_index1, len0, len1;
@@ -509,7 +509,7 @@ gtpu_input (vlib_main_t * vm,
 	  gtpu_header_t * gtpu0;
 	  u32 gtpu_hdr_len0 = 0;
 	  u32 session_index0;
-	  gtp_up_session_t * t0;
+	  upf_session_t * t0;
 	  gtpu4_tunnel_key_t key4_0;
 	  u32 error0;
 	  u32 sw_if_index0, len0;
@@ -743,7 +743,7 @@ gtpu6_input (vlib_main_t * vm,
 
 static char * gtpu_error_strings[] = {
 #define gtpu_error(n,s) s,
-#include <gtp-up/gtpu_error.def>
+#include <upf/gtpu_error.def>
 #undef gtpu_error
 #undef _
 };
@@ -760,10 +760,10 @@ VLIB_REGISTER_NODE (gtpu4_input_node) = {
   .n_next_nodes = GTPU_INPUT_N_NEXT,
   .next_nodes = {
     [GTPU_INPUT_NEXT_DROP]             = "error-drop",
-    [GTPU_INPUT_NEXT_IP4_CLASSIFY]     = "gtp-up-ip4-classify",
-    [GTPU_INPUT_NEXT_IP6_CLASSIFY]     = "gtp-up-ip6-classify",
+    [GTPU_INPUT_NEXT_IP4_CLASSIFY]     = "upf-ip4-classify",
+    [GTPU_INPUT_NEXT_IP6_CLASSIFY]     = "upf-ip6-classify",
     [GTPU_INPUT_NEXT_ERROR_INDICATION] = "gtp-error-indication",
-    [GTPU_INPUT_NEXT_ECHO_REQUEST]     = "gtp-up-ip4-echo-request",
+    [GTPU_INPUT_NEXT_ECHO_REQUEST]     = "upf-ip4-echo-request",
   },
 
 //temp  .format_buffer = format_gtpu_header,
@@ -785,10 +785,10 @@ VLIB_REGISTER_NODE (gtpu6_input_node) = {
   .n_next_nodes = GTPU_INPUT_N_NEXT,
   .next_nodes = {
     [GTPU_INPUT_NEXT_DROP]             = "error-drop",
-    [GTPU_INPUT_NEXT_IP4_CLASSIFY]     = "gtp-up-ip4-classify",
-    [GTPU_INPUT_NEXT_IP6_CLASSIFY]     = "gtp-up-ip6-classify",
+    [GTPU_INPUT_NEXT_IP4_CLASSIFY]     = "upf-ip4-classify",
+    [GTPU_INPUT_NEXT_IP6_CLASSIFY]     = "upf-ip6-classify",
     [GTPU_INPUT_NEXT_ERROR_INDICATION] = "gtp-error-indication",
-    [GTPU_INPUT_NEXT_ECHO_REQUEST]     = "gtp-up-ip6-echo-request",
+    [GTPU_INPUT_NEXT_ECHO_REQUEST]     = "upf-ip6-echo-request",
   },
 
 //temp  .format_buffer = format_gtpu_header,
@@ -918,7 +918,7 @@ process_error_indication (vlib_main_t * vm,
 			  vlib_node_runtime_t * node,
 			  vlib_frame_t * frame)
 {
-  gtp_up_main_t * gtm = &gtp_up_main;
+  upf_main_t * gtm = &upf_main;
   u32 *buffers, *first_buffer;
   gtp_error_ind_t error;
   u32 n_errors_left;
@@ -931,7 +931,7 @@ process_error_indication (vlib_main_t * vm,
   while (n_errors_left >= 1)
     {
       gtpu_header_t * gtpu;
-      gtp_up_session_t * t;
+      upf_session_t * t;
       vlib_buffer_t * b;
       u32 session_index = ~0;
       u32 bi, err;
@@ -1000,7 +1000,7 @@ process_error_indication (vlib_main_t * vm,
 
       t = pool_elt_at_index (gtm->sessions, session_index);
 
-      gtp_up_sx_error_report(t, &error);
+      upf_pfcp_error_report(t, &error);
 
     trace:
       if (PREDICT_FALSE(b->flags & VLIB_BUFFER_IS_TRACED))
@@ -1262,7 +1262,7 @@ gtpu6_echo_request (vlib_main_t * vm,
 
 VLIB_REGISTER_NODE (gtp_ip4_echo_req_node) = {
   .function = gtpu4_echo_request,
-  .name = "gtp-up-ip4-echo-request",
+  .name = "upf-ip4-echo-request",
   .vector_size = sizeof (u32),
   .format_trace = format_gtpu_ip4_echo_req_trace,
 
@@ -1280,7 +1280,7 @@ VLIB_NODE_FUNCTION_MULTIARCH (gtp_ip4_echo_req_node,gtpu4_echo_request)
 
 VLIB_REGISTER_NODE (gtp_ip6_echo_req_node) = {
   .function = gtpu6_echo_request,
-  .name = "gtp-up-ip6-echo-request",
+  .name = "upf-ip6-echo-request",
   .vector_size = sizeof (u32),
   .format_trace = format_gtpu_ip6_echo_req_trace,
 
@@ -1312,7 +1312,7 @@ ip_gtpu_bypass_inline (vlib_main_t * vm,
 			vlib_frame_t * frame,
 			u32 is_ip4)
 {
-  //  gtp_up_main_t * gtm = &gtp_up_main;
+  //  upf_main_t * gtm = &upf_main;
   u32 * from, * to_next, n_left_from, n_left_to_next, next_index;
   vlib_node_runtime_t * error_node = vlib_node_get_runtime (vm, ip4_input_node.index);
 #if VTEP_VALIDATION

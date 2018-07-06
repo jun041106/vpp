@@ -25,7 +25,7 @@
 #include <vppinfra/elog.h>
 
 #include <vlibmemory/api.h>
-#include "gtp_up_sx_server.h"
+#include "upf_pfcp_server.h"
 
 vlib_node_registration_t sx4_input_node;
 vlib_node_registration_t sx6_input_node;
@@ -121,7 +121,7 @@ sx46_input_inline (vlib_main_t * vm, vlib_node_runtime_t * node,
 	  n_left_to_next -= 1;
 
 	  b0 = vlib_get_buffer (vm, bi0);
-	  gtp_up_sx_handle_input(vm, b0, is_ip4);
+	  upf_pfcp_handle_input(vm, b0, is_ip4);
 
 	  b0->error = node->errors[error0];
 
@@ -158,7 +158,7 @@ sx4_input (vlib_main_t * vm, vlib_node_runtime_t * node, vlib_frame_t * frame)
 VLIB_REGISTER_NODE (sx4_input_node) =
 {
   .function = sx4_input,
-  .name = "gtp-up-sx4-input",
+  .name = "upf-sx4-input",
   .vector_size = sizeof (u32),
   .format_trace = format_sx_input_trace,
   .type = VLIB_NODE_TYPE_INTERNAL,
@@ -183,7 +183,7 @@ sx6_input (vlib_main_t * vm, vlib_node_runtime_t * node, vlib_frame_t * frame)
 VLIB_REGISTER_NODE (sx6_input_node) =
 {
   .function = sx6_input,
-  .name = "gtp-up-sx6-input",
+  .name = "upf-sx6-input",
   .vector_size = sizeof (u32),
   .format_trace = format_sx_input_trace,
   .type = VLIB_NODE_TYPE_INTERNAL,

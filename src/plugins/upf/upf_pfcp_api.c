@@ -36,9 +36,9 @@
 #include <vppinfra/format.h>
 
 #include "pfcp.h"
-#include "gtp_up_sx.h"
-#include "gtp_up_sx_server.h"
-#include "gtp_up_sx_api.h"
+#include "upf_pfcp.h"
+#include "upf_pfcp_server.h"
+#include "upf_pfcp_api.h"
 
 #if CLIB_DEBUG > 0
 #define gtp_debug clib_warning
@@ -51,19 +51,19 @@
 
 typedef struct {
   time_t start_time;
-} gtp_up_sx_session_t;
+} upf_pfcp_session_t;
 
 static int node_msg(sx_msg_t * msg);
 static int session_msg(sx_msg_t * msg);
 
-size_t gtp_up_sx_api_session_data_size()
+size_t upf_pfcp_api_session_data_size()
 {
-	return sizeof(gtp_up_sx_session_t);
+	return sizeof(upf_pfcp_session_t);
 }
 
-void gtp_up_sx_api_session_data_init(void *sxp, time_t start_time)
+void upf_pfcp_api_session_data_init(void *sxp, time_t start_time)
 {
-	gtp_up_sx_session_t *sx = (gtp_up_sx_session_t *)sxp;
+	upf_pfcp_session_t *sx = (upf_pfcp_session_t *)sxp;
 
 	memset(sx, 0, sizeof(*sx));
 	sx->start_time = start_time;
@@ -93,7 +93,7 @@ static sx_msg_t * make_response(sx_msg_t * req, size_t len)
 
 /*************************************************************************/
 
-int gtp_up_sx_handle_msg(sx_msg_t * msg)
+int upf_pfcp_handle_msg(sx_msg_t * msg)
 {
   int len = vec_len(msg->data);
 
@@ -115,7 +115,7 @@ int gtp_up_sx_handle_msg(sx_msg_t * msg)
       resp->hdr->length = clib_host_to_net_u16(offsetof(pfcp_header_t, msg_hdr.ies) - 4);
       _vec_len(resp->data) = offsetof(pfcp_header_t, msg_hdr.ies);
 
-      gtp_up_sx_send_data(resp);
+      upf_pfcp_send_data(resp);
       return 0;
   }
 
@@ -356,7 +356,7 @@ format_ipfilter(u8 * s, va_list * args)
 
 /*************************************************************************/
 
-static int send_session_request(gtp_up_session_t * sx, u8 type, struct pfcp_group *grp)
+static int send_session_request(upf_session_t * sx, u8 type, struct pfcp_group *grp)
 {
   sx_msg_t * msg;
   int r = 0;
@@ -386,7 +386,7 @@ static int send_session_request(gtp_up_session_t * sx, u8 type, struct pfcp_grou
   msg->lcl.port = UDP_DST_PORT_SX;
   msg->rmt.port = UDP_DST_PORT_SX;
 
-  gtp_up_sx_server_notify (msg);
+  upf_pfcp_server_notify (msg);
 
  out_free:
   pfcp_free_msg(type, grp);
@@ -427,7 +427,7 @@ static int send_response(sx_msg_t * req, u64 cp_seid, u8 type, struct pfcp_group
   /* vector resp might have changed */
   resp->hdr->length = clib_host_to_net_u16(_vec_len(resp->data) - 4);
 
-  gtp_up_sx_send_data(resp);
+  upf_pfcp_send_data(resp);
 
  out_free:
   pfcp_free_msg(type, grp);
@@ -477,9 +477,9 @@ handle_association_setup_request(sx_msg_t * req, pfcp_association_setup_request_
 {
   sx_server_main_t *sx = &sx_server_main;
   pfcp_association_setup_response_t resp;
-  gtp_up_main_t * gtm = &gtp_up_main;
-  gtp_up_node_assoc_t *n;
-  gtp_up_nwi_t * nwi;
+  upf_main_t * gtm = &upf_main;
+  upf_node_assoc_t *n;
+  upf_nwi_t * nwi;
   int r = 0;
 
   memset(&resp, 0, sizeof(resp));
@@ -513,7 +513,7 @@ handle_association_setup_request(sx_msg_t * req, pfcp_association_setup_request_
 
   pool_foreach (nwi, gtm->nwis,
     ({
-      gtp_up_nwi_ip_res_t * ip_res;
+      upf_nwi_ip_res_t * ip_res;
 
       pool_foreach (ip_res, nwi->ip_res,
 	({
@@ -704,10 +704,10 @@ static int node_msg(sx_msg_t * msg)
 #define OPT(MSG,FIELD,VALUE,DEFAULT)					\
   ((ISSET_BIT((MSG)->grp.fields, (FIELD))) ? MSG->VALUE : (DEFAULT))
 
-static gtp_up_nwi_t *lookup_nwi(u8 * name)
+static upf_nwi_t *lookup_nwi(u8 * name)
 {
-  gtp_up_main_t * gtm = &gtp_up_main;
-  gtp_up_nwi_t * nwi;
+  upf_main_t * gtm = &upf_main;
+  upf_nwi_t * nwi;
   uword *p;
 
   if (pool_elts(gtm->nwis) == 0)
@@ -764,20 +764,20 @@ static u8 dst_to_intf(u8 dst)
   return 0;
 }
 
-static int handle_create_pdr(gtp_up_session_t *sess, pfcp_create_pdr_t *create_pdr,
+static int handle_create_pdr(upf_session_t *sess, pfcp_create_pdr_t *create_pdr,
 			     struct pfcp_group *grp,
 			     int failed_rule_id_field,
 			     pfcp_failed_rule_id_t *failed_rule_id)
 {
   struct pfcp_response *response = (struct pfcp_response *)(grp + 1);
-  gtp_up_main_t *gtm = &gtp_up_main;
+  upf_main_t *gtm = &upf_main;
   pfcp_create_pdr_t *pdr;
   int r = 0;
 
   vec_foreach(pdr, create_pdr)
     {
-      gtp_up_pdr_t *create;
-      gtp_up_nwi_t *nwi;
+      upf_pdr_t *create;
+      upf_nwi_t *nwi;
 
       create = clib_mem_alloc_no_fail(sizeof(*create));
       memset(create, 0, sizeof(*create));
@@ -877,20 +877,20 @@ static int handle_create_pdr(gtp_up_session_t *sess, pfcp_create_pdr_t *create_p
   return r;
 }
 
-static int handle_update_pdr(gtp_up_session_t *sess, pfcp_update_pdr_t *update_pdr,
+static int handle_update_pdr(upf_session_t *sess, pfcp_update_pdr_t *update_pdr,
 			     struct pfcp_group *grp,
 			     int failed_rule_id_field,
 			     pfcp_failed_rule_id_t *failed_rule_id)
 {
   struct pfcp_response *response = (struct pfcp_response *)(grp + 1);
-  gtp_up_main_t *gtm = &gtp_up_main;
+  upf_main_t *gtm = &upf_main;
   pfcp_update_pdr_t *pdr;
   int r = 0;
 
   vec_foreach(pdr, update_pdr)
     {
-      gtp_up_pdr_t *update;
-      gtp_up_nwi_t *nwi;
+      upf_pdr_t *update;
+      upf_nwi_t *nwi;
 
       update = sx_get_pdr(sess, SX_PENDING, pdr->pdr_id);
       if (!update)
@@ -981,7 +981,7 @@ static int handle_update_pdr(gtp_up_session_t *sess, pfcp_update_pdr_t *update_p
   return r;
 }
 
-static int handle_remove_pdr(gtp_up_session_t *sess, pfcp_remove_pdr_t *remove_pdr,
+static int handle_remove_pdr(upf_session_t *sess, pfcp_remove_pdr_t *remove_pdr,
 			     struct pfcp_group *grp,
 			     int failed_rule_id_field,
 			     pfcp_failed_rule_id_t *failed_rule_id)
@@ -1012,7 +1012,7 @@ static int handle_remove_pdr(gtp_up_session_t *sess, pfcp_remove_pdr_t *remove_p
 }
 
 static void
-ip_udp_gtpu_rewrite (gtp_up_far_forward_t * ff)
+ip_udp_gtpu_rewrite (upf_far_forward_t * ff)
 {
   union
   {
@@ -1077,19 +1077,19 @@ ip_udp_gtpu_rewrite (gtp_up_far_forward_t * ff)
   return;
 }
 
-static int handle_create_far(gtp_up_session_t *sess, pfcp_create_far_t *create_far,
+static int handle_create_far(upf_session_t *sess, pfcp_create_far_t *create_far,
 			     struct pfcp_group *grp,
 			     int failed_rule_id_field,
 			     pfcp_failed_rule_id_t *failed_rule_id)
 {
   struct pfcp_response *response = (struct pfcp_response *)(grp + 1);
-  gtp_up_main_t *gtm = &gtp_up_main;
+  upf_main_t *gtm = &upf_main;
   pfcp_create_far_t *far;
   int r = 0;
 
   vec_foreach(far, create_far)
     {
-      gtp_up_far_t *create;
+      upf_far_t *create;
 
       create = clib_mem_alloc_no_fail(sizeof(*create));
       memset(create, 0, sizeof(*create));
@@ -1100,7 +1100,7 @@ static int handle_create_far(gtp_up_session_t *sess, pfcp_create_far_t *create_f
       if ((create->apply_action & FAR_FORWARD) &&
 	  far->grp.fields & CREATE_FAR_FORWARDING_PARAMETERS)
 	{
-	  gtp_up_nwi_t *nwi;
+	  upf_nwi_t *nwi;
 
 	  nwi = lookup_nwi(
 			   ISSET_BIT(far->forwarding_parameters.grp.fields,
@@ -1169,19 +1169,19 @@ static int handle_create_far(gtp_up_session_t *sess, pfcp_create_far_t *create_f
   return r;
 }
 
-static int handle_update_far(gtp_up_session_t *sess, pfcp_update_far_t *update_far,
+static int handle_update_far(upf_session_t *sess, pfcp_update_far_t *update_far,
 			     struct pfcp_group *grp,
 			     int failed_rule_id_field,
 			     pfcp_failed_rule_id_t *failed_rule_id)
 {
   struct pfcp_response *response = (struct pfcp_response *)(grp + 1);
-  gtp_up_main_t *gtm = &gtp_up_main;
+  upf_main_t *gtm = &upf_main;
   pfcp_update_far_t *far;
   int r = 0;
 
   vec_foreach(far, update_far)
     {
-      gtp_up_far_t *update;
+      upf_far_t *update;
 
       update = sx_get_far(sess, SX_PENDING, far->far_id);
       if (!update)
@@ -1198,7 +1198,7 @@ static int handle_update_far(gtp_up_session_t *sess, pfcp_update_far_t *update_f
       if ((update->apply_action & FAR_FORWARD) &&
 	  far->grp.fields & UPDATE_FAR_UPDATE_FORWARDING_PARAMETERS)
 	{
-	  gtp_up_nwi_t *nwi;
+	  upf_nwi_t *nwi;
 
 	  if (ISSET_BIT(far->update_forwarding_parameters.grp.fields,
 			UPDATE_FORWARDING_PARAMETERS_NETWORK_INSTANCE))
@@ -1269,7 +1269,7 @@ static int handle_update_far(gtp_up_session_t *sess, pfcp_update_far_t *update_f
   return r;
 }
 
-static int handle_remove_far(gtp_up_session_t *sess, pfcp_remove_far_t *remove_far,
+static int handle_remove_far(upf_session_t *sess, pfcp_remove_far_t *remove_far,
 			     struct pfcp_group *grp,
 			     int failed_rule_id_field,
 			     pfcp_failed_rule_id_t *failed_rule_id)
@@ -1299,7 +1299,7 @@ static int handle_remove_far(gtp_up_session_t *sess, pfcp_remove_far_t *remove_f
   return r;
 }
 
-static int handle_create_urr(gtp_up_session_t *sess, pfcp_create_urr_t *create_urr,
+static int handle_create_urr(upf_session_t *sess, pfcp_create_urr_t *create_urr,
 			     struct pfcp_group *grp,
 			     int failed_rule_id_field,
 			     pfcp_failed_rule_id_t *failed_rule_id)
@@ -1310,7 +1310,7 @@ static int handle_create_urr(gtp_up_session_t *sess, pfcp_create_urr_t *create_u
 
   vec_foreach(urr, create_urr)
     {
-      gtp_up_urr_t *create;
+      upf_urr_t *create;
 
       create = clib_mem_alloc_no_fail(sizeof(*create));
       memset(create, 0, sizeof(*create));
@@ -1358,7 +1358,7 @@ static int handle_create_urr(gtp_up_session_t *sess, pfcp_create_urr_t *create_u
   return r;
 }
 
-static int handle_update_urr(gtp_up_session_t *sess, pfcp_update_urr_t *update_urr,
+static int handle_update_urr(upf_session_t *sess, pfcp_update_urr_t *update_urr,
 			     struct pfcp_group *grp,
 			     int failed_rule_id_field,
 			     pfcp_failed_rule_id_t *failed_rule_id)
@@ -1369,7 +1369,7 @@ static int handle_update_urr(gtp_up_session_t *sess, pfcp_update_urr_t *update_u
 
   vec_foreach(urr, update_urr)
     {
-      gtp_up_urr_t *update;
+      upf_urr_t *update;
 
       update = sx_get_urr(sess, SX_PENDING, urr->urr_id);
       if (!update)
@@ -1416,7 +1416,7 @@ static int handle_update_urr(gtp_up_session_t *sess, pfcp_update_urr_t *update_u
   return r;
 }
 
-static int handle_remove_urr(gtp_up_session_t *sess, pfcp_remove_urr_t *remove_urr,
+static int handle_remove_urr(upf_session_t *sess, pfcp_remove_urr_t *remove_urr,
 			     struct pfcp_group *grp,
 			     int failed_rule_id_field,
 			     pfcp_failed_rule_id_t *failed_rule_id)
@@ -1447,7 +1447,7 @@ static int handle_remove_urr(gtp_up_session_t *sess, pfcp_remove_urr_t *remove_u
 }
 
 static pfcp_usage_report_t *
-build_usage_report(gtp_up_session_t *sess, gtp_up_urr_t *urr,
+build_usage_report(upf_session_t *sess, upf_urr_t *urr,
 		   u32 trigger, pfcp_usage_report_t **report)
 {
   pfcp_usage_report_t *r;
@@ -1513,7 +1513,7 @@ handle_session_establishment_request(sx_msg_t * req, pfcp_session_establishment_
   pfcp_session_establishment_response_t resp;
   ip46_address_t up_address;
   ip46_address_t cp_address;
-  gtp_up_session_t *sess;
+  upf_session_t *sess;
   int r = 0;
   int is_ip4;
 
@@ -1592,7 +1592,7 @@ handle_session_modification_request(sx_msg_t * req, pfcp_session_modification_re
 {
   pfcp_session_modification_response_t resp;
   pfcp_query_urr_t *qry;
-  gtp_up_session_t *sess;
+  upf_session_t *sess;
   u64 cp_seid = 0;
   int r = 0;
 
@@ -1687,7 +1687,7 @@ handle_session_modification_request(sx_msg_t * req, pfcp_session_modification_re
 
       vec_foreach(qry, msg->query_urr)
 	{
-	  gtp_up_urr_t *urr;
+	  upf_urr_t *urr;
 
 	  if (!(urr = sx_get_urr(sess, SX_PENDING, qry->urr_id)))
 	    continue;
@@ -1704,7 +1704,7 @@ handle_session_modification_request(sx_msg_t * req, pfcp_session_modification_re
       active = sx_get_rules(sess, SX_ACTIVE);
       if (vec_len(active->urr) != 0)
 	{
-	  gtp_up_urr_t *urr;
+	  upf_urr_t *urr;
 
 	  SET_BIT(resp.grp.fields, SESSION_MODIFICATION_RESPONSE_USAGE_REPORT);
 
@@ -1738,7 +1738,7 @@ static int
 handle_session_deletion_request(sx_msg_t * req, pfcp_session_deletion_request_t *msg)
 {
   pfcp_session_deletion_response_t resp;
-  gtp_up_session_t *sess;
+  upf_session_t *sess;
   struct rules *active;
   u64 cp_seid = 0;
   int r = 0;
@@ -1768,7 +1768,7 @@ handle_session_deletion_request(sx_msg_t * req, pfcp_session_deletion_request_t 
   active = sx_get_rules(sess, SX_ACTIVE);
   if (vec_len(active->urr) != 0)
     {
-      gtp_up_urr_t *urr;
+      upf_urr_t *urr;
 
       SET_BIT(resp.grp.fields, SESSION_DELETION_RESPONSE_USAGE_REPORT);
 
@@ -1893,7 +1893,7 @@ static int session_msg(sx_msg_t * msg)
   return 0;
 }
 
-void gtp_up_sx_error_report(gtp_up_session_t * sx, gtp_error_ind_t * error)
+void upf_pfcp_error_report(upf_session_t * sx, gtp_error_ind_t * error)
 {
   pfcp_session_report_request_t req;
   pfcp_f_teid_t f_teid;

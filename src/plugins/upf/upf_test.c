@@ -1,5 +1,5 @@
 /*
- * gtp_up.c - 3GPP TS 29.244 GTP-U UP plug-in
+ * upf.c - 3GPP TS 29.244 GTP-U UP plug-in
  *
  * Copyright (c) 2017 Travelping GmbH
  *
@@ -23,28 +23,28 @@
 uword unformat_sw_if_index (unformat_input_t * input, va_list * args);
 
 /* Declare message IDs */
-#include <gtp-up/gtp_up_msg_enum.h>
+#include <upf/upf_msg_enum.h>
 
 /* define message structures */
 #define vl_typedefs
-#include <gtp-up/gtp_up_all_api_h.h>
+#include <upf/upf_all_api_h.h>
 #undef vl_typedefs
 
 /* declare message handlers for each api */
 
 #define vl_endianfun             /* define message structures */
-#include <gtp-up/gtp_up_all_api_h.h>
+#include <upf/upf_all_api_h.h>
 #undef vl_endianfun
 
 /* instantiate all the print functions we know about */
 #define vl_print(handle, ...)
 #define vl_printfun
-#include <gtp-up/gtp_up_all_api_h.h>
+#include <upf/upf_all_api_h.h>
 #undef vl_printfun
 
 /* Get the API version number. */
 #define vl_api_version(n,v) static u32 api_version=(v);
-#include <gtp-up/gtp_up_all_api_h.h>
+#include <upf/upf_all_api_h.h>
 #undef vl_api_version
 
 
@@ -53,21 +53,21 @@ typedef struct
   /* API message ID base */
   u16 msg_id_base;
   vat_main_t *vat_main;
-} gtp_up_test_main_t;
+} upf_test_main_t;
 
-gtp_up_test_main_t gtp_up_test_main;
+upf_test_main_t upf_test_main;
 
-#define __plugin_msg_base gtp_up_test_main.msg_id_base
+#define __plugin_msg_base upf_test_main.msg_id_base
 #include <vlibapi/vat_helper_macros.h>
 
 #define foreach_standard_reply_retval_handler   \
-_(gtp_up_enable_disable_reply)
+_(upf_enable_disable_reply)
 
 #define _(n)                                            \
     static void vl_api_##n##_t_handler                  \
     (vl_api_##n##_t * mp)                               \
     {                                                   \
-	vat_main_t * vam = gtp_up_test_main.vat_main;   \
+	vat_main_t * vam = upf_test_main.vat_main;   \
 	i32 retval = ntohl(mp->retval);                 \
 	if (vam->async_mode) {                          \
 	    vam->async_errors += (retval < 0);          \
@@ -84,15 +84,15 @@ foreach_standard_reply_retval_handler;
  * we just generated
  */
 #define foreach_vpe_api_reply_msg                                       \
-_(GTP_UP_ENABLE_DISABLE_REPLY, gtp_up_enable_disable_reply)
+_(UPF_ENABLE_DISABLE_REPLY, upf_enable_disable_reply)
 
 
-static int api_gtp_up_enable_disable (vat_main_t * vam)
+static int api_upf_enable_disable (vat_main_t * vam)
 {
   unformat_input_t * i = vam->input;
   int enable_disable = 1;
   u32 sw_if_index = ~0;
-  vl_api_gtp_up_enable_disable_t * mp;
+  vl_api_upf_enable_disable_t * mp;
   int ret;
 
   /* Parse args required to build the message */
@@ -115,7 +115,7 @@ static int api_gtp_up_enable_disable (vat_main_t * vam)
     }
 
   /* Construct the API message */
-  M(GTP_UP_ENABLE_DISABLE, mp);
+  M(UPF_ENABLE_DISABLE, mp);
   mp->sw_if_index = ntohl (sw_if_index);
   mp->enable_disable = enable_disable;
 
@@ -132,11 +132,11 @@ static int api_gtp_up_enable_disable (vat_main_t * vam)
  * and that the user plane plugin processes
  */
 #define foreach_vpe_api_msg \
-_(gtp_up_enable_disable, "<intfc> [disable]")
+_(upf_enable_disable, "<intfc> [disable]")
 
-static void gtp_up_api_hookup (vat_main_t *vam)
+static void upf_api_hookup (vat_main_t *vam)
 {
-    gtp_up_test_main_t * sm = &gtp_up_test_main;
+    upf_test_main_t * sm = &upf_test_main;
     /* Hook up handlers for replies from the user plane plug-in */
 #define _(N,n)                                                  \
     vl_msg_api_set_handlers((VL_API_##N + sm->msg_id_base),     \
@@ -162,17 +162,17 @@ static void gtp_up_api_hookup (vat_main_t *vam)
 
 clib_error_t * vat_plugin_register (vat_main_t *vam)
 {
-  gtp_up_test_main_t * sm = &gtp_up_test_main;
+  upf_test_main_t * sm = &upf_test_main;
   u8 * name;
 
   sm->vat_main = vam;
 
   /* Ask the vpp engine for the first assigned message-id */
-  name = format (0, "gtp_up_%08x%c", api_version, 0);
+  name = format (0, "upf_%08x%c", api_version, 0);
   sm->msg_id_base = vl_client_get_first_plugin_msg_id ((char *) name);
 
   if (sm->msg_id_base != (u16) ~0)
-    gtp_up_api_hookup (vam);
+    upf_api_hookup (vam);
 
   vec_free(name);
 

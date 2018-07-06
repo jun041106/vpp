@@ -14,17 +14,17 @@
  * limitations under the License.
  */
 
-#ifndef _GTP_UP_SX_ERL_H
-#define _GTP_UP_SX_ERL_H
+#ifndef _UPF_SX_ERL_H
+#define _UPF_SX_ERL_H
 
 #include <vppinfra/types.h>
-#include "gtp_up_sx_server.h"
+#include "upf_pfcp_server.h"
 
 #define PRIsMAC "%02x:%02x:%02x:%02x:%02x:%02x"
 #define ARGsMAC(m) (m)[0], (m)[1], (m)[2], (m)[3], (m)[4], (m)[5]
 
-int gtp_up_sx_handle_msg(sx_msg_t * msg);
+int upf_pfcp_handle_msg(sx_msg_t * msg);
 
 u8 * format_ipfilter(u8 * s, va_list * args);
 
-#endif /* _GTP_UP_SX_ERL_H */
+#endif /* _UPF_SX_ERL_H */

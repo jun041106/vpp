@@ -1,5 +1,5 @@
 /*
- * gtp_up_http_redirect_server.h - 3GPP TS 29.244 GTP-U UP plug-in header file
+ * upf_http_redirect_server.h - 3GPP TS 29.244 GTP-U UP plug-in header file
  *
  * Copyright (c) 2018 Travelping GmbH
  *
@@ -15,8 +15,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#ifndef __included_gtp_up_http_redirect_server_h__
-#define __included_gtp_up_http_redirect_server_h__
+#ifndef __included_upf_http_redirect_server_h__
+#define __included_upf_http_redirect_server_h__
 
 #include <vnet/vnet.h>
 #include <vnet/session/application.h>
@@ -48,9 +48,9 @@ typedef struct
 
 extern http_redirect_server_main_t http_redirect_server_main;
 
-u32 gtp_up_http_redirect_server_create(u32 fib_index, int is_ip4);
+u32 upf_http_redirect_server_create(u32 fib_index, int is_ip4);
 
-static inline u32 gtp_up_http_redirect_session(u32 fib_index, int is_ip4)
+static inline u32 upf_http_redirect_session(u32 fib_index, int is_ip4)
 {
   http_redirect_server_main_t *hsm = &http_redirect_server_main;
 
@@ -69,7 +69,7 @@ static inline u32 gtp_up_http_redirect_session(u32 fib_index, int is_ip4)
 	return hsm->ip6_listen_session_by_fib_index[fib_index];
     }
 
-  return gtp_up_http_redirect_server_create(fib_index, is_ip4);
+  return upf_http_redirect_server_create(fib_index, is_ip4);
 }
 
 #endif

@@ -1,5 +1,5 @@
 /*
- * gtp_up_all_api_h.h - 3GPP TS 29.244 GTP-U UP plug-in api #include file
+ * upf_all_api_h.h - 3GPP TS 29.244 GTP-U UP plug-in api #include file
  *
  * Copyright (c) 2017 Travelping GmbH
  *
@@ -16,4 +16,4 @@
  * limitations under the License.
  */
 /* Include the generated file, see BUILT_SOURCES in Makefile.am */
-#include <gtp-up/gtp_up.api.h>
+#include <upf/upf.api.h>

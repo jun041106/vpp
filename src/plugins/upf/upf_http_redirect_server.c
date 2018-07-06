@@ -21,10 +21,10 @@
 #include <vnet/session/application.h>
 #include <vnet/session/application_interface.h>
 
-#include "gtp_up.h"
-#include "gtp_up_sx.h"
-#include "gtp_up_sx_api.h"
-#include "gtp_up_http_redirect_server.h"
+#include "upf.h"
+#include "upf_pfcp.h"
+#include "upf_pfcp_api.h"
+#include "upf_http_redirect_server.h"
 
 typedef enum
 {
@@ -173,11 +173,11 @@ http_redirect_server_rx_callback_static (stream_session_t * s)
 {
   http_redirect_server_main_t *hsm = &http_redirect_server_main;
   vnet_disconnect_args_t _a, *a = &_a;
-  gtp_up_main_t * gtm = &gtp_up_main;
+  upf_main_t * gtm = &upf_main;
   transport_connection_t *tc;
-  gtp_up_session_t * sess;
+  upf_session_t * sess;
   struct rules *active;
-  gtp_up_far_t * far;
+  upf_far_t * far;
   u8 *request = 0;
   u8 *wispr, *html, *http, *url;
   int i;
@@ -411,7 +411,7 @@ http_redirect_server_create (vlib_main_t * vm, u32 fib_index, int is_ip4)
   return 0;
 }
 
-u32 gtp_up_http_redirect_server_create(u32 fib_index, int is_ip4)
+u32 upf_http_redirect_server_create(u32 fib_index, int is_ip4)
 {
   vlib_main_t *vm = &vlib_global_main;
   int rv;
@@ -422,7 +422,7 @@ u32 gtp_up_http_redirect_server_create(u32 fib_index, int is_ip4)
   rv = http_redirect_server_create(vm, fib_index, is_ip4);
   if (rv != 0)
     {
-      clib_error ("GTP-UP http redirect server create returned %d", rv);
+      clib_error ("UPF http redirect server create returned %d", rv);
       return 0;
     }
 
@@ -431,7 +431,7 @@ u32 gtp_up_http_redirect_server_create(u32 fib_index, int is_ip4)
 }
 
 clib_error_t *
-gtp_up_http_redirect_server_main_init (vlib_main_t * vm)
+upf_http_redirect_server_main_init (vlib_main_t * vm)
 {
   http_redirect_server_main_t *hsm = &http_redirect_server_main;
   vlib_thread_main_t *vtm = vlib_get_thread_main ();
@@ -446,7 +446,7 @@ gtp_up_http_redirect_server_main_init (vlib_main_t * vm)
   return 0;
 }
 
-VLIB_INIT_FUNCTION (gtp_up_http_redirect_server_main_init);
+VLIB_INIT_FUNCTION (upf_http_redirect_server_main_init);
 
 /*
 * fd.io coding-style-patch-verification: ON

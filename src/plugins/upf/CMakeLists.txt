@@ -103,36 +103,36 @@ if(DPDK_INCLUDE_DIR AND DPDK_LIB)
     message(STATUS "DPDK depends on libmnl (Mellanox PMD requirement)")
   endif()
   set(DPDK_LINK_FLAGS "${DPDK_LINK_FLAGS} -Wl,-lnuma")
-  add_vpp_plugin(gtp_up
+  add_vpp_plugin(upf
     SOURCES
     node.c
-    gtp_up.c
-    gtp_up_api.c
+    upf.c
+    upf_api.c
     gtpu_encap.c
     gtpu_decap.c
-    gtp_up_if_input.c
-    gtp_up_classify.c
+    upf_if_input.c
+    upf_classify.c
     pfcp.c
-    gtp_up_sx.c
-    gtp_up_sx_api.c
-    gtp_up_sx_input.c
-    gtp_up_sx_server.c
-    gtp_up_http_redirect_server.c
+    upf_pfcp.c
+    upf_pfcp_api.c
+    upf_pfcp_input.c
+    upf_pfcp_server.c
+    upf_http_redirect_server.c
 
     API_FILES
-    gtp_up.api
+    upf.api
 
     INSTALL_HEADERS
-    gtp_up.h
-    gtp_up_all_api_h.h
-    gtp_up_msg_enum.h
+    upf.h
+    upf_all_api_h.h
+    upf_msg_enum.h
     pfcp.h
-    gtp_up_sx.h
-    gtp_up_sx_api.h
-    gtp_up_http_redirect_server.h
+    upf_pfcp.h
+    upf_pfcp_api.h
+    upf_http_redirect_server.h
 
     API_TEST_SOURCES
-    gtp_up_test.c
+    upf_test.c
   )
 else()
   message(WARNING "DPDK not found - GTP UPF disabled")
