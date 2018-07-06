@@ -1,5 +1,5 @@
-GTP-U UP based on VPP
-=====================
+GTP-U User Plane Function (UPF) based on VPP
+============================================
 
 For main VPP README, skip to the next chapter.
 
