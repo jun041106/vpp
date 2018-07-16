@@ -432,7 +432,7 @@ upf_encap_inline (vlib_main_t * vm,
 					     - sizeof (*ip4_2) - sizeof(*udp2)
 					     - GTPU_V1_HDR_LEN);
 	      gtpu2->length = new_l2;
-	      gtpu3 = (gtpu_header_t *)(udp1+3);
+	      gtpu3 = (gtpu_header_t *)(udp3+1);
 	      new_l3 = clib_host_to_net_u16 (vlib_buffer_length_in_chain(vm, b3)
 					     - sizeof (*ip4_3) - sizeof(*udp3)
 					     - GTPU_V1_HDR_LEN);
