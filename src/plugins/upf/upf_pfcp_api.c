@@ -294,8 +294,21 @@ format_ipfilter_address_port(u8 * s,va_list * args)
 {
   ipfilter_address_t *ip = va_arg (*args, ipfilter_address_t *);
   ipfilter_port_t *port  = va_arg (*args, ipfilter_port_t *);
+  int direction          = va_arg (*args, int);
 
-  s = format(s, "%U", format_ip46_address, &ip->address);
+  if (direction == 0 &&
+      ipfilter_address_cmp_const(ip, ACL_FROM_ANY) == 0)
+    {
+      s = format(s, "any");
+    }
+  else if (direction == 1 &&
+	   ipfilter_address_cmp_const(ip, ACL_TO_ASSIGNED) == 0)
+    {
+      s = format(s, "assigned");
+    }
+  else
+    s = format(s, "%U", format_ip46_address, &ip->address);
+
   if (port->min != 0 || port->max != (u16)~0)
     {
       s = format(s, " %d", port->min);
@@ -347,9 +360,9 @@ format_ipfilter(u8 * s, va_list * args)
     s = format(s, "%d ", acl->proto);
 
   s = format(s, "from %U ", format_ipfilter_address_port,
-	     &acl->src_address, &acl->src_port);
+	     &acl->src_address, &acl->src_port, 0);
   s = format(s, "to %U ", format_ipfilter_address_port,
-	     &acl->dst_address, &acl->dst_port);
+	     &acl->dst_address, &acl->dst_port, 1);
 
   return s;
 }

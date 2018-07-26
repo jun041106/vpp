@@ -68,4 +68,25 @@ void upf_pfcp_error_report(upf_session_t * sx, gtp_error_ind_t * error);
 /* format functions */
 u8 * format_sx_session(u8 * s, va_list * args);
 
+/**
+ * Compare integer ids.
+ */
+#define intcmp(a, b)                                    \
+	({                                              \
+		typeof (a) a_ = (a);                    \
+		typeof (b) b_ = (b);                    \
+		(a_) < (b_) ? -1 : (a_) > (b_) ? 1 : 0; \
+	})
+
+static inline int ipfilter_address_cmp_const(const ipfilter_address_t *a, const ipfilter_address_t b)
+{
+  int r;
+
+  if ((r = intcmp(a->address.as_u64[0], b.address.as_u64[0])) != 0)
+    return r;
+  if ((r = intcmp(a->address.as_u64[1], b.address.as_u64[1])) != 0)
+    return r;
+  return intcmp(a->mask, b.mask);
+};
+
 #endif /* _UPF_SX_H_ */

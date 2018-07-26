@@ -304,16 +304,6 @@ VNET_HW_INTERFACE_CLASS (gtpu_hw_class) =
 };
 /* *INDENT-ON* */
 
-/**
- * Compare integer ids.
- */
-#define intcmp(a, b)                                    \
-	({                                              \
-		typeof (a) a_ = (a);                    \
-		typeof (b) b_ = (b);                    \
-		(a_) < (b_) ? -1 : (a_) > (b_) ? 1 : 0; \
-	})
-
 static int sx_pdr_id_compare(const void *p1, const void *p2)
 {
 	const upf_pdr_t *a = (upf_pdr_t *)p1;
@@ -1110,17 +1100,6 @@ format_acl6 (u8 * s, va_list * args)
 	     rule->data.userdata);
 
   return s;
-}
-
-static int ipfilter_address_cmp_const(const ipfilter_address_t *a, const ipfilter_address_t b)
-{
-  int r;
-
-  if ((r = intcmp(a->address.as_u64[0], b.address.as_u64[0])) != 0)
-    return r;
-  if ((r = intcmp(a->address.as_u64[1], b.address.as_u64[1])) != 0)
-    return r;
-  return intcmp(a->mask, b.mask);
 }
 
 static void rte_acl_set_port(struct rte_acl_field * field, const ipfilter_port_t * port)
