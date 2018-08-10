@@ -18,12 +18,15 @@
 #define _UPF_SX_ERL_H
 
 #include <vppinfra/types.h>
+#include "pfcp.h"
 #include "upf_pfcp_server.h"
 
 #define PRIsMAC "%02x:%02x:%02x:%02x:%02x:%02x"
 #define ARGsMAC(m) (m)[0], (m)[1], (m)[2], (m)[3], (m)[4], (m)[5]
 
 int upf_pfcp_handle_msg(sx_msg_t * msg);
+pfcp_usage_report_t *build_usage_report(upf_session_t *sess, upf_urr_t *urr,
+					u32 trigger, pfcp_usage_report_t **report);
 
 u8 * format_ipfilter(u8 * s, va_list * args);
 

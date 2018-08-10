@@ -372,37 +372,14 @@ format_ipfilter(u8 * s, va_list * args)
 static int send_session_request(upf_session_t * sx, u8 type, struct pfcp_group *grp)
 {
   sx_msg_t * msg;
-  int r = 0;
 
-  msg = clib_mem_alloc_no_fail(sizeof(sx_msg_t));
-  memset(msg, 0, sizeof(sx_msg_t));
+  msg = build_sx_msg(sx, type, grp);
+  if (msg)
+    {
+      upf_pfcp_server_notify (msg);
+      pfcp_free_msg(type, grp);
+    }
 
-  msg->data = vec_new(u8, 2048);
-
-  msg->hdr->version = 1;
-  msg->hdr->s_flag = 1;
-  msg->hdr->type = type;
-
-  msg->hdr->session_hdr.seid = clib_host_to_net_u64(sx->cp_seid);
-  //TODO: sequence number....
-  _vec_len(msg->data) = offsetof(pfcp_header_t, session_hdr.ies);
-
-  r = pfcp_encode_msg(type, grp, &msg->data);
-  if (r != 0)
-    goto out_free;
-
-  msg->hdr->length = clib_host_to_net_u16(_vec_len(msg->data) - 4);
-
-  msg->fib_index = sx->fib_index,
-  msg->lcl.address = sx->up_address;
-  msg->rmt.address = sx->cp_address;
-  msg->lcl.port = UDP_DST_PORT_SX;
-  msg->rmt.port = UDP_DST_PORT_SX;
-
-  upf_pfcp_server_notify (msg);
-
- out_free:
-  pfcp_free_msg(type, grp);
   return 0;
 }
 
@@ -1334,12 +1311,18 @@ static int handle_create_urr(upf_session_t *sess, pfcp_create_urr_t *create_urr,
       //TODO: measurement_period;
       if (ISSET_BIT(urr->grp.fields, CREATE_URR_VOLUME_THRESHOLD))
 	{
-	  create->threshold.volume[URR_COUNTER_UL] = urr->volume_threshold.ul;
-	  create->threshold.volume[URR_COUNTER_DL] = urr->volume_threshold.dl;
-	  create->threshold.volume[URR_COUNTER_TOTAL] = urr->volume_threshold.total;
+	  create->volume.threshold.ul = urr->volume_threshold.ul;
+	  create->volume.threshold.dl = urr->volume_threshold.dl;
+	  create->volume.threshold.total = urr->volume_threshold.total;
 	}
 
-      //TODO: volume_quota;
+      if (ISSET_BIT(urr->grp.fields, CREATE_URR_VOLUME_QUOTA))
+	{
+	  create->volume.quota.ul = urr->volume_quota.ul;
+	  create->volume.quota.dl = urr->volume_quota.dl;
+	  create->volume.quota.total = urr->volume_quota.total;
+	}
+
       //TODO: time_threshold;
       //TODO: time_quota;
       //TODO: quota_holding_time;
@@ -1395,16 +1378,25 @@ static int handle_update_urr(upf_session_t *sess, pfcp_update_urr_t *update_urr,
 	}
 
       update->methods = urr->measurement_method;
-      update->triggers = OPT(urr, UPDATE_URR_REPORTING_TRIGGERS, reporting_triggers, 0);
+      update->triggers = OPT(urr, UPDATE_URR_REPORTING_TRIGGERS,
+			     reporting_triggers, update->triggers);
       //TODO: measurement_period;
       if (ISSET_BIT(urr->grp.fields, UPDATE_URR_VOLUME_THRESHOLD))
 	{
-	  update->threshold.volume[URR_COUNTER_UL] = urr->volume_threshold.ul;
-	  update->threshold.volume[URR_COUNTER_DL] = urr->volume_threshold.dl;
-	  update->threshold.volume[URR_COUNTER_TOTAL] = urr->volume_threshold.total;
+	  update->volume.threshold.ul = urr->volume_threshold.ul;
+	  update->volume.threshold.dl = urr->volume_threshold.dl;
+	  update->volume.threshold.total = urr->volume_threshold.total;
+	}
+      if (ISSET_BIT(urr->grp.fields, UPDATE_URR_VOLUME_QUOTA))
+	{
+	  update->update_flags |= SX_URR_UPDATE_VOLUME_QUOTA;
+	  memset(&update->volume.measure.consumed, 0,
+		 sizeof(update->volume.measure.consumed));
+	  update->volume.quota.ul = urr->volume_quota.ul;
+	  update->volume.quota.dl = urr->volume_quota.dl;
+	  update->volume.quota.total = urr->volume_quota.total;
 	}
 
-      //TODO: volume_quota;
       //TODO: time_threshold;
       //TODO: time_quota;
       //TODO: quota_holding_time;
@@ -1459,12 +1451,20 @@ static int handle_remove_urr(upf_session_t *sess, pfcp_remove_urr_t *remove_urr,
   return r;
 }
 
-static pfcp_usage_report_t *
+pfcp_usage_report_t *
 build_usage_report(upf_session_t *sess, upf_urr_t *urr,
 		   u32 trigger, pfcp_usage_report_t **report)
 {
   pfcp_usage_report_t *r;
-  vlib_counter_t v;
+  urr_volume_t volume;
+
+  clib_spinlock_lock (&sess->lock);
+
+  volume = urr->volume;
+  memset(&urr->volume.measure.packets, 0, sizeof(urr->volume.measure.packets));
+  memset(&urr->volume.measure.bytes, 0, sizeof(urr->volume.measure.bytes));
+
+  clib_spinlock_unlock (&sess->lock);
 
   vec_alloc(*report, 1);
   r = vec_end(*report);
@@ -1488,12 +1488,9 @@ build_usage_report(upf_session_t *sess, upf_urr_t *urr,
   SET_BIT(r->grp.fields, USAGE_REPORT_VOLUME_MEASUREMENT);
   r->volume_measurement.fields = 7;
 
-  vlib_get_combined_counter (&urr->measurement.volume, URR_COUNTER_UL, &v);
-  r->volume_measurement.ul = v.bytes;
-  vlib_get_combined_counter (&urr->measurement.volume, URR_COUNTER_DL, &v);
-  r->volume_measurement.dl = v.bytes;
-  vlib_get_combined_counter (&urr->measurement.volume, URR_COUNTER_TOTAL, &v);
-  r->volume_measurement.total = v.bytes;
+  r->volume_measurement.ul = volume.measure.bytes.ul;
+  r->volume_measurement.dl = volume.measure.bytes.dl;
+  r->volume_measurement.total = volume.measure.bytes.total;
 
   /* SET_BIT(r->grp.fields, USAGE_REPORT_DURATION_MEASUREMENT); */
   /* SET_BIT(r->grp.fields, USAGE_REPORT_APPLICATION_DETECTION_INFORMATION); */
@@ -1702,7 +1699,7 @@ handle_session_modification_request(sx_msg_t * req, pfcp_session_modification_re
 	{
 	  upf_urr_t *urr;
 
-	  if (!(urr = sx_get_urr(sess, SX_PENDING, qry->urr_id)))
+	  if (!(urr = sx_get_urr(sess, SX_ACTIVE, qry->urr_id)))
 	    continue;
 
 	  build_usage_report(sess, urr, USAGE_REPORT_TRIGGER_IMMEDIATE_REPORT,

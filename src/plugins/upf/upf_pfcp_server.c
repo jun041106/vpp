@@ -17,6 +17,9 @@
     udp upf_pfcp server
 */
 
+#define _LGPL_SOURCE            /* LGPL v3.0 is compatible with Apache 2.0 */
+#include <urcu-qsbr.h>          /* QSBR RCU flavor */
+
 #include <vnet/ip/ip.h>
 #include <vnet/udp/udp.h>
 #include <vnet/session/session.h>
@@ -27,8 +30,9 @@
 
 #include <vppinfra/bihash_template.c>
 
-#include "upf_pfcp_server.h"
+#include "upf_pfcp.h"
 #include "upf_pfcp_api.h"
+#include "upf_pfcp_server.h"
 
 #if CLIB_DEBUG > 0
 #define gtp_debug clib_warning
@@ -41,6 +45,7 @@ typedef enum
 {
   EVENT_RX = 1,
   EVENT_NOTIFY,
+  EVENT_URR,
 } sx_process_event_t;
 
 sx_server_main_t sx_server_main;
@@ -106,10 +111,112 @@ void upf_pfcp_send_data (sx_msg_t * msg)
   vlib_put_frame_to_node (vm, to_node_index, f);
 }
 
+sx_msg_t * build_sx_msg(upf_session_t * sx, u8 type, struct pfcp_group *grp)
+{
+  sx_msg_t * msg;
+  int r = 0;
+
+  msg = clib_mem_alloc_no_fail(sizeof(sx_msg_t));
+  memset(msg, 0, sizeof(sx_msg_t));
+
+  msg->data = vec_new(u8, 2048);
+
+  msg->hdr->version = 1;
+  msg->hdr->s_flag = 1;
+  msg->hdr->type = type;
+
+  msg->hdr->session_hdr.seid = clib_host_to_net_u64(sx->cp_seid);
+  //TODO: sequence number....
+  _vec_len(msg->data) = offsetof(pfcp_header_t, session_hdr.ies);
+
+  r = pfcp_encode_msg(type, grp, &msg->data);
+  if (r != 0)
+    {
+      sx_msg_free(msg);
+      return NULL;
+    }
+
+  msg->hdr->length = clib_host_to_net_u16(_vec_len(msg->data) - 4);
+
+  msg->fib_index = sx->fib_index,
+  msg->lcl.address = sx->up_address;
+  msg->rmt.address = sx->cp_address;
+  msg->lcl.port = clib_host_to_net_u16 (UDP_DST_PORT_SX);
+  msg->rmt.port = clib_host_to_net_u16 (UDP_DST_PORT_SX);
+
+  return msg;
+}
+
+static int urr_check_counter(u64 bytes, u64 consumed, u64 threshold, u64 quota)
+{
+  u32 r = 0;
+
+  if (quota != 0 && consumed >= quota)
+    r |= USAGE_REPORT_TRIGGER_VOLUME_QUOTA;
+
+  if (threshold != 0 && bytes > threshold)
+    r |= USAGE_REPORT_TRIGGER_VOLUME_THRESHOLD;
+
+  return r;
+}
+
+static void
+upf_pfcp_session_usage_report(upf_session_t *sx)
+{
+  pfcp_session_report_request_t req;
+  struct rules *active;
+  upf_urr_t *urr;
+  sx_msg_t *msg;
+
+  active = sx_get_rules(sx, SX_ACTIVE);
+
+  if (vec_len(active->urr) == 0)
+    /* how could that happen? */
+    return;
+
+  memset(&req, 0, sizeof(req));
+  SET_BIT(req.grp.fields, SESSION_REPORT_REQUEST_REPORT_TYPE);
+  req.report_type = REPORT_TYPE_USAR;
+
+  SET_BIT(req.grp.fields, SESSION_REPORT_REQUEST_USAGE_REPORT);
+
+  vec_foreach(urr, active->urr)
+    {
+      u32 trigger = 0;
+
+#define urr_check(V, D)					\
+      urr_check_counter(				\
+			V.measure.bytes.D,		\
+			V.measure.consumed.D,		\
+			V.threshold.D,			\
+			V.quota.D)
+
+      trigger = urr_check(urr->volume, ul);
+      trigger |= urr_check(urr->volume, dl);
+      trigger |= urr_check(urr->volume, total);
+
+#undef urr_check
+
+      if (trigger != 0)
+	{
+	  build_usage_report(sx, urr, trigger, &req.usage_report);
+	}
+    }
+
+  msg = build_sx_msg(sx, PFCP_SESSION_REPORT_REQUEST, &req.grp);
+  if (msg)
+    {
+      upf_pfcp_send_data(msg);
+      sx_msg_free(msg);
+    }
+}
+
 static uword
 sx_process (vlib_main_t * vm,
 	    vlib_node_runtime_t * rt, vlib_frame_t * f)
 {
+  upf_main_t *gtm = &upf_main;
+
   while (1)
     {
       uword event_type, *event_data = 0;
@@ -138,6 +245,19 @@ sx_process (vlib_main_t * vm,
 
 		upf_pfcp_send_data(msg);
 		sx_msg_free(msg);
+	      }
+	    break;
+	  }
+
+	case EVENT_URR:
+	  {
+	    for (int i = 0; i < vec_len (event_data); i++)
+	      {
+		uword si = (uword)event_data[i];
+		upf_session_t *sx;
+
+		sx = pool_elt_at_index (gtm->sessions, si);
+		upf_pfcp_session_usage_report(sx);
 	      }
 	    break;
 	  }
@@ -219,6 +339,16 @@ upf_pfcp_server_notify(sx_msg_t * msg)
 
   gtp_debug ("sending NOTIFY event %p", msg);
   vlib_process_signal_event_mt(vm, sx->node_index, EVENT_NOTIFY, (uword)msg);
+}
+
+void
+upf_pfcp_server_session_usage_report(upf_session_t *sess)
+{
+  sx_server_main_t *sx = &sx_server_main;
+  vlib_main_t *vm = sx->vlib_main;
+  upf_main_t *gtm = &upf_main;
+
+  vlib_process_signal_event_mt(vm, sx->node_index, EVENT_URR, (uword)(sess - gtm->sessions));
 }
 
 /*********************************************************/

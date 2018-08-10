@@ -298,18 +298,29 @@ typedef struct {
 
 /* Counter */
 
-enum {
-  URR_COUNTER_UL = 0,
-  URR_COUNTER_DL,
-  URR_COUNTER_TOTAL,
-  URR_COUNTER_NUM,
-};
+#define URR_OK                  0
+#define URR_QUOTA_EXHAUSTED     BIT(0)
+#define URR_THRESHOLD_REACHED   BIT(1)
 
-// TODO: replace with vpp counter
+/* TODO: measure if more optimize cache line aware layout
+ *       of the counters and quotas has any performance impcat */
 typedef struct {
-    u64 bytes;
-    u64 pkts;
-} upf_cnt_t;
+  u64 ul;
+  u64 dl;
+  u64 total;
+} urr_counter_t;
+
+typedef struct {
+  urr_counter_t packets;
+  urr_counter_t bytes;
+  urr_counter_t consumed;
+} urr_measure_t;
+
+typedef struct {
+  urr_measure_t measure;
+  urr_counter_t threshold;
+  urr_counter_t quota;
+} urr_volume_t;
 
 /* Usage Reporting Rules */
 typedef struct {
@@ -320,17 +331,17 @@ typedef struct {
 #define SX_URR_EVENT  0x0004
 
     u16 triggers;
-#define SX_URR_PERIODIC  0x0001
-#define SX_URR_THRESHOLD 0x0002
-#define SX_URR_ENVELOPE  0x0004
+#define SX_URR_PERIODIC         0x0001
+#define SX_URR_VOLUME_THRESHOLD 0x0002
+#define SX_URR_VOLUME_QUOTA     0x0004
+#define SX_URR_TIME_THRESHOLD   0x0008
+#define SX_URR_TIME_QUOTA       0x0010
+#define SX_URR_ENVELOPE         0x8000
 
-    struct {
-      u64 volume[URR_COUNTER_NUM];
-    } threshold;
+  u8 update_flags;
+#define SX_URR_UPDATE_VOLUME_QUOTA BIT(0)
 
-    struct {
-      vlib_combined_counter_main_t volume;
-    } measurement;
+  urr_volume_t volume;
 } upf_urr_t;
 
 typedef struct {
@@ -347,6 +358,7 @@ typedef struct {
   uint32_t flags;
 #define SX_UPDATING    0x8000
 
+  clib_spinlock_t lock;
   volatile int active;
 
   struct rules {

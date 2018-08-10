@@ -18,6 +18,7 @@
 #define _UPF_SX_SERVER_H
 
 #include <time.h>
+#include "upf.h"
 #include "pfcp.h"
 
 typedef struct
@@ -71,8 +72,10 @@ extern vlib_node_registration_t sx6_input_node;
 
 #define UDP_DST_PORT_SX 8805
 
+sx_msg_t * build_sx_msg(upf_session_t * sx, u8 type, struct pfcp_group *grp);
 void upf_pfcp_send_data (sx_msg_t * msg);
 void upf_pfcp_server_notify (sx_msg_t * msg);
+void upf_pfcp_server_session_usage_report(upf_session_t *sx);
 
 void upf_pfcp_handle_input (vlib_main_t * vm, vlib_buffer_t *b, int is_ip4);
 

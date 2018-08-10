@@ -15,6 +15,7 @@
 #ifndef _UPF_SX_H_
 #define _UPF_SX_H_
 
+#include <urcu-pointer.h>
 #include "upf.h"
 
 #define MAX_LEN 128
@@ -59,7 +60,8 @@ static inline struct rules *sx_get_rules(upf_session_t *sx, int rules)
 
 void vlib_free_combined_counter (vlib_combined_counter_main_t * cm);
 
-void process_urrs(vlib_main_t *vm, struct rules *r,
+void process_urrs(vlib_main_t *vm, upf_session_t *sess,
+		  struct rules *r,
 		  upf_pdr_t *pdr, vlib_buffer_t * b,
 		  u8 is_dl, u8 is_ul);
 

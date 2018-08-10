@@ -451,6 +451,8 @@ upf_session_t *sx_create_session(int sx_fib_index, const ip46_address_t *up_addr
   sx->cp_seid = cp_seid;
   sx->cp_address = *cp_address;
 
+  clib_spinlock_init(&sx->lock);
+
   //TODO sx->up_f_seid = sx - gtm->sessions;
   hash_set (gtm->session_by_id, cp_seid, sx - gtm->sessions);
 
@@ -751,8 +753,8 @@ static int make_pending_urr(upf_session_t *sx)
       pending->urr = vec_dup(active->urr);
       vec_foreach (urr, pending->urr)
 	{
-	  memset(&urr->measurement.volume, 0, sizeof(urr->measurement.volume));
-	  vlib_validate_combined_counter(&urr->measurement.volume, URR_COUNTER_NUM);
+	  urr->update_flags = 0;
+	  memset(&urr->volume.measure, 0, sizeof(urr->volume.measure));
 	}
     }
 
@@ -764,7 +766,6 @@ static void sx_free_rules(upf_session_t *sx, int rule)
   struct rules *rules = sx_get_rules(sx, rule);
   upf_pdr_t *pdr;
   upf_far_t *far;
-  upf_urr_t *urr;
 
   vec_foreach (pdr, rules->pdr)
     vec_free(pdr->urr_ids);
@@ -777,8 +778,6 @@ static void sx_free_rules(upf_session_t *sx, int rule)
       vec_free(far->forward.rewrite);
     }
   vec_free(rules->far);
-  vec_foreach (urr, rules->urr)
-    vlib_free_combined_counter(&urr->measurement.volume);
   vec_free(rules->urr);
   for (size_t i = 0; i < ARRAY_LEN(rules->sdf); i++)
     sx_acl_free(&rules->sdf[i]);
@@ -806,6 +805,8 @@ static void rcu_free_sx_session_info(struct rcu_head *head)
 
   for (size_t i = 0; i < ARRAY_LEN(sx->rules); i++)
     sx_free_rules(sx, i);
+
+  clib_spinlock_free(&sx->lock);
 
   vec_add1 (gtm->free_session_hw_if_indices, sx->hw_if_index);
 
@@ -1748,14 +1749,7 @@ int sx_update_apply(upf_session_t *sx)
   else
     pending->far = active->far;
 
-  if (pending_urr)
-    {
-      upf_urr_t *urr;
-
-      vec_foreach (urr, pending->urr)
-	vlib_validate_combined_counter(&urr->measurement.volume, URR_COUNTER_NUM);
-    }
-  else
+  if (!pending_urr)
     pending->urr = active->urr;
 
   if (pending_pdr)
@@ -1797,9 +1791,57 @@ int sx_update_apply(upf_session_t *sx)
     }
 
   pending = sx_get_rules(sx, SX_PENDING);
+  active = sx_get_rules(sx, SX_ACTIVE);
+
   if (!pending_pdr) pending->pdr = NULL;
   if (!pending_far) pending->far = NULL;
-  if (!pending_urr) pending->urr = NULL;
+  if (pending_urr)
+    {
+      /* something needs to be done here, TODO: figure out what exactly that is.... */
+      upf_urr_t *old_urr;
+
+      clib_spinlock_lock (&sx->lock);
+
+      /* copy rest traffic from old active (now pending) to current
+       * new URR was initialized with zero, simply add the old values */
+      vec_foreach (old_urr, pending->urr)
+	{
+	  upf_urr_t * new_urr = sx_get_urr_by_id(active, old_urr->id);
+
+	  if (!new_urr)
+	    continue;
+
+	  if (!(new_urr->methods & SX_URR_VOLUME))
+	    continue;
+
+	  urr_volume_t *old_volume = &old_urr->volume;
+	  urr_volume_t *new_volume = &new_urr->volume;
+
+#define combine_volume_type(Dst, Src, T, D)			\
+	  (Dst)->measure.T.D += (Src)->measure.T.D
+#define combine_volume(Dst, Src, T)				\
+	  do {							\
+	    combine_volume_type((Dst), (Src), T, ul);		\
+	    combine_volume_type((Dst), (Src), T, dl);		\
+	    combine_volume_type((Dst), (Src), T, total);	\
+	  } while (0)
+
+	  combine_volume(new_volume, old_volume, packets);
+	  combine_volume(new_volume, old_volume, bytes);
+
+	  if (new_urr->update_flags & SX_URR_UPDATE_VOLUME_QUOTA)
+	    new_volume->measure.consumed = new_volume->measure.bytes;
+	  else
+	    combine_volume(new_volume, old_volume, consumed);
+
+#undef combine_volume
+#undef combine_volume_type
+	}
+
+      clib_spinlock_unlock (&sx->lock);
+    }
+  else
+    pending->urr = NULL;
 
   return 0;
 }
@@ -1827,45 +1869,65 @@ upf_session_t *sx_lookup(uint64_t sess_id)
   return pool_elt_at_index (gtm->sessions, p[0]);
 }
 
-void
-vlib_free_combined_counter (vlib_combined_counter_main_t * cm)
+static int urr_increment_and_check_counter(u64 * packets, u64 * bytes, u64 * consumed,
+					   u64 threshold, u64 quota, u64 n_bytes)
 {
-  vlib_thread_main_t *tm = vlib_get_thread_main ();
-  int i;
+  int r = URR_OK;
 
-  for (i = 0; i < tm->n_vlib_mains; i++)
-    vec_free (cm->counters[i]);
-  vec_free (cm->counters);
+  if (quota != 0 &&
+      unlikely(*consumed < quota && *consumed + n_bytes >= quota))
+    r |= URR_QUOTA_EXHAUSTED;
+  *consumed += n_bytes;
+
+  if (threshold != 0 &&
+      unlikely(*bytes < threshold && *bytes + n_bytes >= threshold))
+    r |= URR_THRESHOLD_REACHED;
+  *bytes += n_bytes;
+
+  *packets += 1;
+
+  return r;
 }
 
-void process_urrs(vlib_main_t *vm, struct rules *r,
+void process_urrs(vlib_main_t *vm, upf_session_t *sess,
+		  struct rules *r,
 		  upf_pdr_t *pdr, vlib_buffer_t * b,
 		  u8 is_dl, u8 is_ul)
 {
-  u32 thread_index = vlib_get_thread_index ();
   u16 *urr_id;
 
   vec_foreach (urr_id, pdr->urr_ids)
     {
       upf_urr_t * urr = sx_get_urr_by_id(r, *urr_id);
+      int r = URR_OK;
 
       if (!urr)
 	continue;
 
+      clib_spinlock_lock (&sess->lock);
+
       if (urr->methods & SX_URR_VOLUME)
 	{
-	  if (is_dl)
-	    vlib_increment_combined_counter(&urr->measurement.volume, thread_index,
-					    URR_COUNTER_DL, 1,
-					    vlib_buffer_length_in_chain (vm, b));
+#define urr_incr_and_check(V, D, L)					\
+	  urr_increment_and_check_counter(&V.measure.packets.D,		\
+					  &V.measure.bytes.D,		\
+					  &V.measure.consumed.D,	\
+					  V.threshold.D,		\
+					  V.quota.D,			\
+					  (L))
+
 	  if (is_ul)
-	    vlib_increment_combined_counter(&urr->measurement.volume, thread_index,
-					    URR_COUNTER_UL, 1,
-					    vlib_buffer_length_in_chain (vm, b));
-	  vlib_increment_combined_counter(&urr->measurement.volume, thread_index,
-					  URR_COUNTER_TOTAL, 1,
-					  vlib_buffer_length_in_chain (vm, b));
+	    r |= urr_incr_and_check(urr->volume, ul, vlib_buffer_length_in_chain (vm, b));
+	  if (is_dl)
+	    r |= urr_incr_and_check(urr->volume, dl, vlib_buffer_length_in_chain (vm, b));
+
+	  r |= urr_incr_and_check(urr->volume, total, vlib_buffer_length_in_chain (vm, b));
 	}
+
+      clib_spinlock_unlock (&sess->lock);
+
+      if (unlikely(r != URR_OK))
+	upf_pfcp_server_session_usage_report(sess);
     }
 }
 
@@ -1891,6 +1953,31 @@ static const char * source_intf_name[] = {
   "SGi-LAN",
   "CP-function"
 };
+
+static u8 *
+format_urr_counter(u8 * s, va_list * args)
+{
+  void *m = va_arg (*args, void *);
+  void *t = va_arg (*args, void *);
+  off_t offs = va_arg (*args, off_t);
+
+  return format(s, "Measured: %20"PRIu64", Theshold: %20"PRIu64", Pkts: %10"PRIu64,
+		*(u64 *)(m + offsetof(urr_measure_t, bytes) + offs),
+		*(u64 *)(t + offs),
+		*(u64 *)(m + offsetof(urr_measure_t, packets) + offs));
+}
+
+static u8 *
+format_urr_quota(u8 * s, va_list * args)
+{
+  void *m = va_arg (*args, void *);
+  void *q = va_arg (*args, void *);
+  off_t offs = va_arg (*args, off_t);
+
+  return format(s, "Consumed: %20"PRIu64", Quota:    %20"PRIu64,
+		*(u64 *)(m + offsetof(urr_measure_t, consumed) + offs),
+		*(u64 *)(q + offs));
+}
 
 u8 *
 format_sx_session(u8 * s, va_list * args)
@@ -1998,11 +2085,27 @@ format_sx_session(u8 * s, va_list * args)
   }
 
   vec_foreach (urr, rules->urr)
-    s = format(s, "URR: %u\n"
-	       "  Measurement Method: %04x == %U\n",
-	       urr->id, urr->methods,
-	       format_flags, urr->methods, urr_method_flags);
+    {
+      s = format(s, "URR: %u\n"
+		 "  Measurement Method: %04x == %U\n",
+		 urr->id, urr->methods,
+		 format_flags, urr->methods, urr_method_flags);
+      if (urr->methods & SX_URR_VOLUME)
+	{
+	  urr_volume_t *v = &urr->volume;
 
+	  s = format(s, "  Volume\n"
+		     "    Up:    %U\n           %U\n"
+		     "    Down:  %U\n           %U\n"
+		     "    Total: %U\n           %U\n",
+		     format_urr_counter, &v->measure, &v->threshold, offsetof(urr_counter_t, ul),
+		     format_urr_quota,   &v->measure, &v->quota, offsetof(urr_counter_t, ul),
+		     format_urr_counter, &v->measure, &v->threshold, offsetof(urr_counter_t, dl),
+		     format_urr_quota,   &v->measure, &v->quota, offsetof(urr_counter_t, dl),
+		     format_urr_counter, &v->measure, &v->threshold, offsetof(urr_counter_t, total),
+		     format_urr_quota,   &v->measure, &v->quota, offsetof(urr_counter_t, total));
+	}
+    }
   return s;
 }
 
