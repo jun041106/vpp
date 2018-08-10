@@ -1903,13 +1903,15 @@ format_sx_session(u8 * s, va_list * args)
   upf_far_t *far;
   upf_urr_t *urr;
 
-  s = format(s, "CP F-SEID: 0x%016" PRIx64 " (%" PRIu64 ") @ %p\n"
-	     "Active: %u\nPending: %u\n",
-	     sx->cp_seid, sx->cp_seid, sx,
-	     sx->active ^ SX_ACTIVE, sx->active ^ SX_PENDING);
+  s = format(s,
+	     "CP F-SEID: 0x%016" PRIx64 " (%" PRIu64 ") @ %U\n"
+	     "UP F-SEID: 0x%016" PRIx64 " (%" PRIu64 ") @ %U\n",
+	     sx->cp_seid, sx->cp_seid, format_ip46_address, &sx->cp_address, IP46_TYPE_ANY,
+	     sx->cp_seid, sx->cp_seid, format_ip46_address, &sx->up_address, IP46_TYPE_ANY,
+	     sx);
 
-  s = format(s, "PDR: %p\nFAR: %p\n",
-	     rules->pdr, rules->far);
+  s = format(s, "  Pointer: %p\n  PDR: %p\n  FAR: %p\n",
+	     sx, rules->pdr, rules->far);
 
   vec_foreach (pdr, rules->pdr) {
     upf_nwi_t * nwi = NULL;

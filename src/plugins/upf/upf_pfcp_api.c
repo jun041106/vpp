@@ -1524,8 +1524,8 @@ static int
 handle_session_establishment_request(sx_msg_t * req, pfcp_session_establishment_request_t *msg)
 {
   pfcp_session_establishment_response_t resp;
-  ip46_address_t up_address;
-  ip46_address_t cp_address;
+  ip46_address_t up_address = ip46_address_initializer;
+  ip46_address_t cp_address = ip46_address_initializer;
   upf_session_t *sess;
   int r = 0;
   int is_ip4;
