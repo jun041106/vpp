@@ -1201,17 +1201,17 @@ static int add_ip4_sdf(struct rte_acl_ctx *ctx, const upf_pdr_t *pdr,
   switch (pdr->pdi.src_intf)
     {
     case SRC_INTF_ACCESS:
-      ip4_assign_src_address(&r, SRC_FIELD_IPV4, pdr);
-      ip4_assign_dst_address(&r, DST_FIELD_IPV4, pdr);
-      ip4_assign_src_port(&r, SRCP_FIELD_IPV4, pdr);
-      ip4_assign_dst_port(&r, DSTP_FIELD_IPV4, pdr);
-      break;
-
-    default:
       ip4_assign_src_address(&r, DST_FIELD_IPV4, pdr);
       ip4_assign_dst_address(&r, SRC_FIELD_IPV4, pdr);
       ip4_assign_src_port(&r, DSTP_FIELD_IPV4, pdr);
       ip4_assign_dst_port(&r, SRCP_FIELD_IPV4, pdr);
+      break;
+
+    default:
+      ip4_assign_src_address(&r, SRC_FIELD_IPV4, pdr);
+      ip4_assign_dst_address(&r, DST_FIELD_IPV4, pdr);
+      ip4_assign_src_port(&r, SRCP_FIELD_IPV4, pdr);
+      ip4_assign_dst_port(&r, DSTP_FIELD_IPV4, pdr);
       break;
     }
 
@@ -1325,17 +1325,17 @@ static int add_ip6_sdf(struct rte_acl_ctx *ctx, const upf_pdr_t *pdr,
   switch (pdr->pdi.src_intf)
     {
     case SRC_INTF_ACCESS:
-      ip6_assign_src_address(&r, SRC1_FIELD_IPV6, pdr);
-      ip6_assign_dst_address(&r, DST1_FIELD_IPV6, pdr);
-      ip6_assign_src_port(&r, SRCP_FIELD_IPV6, pdr);
-      ip6_assign_dst_port(&r, DSTP_FIELD_IPV6, pdr);
-      break;
-
-    default:
       ip6_assign_src_address(&r, DST1_FIELD_IPV6, pdr);
       ip6_assign_dst_address(&r, SRC1_FIELD_IPV6, pdr);
       ip6_assign_src_port(&r, DSTP_FIELD_IPV6, pdr);
       ip6_assign_dst_port(&r, SRCP_FIELD_IPV6, pdr);
+      break;
+
+    default:
+      ip6_assign_src_address(&r, SRC1_FIELD_IPV6, pdr);
+      ip6_assign_dst_address(&r, DST1_FIELD_IPV6, pdr);
+      ip6_assign_src_port(&r, SRCP_FIELD_IPV6, pdr);
+      ip6_assign_dst_port(&r, DSTP_FIELD_IPV6, pdr);
       break;
     }
 
