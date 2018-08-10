@@ -442,6 +442,34 @@ format_pfcp_ie(u8 * s, va_list * args)
 
 /* generic IEs */
 
+static u8 * format_u32_ie(u8 * s, va_list * args)
+{
+  u32 *v = va_arg (*args, u32 *);
+
+  s = format(s, "%u", *v);
+  return s;
+}
+
+static int decode_u32_ie(u8 *data, u16 length, void *p)
+{
+  u32 *v = p;
+
+  if (length < 4)
+    return PFCP_CAUSE_INVALID_LENGTH;
+
+  *v = get_u32(data);
+
+  return 0;
+}
+
+static int encode_u32_ie(void *p, u8 **vec)
+{
+  u32 *v = p;
+
+  put_u32(*vec, *v);
+  return 0;
+}
+
 static u8 * format_volume_ie(u8 * s, va_list * args)
 {
   pfcp_volume_ie_t *v = va_arg (*args, pfcp_volume_ie_t *);
@@ -890,53 +918,13 @@ static int encode_gbr(void *p, u8 **vec)
   return 0;
 }
 
-static u8 * format_qer_correlation_id(u8 * s, va_list * args)
-{
-  pfcp_qer_correlation_id_t *v = va_arg (*args, pfcp_qer_correlation_id_t *);
+#define format_qer_correlation_id format_u32_ie
+#define decode_qer_correlation_id decode_u32_ie
+#define encode_qer_correlation_id encode_u32_ie
 
-  return format(s, "TODO: %U", format_hex_bytes, v, sizeof(*v));
-}
-
-static int decode_qer_correlation_id(u8 *data, u16 length, void *p)
-{
-  pfcp_qer_correlation_id_t *v __attribute__ ((unused)) = p;
-
-  return 0;
-}
-
-static int encode_qer_correlation_id(void *p, u8 **vec)
-{
-  pfcp_qer_correlation_id_t *v __attribute__ ((unused)) = p;
-
-  return 0;
-}
-
-static u8 * format_precedence(u8 * s, va_list * args)
-{
-  pfcp_precedence_t *v = va_arg (*args, pfcp_precedence_t *);
-
-  return format(s, "%d", *v);
-}
-
-static int decode_precedence(u8 *data, u16 length, void *p)
-{
-  pfcp_precedence_t *v = p;
-
-  if (length < 4)
-	      return PFCP_CAUSE_INVALID_LENGTH;
-
-  *v = get_u32(data);
-
-  return 0;
-}
-
-static int encode_precedence(void *p, u8 **vec)
-{
-  pfcp_precedence_t *v = p;
-
-  put_u32(*vec, *v);
-  return 0;
-}
+#define format_precedence format_u32_ie
+#define decode_precedence decode_u32_ie
+#define encode_precedence encode_u32_ie
 
 static u8 * format_transport_level_marking(u8 * s, va_list * args)
 {
@@ -963,26 +951,9 @@ static int encode_transport_level_marking(void *p, u8 **vec)
 #define decode_volume_threshold decode_volume_ie
 #define encode_volume_threshold encode_volume_ie
 
-static u8 * format_time_threshold(u8 * s, va_list * args)
-{
-  pfcp_time_threshold_t *v = va_arg (*args, pfcp_time_threshold_t *);
-
-  return format(s, "TODO: %U", format_hex_bytes, v, sizeof(*v));
-}
-
-static int decode_time_threshold(u8 *data, u16 length, void *p)
-{
-  pfcp_time_threshold_t *v __attribute__ ((unused)) = p;
-
-  return 0;
-}
-
-static int encode_time_threshold(void *p, u8 **vec)
-{
-  pfcp_time_threshold_t *v __attribute__ ((unused)) = p;
-
-  return 0;
-}
+#define format_time_threshold format_u32_ie
+#define decode_time_threshold decode_u32_ie
+#define encode_time_threshold encode_u32_ie
 
 #define format_monitoring_time format_time_stamp
 #define decode_monitoring_time decode_time_stamp_ie
@@ -992,47 +963,13 @@ static int encode_time_threshold(void *p, u8 **vec)
 #define decode_subsequent_volume_threshold decode_volume_ie
 #define encode_subsequent_volume_threshold encode_volume_ie
 
-static u8 * format_subsequent_time_threshold(u8 * s, va_list * args)
-{
-  pfcp_subsequent_time_threshold_t *v = va_arg (*args, pfcp_subsequent_time_threshold_t *);
+#define format_subsequent_time_threshold format_u32_ie
+#define decode_subsequent_time_threshold decode_u32_ie
+#define encode_subsequent_time_threshold encode_u32_ie
 
-  return format(s, "TODO: %U", format_hex_bytes, v, sizeof(*v));
-}
-
-static int decode_subsequent_time_threshold(u8 *data, u16 length, void *p)
-{
-  pfcp_subsequent_time_threshold_t *v __attribute__ ((unused)) = p;
-
-  return 0;
-}
-
-static int encode_subsequent_time_threshold(void *p, u8 **vec)
-{
-  pfcp_subsequent_time_threshold_t *v __attribute__ ((unused)) = p;
-
-  return 0;
-}
-
-static u8 * format_inactivity_detection_time(u8 * s, va_list * args)
-{
-  pfcp_inactivity_detection_time_t *v = va_arg (*args, pfcp_inactivity_detection_time_t *);
-
-  return format(s, "TODO: %U", format_hex_bytes, v, sizeof(*v));
-}
-
-static int decode_inactivity_detection_time(u8 *data, u16 length, void *p)
-{
-  pfcp_inactivity_detection_time_t *v __attribute__ ((unused)) = p;
-
-  return 0;
-}
-
-static int encode_inactivity_detection_time(void *p, u8 **vec)
-{
-  pfcp_inactivity_detection_time_t *v __attribute__ ((unused)) = p;
-
-  return 0;
-}
+#define format_inactivity_detection_time format_u32_ie
+#define decode_inactivity_detection_time decode_u32_ie
+#define encode_inactivity_detection_time encode_u32_ie
 
 static u8 * format_reporting_triggers(u8 * s, va_list * args)
 {
@@ -1497,26 +1434,9 @@ static int encode_sxsrrsp_flags(void *p, u8 **vec)
   return 0;
 }
 
-static u8 * format_sequence_number(u8 * s, va_list * args)
-{
-  pfcp_sequence_number_t *v = va_arg (*args, pfcp_sequence_number_t *);
-
-  return format(s, "TODO: %U", format_hex_bytes, v, sizeof(*v));
-}
-
-static int decode_sequence_number(u8 *data, u16 length, void *p)
-{
-  pfcp_sequence_number_t *v __attribute__ ((unused)) = p;
-
-  return 0;
-}
-
-static int encode_sequence_number(void *p, u8 **vec)
-{
-  pfcp_sequence_number_t *v __attribute__ ((unused)) = p;
-
-  return 0;
-}
+#define format_sequence_number format_u32_ie
+#define decode_sequence_number decode_u32_ie
+#define encode_sequence_number encode_u32_ie
 
 static u8 * format_metric(u8 * s, va_list * args)
 {
@@ -1848,26 +1768,9 @@ static int encode_usage_report_trigger(void *p, u8 **vec)
   return 0;
 }
 
-static u8 * format_measurement_period(u8 * s, va_list * args)
-{
-  pfcp_measurement_period_t *v = va_arg (*args, pfcp_measurement_period_t *);
-
-  return format(s, "TODO: %U", format_hex_bytes, v, sizeof(*v));
-}
-
-static int decode_measurement_period(u8 *data, u16 length, void *p)
-{
-  pfcp_measurement_period_t *v __attribute__ ((unused)) = p;
-
-  return 0;
-}
-
-static int encode_measurement_period(void *p, u8 **vec)
-{
-  pfcp_measurement_period_t *v __attribute__ ((unused)) = p;
-
-  return 0;
-}
+#define format_measurement_period format_u32_ie
+#define decode_measurement_period decode_u32_ie
+#define encode_measurement_period encode_u32_ie
 
 static u8 * format_fq_csid(u8 * s, va_list * args)
 {
@@ -1894,26 +1797,9 @@ static int encode_fq_csid(void *p, u8 **vec)
 #define decode_volume_measurement decode_volume_ie
 #define encode_volume_measurement encode_volume_ie
 
-static u8 * format_duration_measurement(u8 * s, va_list * args)
-{
-  pfcp_duration_measurement_t *v = va_arg (*args, pfcp_duration_measurement_t *);
-
-  return format(s, "TODO: %U", format_hex_bytes, v, sizeof(*v));
-}
-
-static int decode_duration_measurement(u8 *data, u16 length, void *p)
-{
-  pfcp_duration_measurement_t *v __attribute__ ((unused)) = p;
-
-  return 0;
-}
-
-static int encode_duration_measurement(void *p, u8 **vec)
-{
-  pfcp_duration_measurement_t *v __attribute__ ((unused)) = p;
-
-  return 0;
-}
+#define format_duration_measurement format_u32_ie
+#define decode_duration_measurement decode_u32_ie
+#define encode_duration_measurement encode_u32_ie
 
 #define format_time_of_first_packet format_time_stamp
 #define decode_time_of_first_packet decode_time_stamp_ie
@@ -1923,26 +1809,10 @@ static int encode_duration_measurement(void *p, u8 **vec)
 #define decode_time_of_last_packet decode_time_stamp_ie
 #define encode_time_of_last_packet encode_time_stamp_ie
 
-static u8 * format_quota_holding_time(u8 * s, va_list * args)
-{
-  pfcp_quota_holding_time_t *v = va_arg (*args, pfcp_quota_holding_time_t *);
+#define format_quota_holding_time format_u32_ie
+#define decode_quota_holding_time decode_u32_ie
+#define encode_quota_holding_time encode_u32_ie
 
-  return format(s, "TODO: %U", format_hex_bytes, v, sizeof(*v));
-}
-
-static int decode_quota_holding_time(u8 *data, u16 length, void *p)
-{
-  pfcp_quota_holding_time_t *v __attribute__ ((unused)) = p;
-
-  return 0;
-}
-
-static int encode_quota_holding_time(void *p, u8 **vec)
-{
-  pfcp_quota_holding_time_t *v __attribute__ ((unused)) = p;
-
-  return 0;
-}
 
 static u8 * format_dropped_dl_traffic_threshold(u8 * s, va_list * args)
 {
@@ -1970,26 +1840,9 @@ static int encode_dropped_dl_traffic_threshold(void *p, u8 **vec)
 #define decode_volume_quota decode_volume_ie
 #define encode_volume_quota encode_volume_ie
 
-static u8 * format_time_quota(u8 * s, va_list * args)
-{
-  pfcp_time_quota_t *v = va_arg (*args, pfcp_time_quota_t *);
-
-  return format(s, "TODO: %U", format_hex_bytes, v, sizeof(*v));
-}
-
-static int decode_time_quota(u8 *data, u16 length, void *p)
-{
-  pfcp_time_quota_t *v __attribute__ ((unused)) = p;
-
-  return 0;
-}
-
-static int encode_time_quota(void *p, u8 **vec)
-{
-  pfcp_time_quota_t *v __attribute__ ((unused)) = p;
-
-  return 0;
-}
+#define format_time_quota format_u32_ie
+#define decode_time_quota decode_u32_ie
+#define encode_time_quota encode_u32_ie
 
 #define format_start_time format_time_stamp
 #define decode_start_time decode_time_stamp_ie
@@ -1999,61 +1852,13 @@ static int encode_time_quota(void *p, u8 **vec)
 #define decode_end_time decode_time_stamp_ie
 #define encode_end_time encode_time_stamp_ie
 
-static u8 * format_urr_id(u8 * s, va_list * args)
-{
-  pfcp_urr_id_t *v = va_arg (*args, pfcp_urr_id_t *);
+#define format_urr_id format_u32_ie
+#define decode_urr_id decode_u32_ie
+#define encode_urr_id encode_u32_ie
 
-  s = format(s, "%u", *v);
-  return s;
-}
-
-static int decode_urr_id(u8 *data, u16 length, void *p)
-{
-  pfcp_urr_id_t *v = p;
-
-  if (length < 4)
-    return PFCP_CAUSE_INVALID_LENGTH;
-
-  *v = get_u32(data);
-
-  return 0;
-}
-
-static int encode_urr_id(void *p, u8 **vec)
-{
-  pfcp_urr_id_t *v = p;
-
-  put_u32(*vec, *v);
-  return 0;
-}
-
-static u8 * format_linked_urr_id(u8 * s, va_list * args)
-{
-  pfcp_linked_urr_id_t *v = va_arg (*args, pfcp_linked_urr_id_t *);
-
-  s = format(s, "%u", *v);
-  return s;
-}
-
-static int decode_linked_urr_id(u8 *data, u16 length, void *p)
-{
-  pfcp_linked_urr_id_t *v = p;
-
-  if (length < 4)
-    return PFCP_CAUSE_INVALID_LENGTH;
-
-  *v = get_u32(data);
-
-  return 0;
-}
-
-static int encode_linked_urr_id(void *p, u8 **vec)
-{
-  pfcp_linked_urr_id_t *v = p;
-
-  put_u32(*vec, *v);
-  return 0;
-}
+#define format_linked_urr_id format_u32_ie
+#define decode_linked_urr_id decode_u32_ie
+#define encode_linked_urr_id encode_u32_ie
 
 static const char *outer_header_creation_description_flags[] = {
   "GTP-U/UDP/IPv4",
@@ -2505,33 +2310,9 @@ static int encode_remote_gtp_u_peer(void *p, u8 **vec)
   return 0;
 }
 
-static u8 * format_ur_seqn(u8 * s, va_list * args)
-{
-  pfcp_ur_seqn_t *v = va_arg (*args, pfcp_ur_seqn_t *);
-
-  s = format(s, "%u", *v);
-  return s;
-}
-
-static int decode_ur_seqn(u8 *data, u16 length, void *p)
-{
-  pfcp_ur_seqn_t *v = p;
-
-  if (length < 4)
-    return PFCP_CAUSE_INVALID_LENGTH;
-
-  *v = get_u32(data);
-
-  return 0;
-}
-
-static int encode_ur_seqn(void *p, u8 **vec)
-{
-  pfcp_ur_seqn_t *v = p;
-
-  put_u32(*vec, *v);
-  return 0;
-}
+#define format_ur_seqn format_u32_ie
+#define decode_ur_seqn decode_u32_ie
+#define encode_ur_seqn encode_u32_ie
 
 static u8 * format_activate_predefined_rules(u8 * s, va_list * args)
 {
@@ -2575,61 +2356,13 @@ static int encode_deactivate_predefined_rules(void *p, u8 **vec)
   return 0;
 }
 
-static u8 * format_far_id(u8 * s, va_list * args)
-{
-  pfcp_far_id_t *v = va_arg (*args, pfcp_far_id_t *);
+#define format_far_id format_u32_ie
+#define decode_far_id decode_u32_ie
+#define encode_far_id encode_u32_ie
 
-  s = format(s, "%u", *v);
-  return s;
-}
-
-static int decode_far_id(u8 *data, u16 length, void *p)
-{
-  pfcp_far_id_t *v = p;
-
-  if (length < 4)
-    return PFCP_CAUSE_INVALID_LENGTH;
-
-  *v = get_u32(data);
-
-  return 0;
-}
-
-static int encode_far_id(void *p, u8 **vec)
-{
-  pfcp_far_id_t *v = p;
-
-  put_u32(*vec, *v);
-  return 0;
-}
-
-static u8 * format_qer_id(u8 * s, va_list * args)
-{
-  pfcp_qer_id_t *v = va_arg (*args, pfcp_qer_id_t *);
-
-  s = format(s, "%u", *v);
-  return s;
-}
-
-static int decode_qer_id(u8 *data, u16 length, void *p)
-{
-  pfcp_qer_id_t *v = p;
-
-  if (length < 4)
-    return PFCP_CAUSE_INVALID_LENGTH;
-
-  *v = get_u32(data);
-
-  return 0;
-}
-
-static int encode_qer_id(void *p, u8 **vec)
-{
-  pfcp_qer_id_t *v = p;
-
-  put_u32(*vec, *v);
-  return 0;
-}
+#define format_qer_id format_u32_ie
+#define decode_qer_id decode_u32_ie
+#define encode_qer_id encode_u32_ie
 
 static u8 * format_oci_flags(u8 * s, va_list * args)
 {
