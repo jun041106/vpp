@@ -988,26 +988,9 @@ static int encode_time_threshold(void *p, u8 **vec)
 #define decode_monitoring_time decode_time_stamp_ie
 #define encode_monitoring_time encode_time_stamp_ie
 
-static u8 * format_subsequent_volume_threshold(u8 * s, va_list * args)
-{
-  pfcp_subsequent_volume_threshold_t *v = va_arg (*args, pfcp_subsequent_volume_threshold_t *);
-
-  return format(s, "TODO: %U", format_hex_bytes, v, sizeof(*v));
-}
-
-static int decode_subsequent_volume_threshold(u8 *data, u16 length, void *p)
-{
-  pfcp_subsequent_volume_threshold_t *v __attribute__ ((unused)) = p;
-
-  return 0;
-}
-
-static int encode_subsequent_volume_threshold(void *p, u8 **vec)
-{
-  pfcp_subsequent_volume_threshold_t *v __attribute__ ((unused)) = p;
-
-  return 0;
-}
+#define format_subsequent_volume_threshold format_volume_ie
+#define decode_subsequent_volume_threshold decode_volume_ie
+#define encode_subsequent_volume_threshold encode_volume_ie
 
 static u8 * format_subsequent_time_threshold(u8 * s, va_list * args)
 {
@@ -1983,26 +1966,9 @@ static int encode_dropped_dl_traffic_threshold(void *p, u8 **vec)
   return 0;
 }
 
-static u8 * format_volume_quota(u8 * s, va_list * args)
-{
-  pfcp_volume_quota_t *v = va_arg (*args, pfcp_volume_quota_t *);
-
-  return format(s, "TODO: %U", format_hex_bytes, v, sizeof(*v));
-}
-
-static int decode_volume_quota(u8 *data, u16 length, void *p)
-{
-  pfcp_volume_quota_t *v __attribute__ ((unused)) = p;
-
-  return 0;
-}
-
-static int encode_volume_quota(void *p, u8 **vec)
-{
-  pfcp_volume_quota_t *v __attribute__ ((unused)) = p;
-
-  return 0;
-}
+#define format_volume_quota format_volume_ie
+#define decode_volume_quota decode_volume_ie
+#define encode_volume_quota encode_volume_ie
 
 static u8 * format_time_quota(u8 * s, va_list * args)
 {

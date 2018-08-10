@@ -396,7 +396,7 @@ typedef u32 pfcp_quota_holding_time_t;
 typedef u32 pfcp_dropped_dl_traffic_threshold_t;
 
 #define PFCP_IE_VOLUME_QUOTA				73
-typedef u32 pfcp_volume_quota_t;
+typedef pfcp_volume_ie_t pfcp_volume_quota_t;
 
 #define PFCP_IE_TIME_QUOTA				74
 typedef u32 pfcp_time_quota_t;
