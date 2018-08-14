@@ -50,15 +50,12 @@ always_inline void sx_msg_free (sx_msg_t * m)
 
 typedef struct
 {
-  u64 node_index;
-
   /* Sx Node Id is either IPv4, IPv6 or FQDN */
   u8 * node_id;
 } sx_node_t;
 
 typedef struct
 {
-  u32 node_index;               /**< process node index for evnt scheduling */
   time_t start_time;
   ip46_address_t address;
 

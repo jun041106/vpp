@@ -48,6 +48,8 @@ typedef enum
   EVENT_URR,
 } sx_process_event_t;
 
+static vlib_node_registration_t sx_api_process_node;
+
 sx_server_main_t sx_server_main;
 
 #define MAX_HDRS_LEN    100	/* Max number of bytes for headers */
@@ -285,7 +287,6 @@ sx_process (vlib_main_t * vm,
 
 void upf_pfcp_handle_input (vlib_main_t * vm, vlib_buffer_t *b, int is_ip4)
 {
-  sx_server_main_t *sx = &sx_server_main;
   udp_header_t *udp;
   ip4_header_t *ip4;
   ip6_header_t *ip6;
@@ -328,7 +329,7 @@ void upf_pfcp_handle_input (vlib_main_t * vm, vlib_buffer_t *b, int is_ip4)
 		clib_net_to_host_u16(msg->lcl.port),
 		msg->data);
 
-  vlib_process_signal_event_mt(vm, sx->node_index, EVENT_RX, (uword)msg);
+  vlib_process_signal_event_mt(vm, sx_api_process_node.index, EVENT_RX, (uword)msg);
 }
 
 void
@@ -338,7 +339,7 @@ upf_pfcp_server_notify(sx_msg_t * msg)
   vlib_main_t *vm = sx->vlib_main;
 
   gtp_debug ("sending NOTIFY event %p", msg);
-  vlib_process_signal_event_mt(vm, sx->node_index, EVENT_NOTIFY, (uword)msg);
+  vlib_process_signal_event_mt(vm, sx_api_process_node.index, EVENT_NOTIFY, (uword)msg);
 }
 
 void
@@ -348,7 +349,7 @@ upf_pfcp_server_session_usage_report(upf_session_t *sess)
   vlib_main_t *vm = sx->vlib_main;
   upf_main_t *gtm = &upf_main;
 
-  vlib_process_signal_event_mt(vm, sx->node_index, EVENT_URR, (uword)(sess - gtm->sessions));
+  vlib_process_signal_event_mt(vm, sx_api_process_node.index, EVENT_URR, (uword)(sess - gtm->sessions));
 }
 
 /*********************************************************/
@@ -358,7 +359,6 @@ sx_server_main_init (vlib_main_t * vm)
 {
   sx_server_main_t *sx = &sx_server_main;
   clib_error_t *error;
-  vlib_node_t *n;
 
   if ((error = vlib_call_init_function (vm, vnet_interface_cli_init)))
     return error;
@@ -366,19 +366,6 @@ sx_server_main_init (vlib_main_t * vm)
   sx->vlib_main = vm;
   sx->start_time = time(NULL);
 
-  static vlib_node_registration_t r = {
-    .name = "sx-api",
-    .function = sx_process,
-    .type = VLIB_NODE_TYPE_PROCESS,
-    .process_log2_n_stack_bytes = 16,
-    .runtime_data_bytes = sizeof (void *),
-  };
-
-  vlib_register_node (vm, &r);
-  n = vlib_get_node (vm, r.index);
-  sx->node_index = n->index;
-
-  vlib_start_process (vm, n->runtime_index);
 
   udp_register_dst_port (vm, UDP_DST_PORT_SX,
 			 sx4_input_node.index, /* is_ip4 */ 1);
@@ -388,6 +375,17 @@ sx_server_main_init (vlib_main_t * vm)
   gtp_debug ("PFCP: start_time: %p, %d, %x.", sx, sx->start_time, sx->start_time);
   return 0;
 }
+
+/* *INDENT-OFF* */
+VLIB_REGISTER_NODE (sx_api_process_node, static) = {
+    .function = sx_process,
+    .type = VLIB_NODE_TYPE_PROCESS,
+    .process_log2_n_stack_bytes = 16,
+    .runtime_data_bytes = sizeof (void *),
+    .name = "sx-api",
+};
+
+/* *INDENT-ON* */
 
 /*
  * fd.io coding-style-patch-verification: ON
