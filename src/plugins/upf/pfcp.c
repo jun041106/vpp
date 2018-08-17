@@ -975,20 +975,41 @@ static u8 * format_reporting_triggers(u8 * s, va_list * args)
 {
   pfcp_reporting_triggers_t *v = va_arg (*args, pfcp_reporting_triggers_t *);
 
-  return format(s, "TODO: %U", format_hex_bytes, v, sizeof(*v));
+  s = format (s, "PERIO:%d,VOLTH:%d,TIMTH:%d,QUHTI:%d,"
+	      "START:%d,STOPT:%d,DROTH:%d,LIUSA:%d,"
+	      "VOLQU:%d,TIMQU:%d,ENVCL:%d",
+	      !!(*v & REPORTING_TRIGGER_PERIODIC_REPORTING),
+	      !!(*v & REPORTING_TRIGGER_VOLUME_THRESHOLD),
+	      !!(*v & REPORTING_TRIGGER_TIME_THRESHOLD),
+	      !!(*v & REPORTING_TRIGGER_QUOTA_HOLDING_TIME),
+	      !!(*v & REPORTING_TRIGGER_START_OF_TRAFFIC),
+	      !!(*v & REPORTING_TRIGGER_STOP_OF_TRAFFIC),
+	      !!(*v & REPORTING_TRIGGER_DROPPED_DL_TRAFFIC_THRESHOLD),
+	      !!(*v & REPORTING_TRIGGER_LINKED_USAGE_REPORTING),
+	      !!(*v & REPORTING_TRIGGER_VOLUME_QUOTA),
+	      !!(*v & REPORTING_TRIGGER_TIME_QUOTA),
+	      !!(*v & REPORTING_TRIGGER_ENVELOPE_CLOSURE));
+  return s;
 }
 
 static int decode_reporting_triggers(u8 *data, u16 length, void *p)
 {
-  pfcp_reporting_triggers_t *v __attribute__ ((unused)) = p;
+  pfcp_reporting_triggers_t *v = p;
+
+  if (length < 2)
+    return PFCP_CAUSE_INVALID_LENGTH;
+
+  *v = (data[1] << 8) | data[0];
 
   return 0;
 }
 
 static int encode_reporting_triggers(void *p, u8 **vec)
 {
-  pfcp_reporting_triggers_t *v __attribute__ ((unused)) = p;
+  pfcp_reporting_triggers_t *v = p;
 
+  put_u8(*vec, *v & 0xff);
+  put_u8(*vec, (*v >> 8) & 0xff);
   return 0;
 }
 
@@ -1754,7 +1775,7 @@ static int decode_usage_report_trigger(u8 *data, u16 length, void *p)
   if (length < 2)
     return PFCP_CAUSE_INVALID_LENGTH;
 
-  *v = (data[1] << 8) & data[0];
+  *v = (data[1] << 8) | data[0];
 
   return 0;
 }
