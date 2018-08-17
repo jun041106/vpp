@@ -36,6 +36,8 @@
 #include "upf_pfcp_api.h"
 #include "upf_pfcp_server.h"
 
+#undef CLIB_DEBUG
+#define CLIB_DEBUG 1
 #if CLIB_DEBUG > 0
 #define gtp_debug clib_warning
 #else
@@ -535,6 +537,8 @@ upf_pfcp_session_usage_report(upf_session_t *sx, f64 now)
 
   active = sx_get_rules(sx, SX_ACTIVE);
 
+  clib_warning("Active: %p (%d)\n", active, vec_len(active->urr));
+
   if (vec_len(active->urr) == 0)
     /* how could that happen? */
     return;
@@ -550,6 +554,8 @@ upf_pfcp_session_usage_report(upf_session_t *sx, f64 now)
   vec_foreach_index(ni, active->urr)
     {
       urr = vec_elt_at_index (active->urr, ni);
+
+      clib_warning("URR: %p\n", urr);
 
 #define urr_check(V, D)					\
       urr_check_counter(				\
@@ -682,6 +688,22 @@ upf_pfcp_session_urr_timer(upf_session_t *sx, f64 now, f64 cnow)
 #define urr_check(V, NOW)					\
       (((V).base != 0) && ((V).period != 0) &&			\
        (trunc(((NOW) - (V).base - (f64)(V).period) * 100) >= 0))
+
+#define urr_debug(Label, t)						\
+      clib_warning( "%-10s %20lu secs @ %U, in %9.3f secs (%9.3f  %9.3f), %.4f, handle 0x%08x, check: %u", \
+		    (Label), (t).period,				\
+		    /* VPP does not support ISO dates... */		\
+		    format_time_float, 0, (t).base + (f64)(t).period,	\
+		    ((f64)(t).period) - (now - (t).base),		\
+		    (now - (t).base - (t).period) * 100,		\
+		    trunc((now - (t).base - (t).period) * 100),		\
+		    cnow, (t).handle, urr_check(t, now));
+
+      clib_warning("URR: %p, Id: %u", urr, urr->id);
+      urr_debug("Period", urr->measurement_period);
+      urr_debug("Threshold", urr->time_threshold);
+      urr_debug("Quota", urr->time_quota);
+      urr_debug("Monitoring", urr->monitoring_time);
 
       if (urr_check(urr->measurement_period, now))
 	{
@@ -851,6 +873,7 @@ sx_process (vlib_main_t * vm,
       switch (event_type)
 	{
 	case ~0:                /* timeout */
+	  // gtp_debug ("timeout....");
 	  break;
 
 	case EVENT_RX:
@@ -896,6 +919,7 @@ sx_process (vlib_main_t * vm,
 		upf_session_t *sx;
 
 		sx = pool_elt_at_index (gtm->sessions, si);
+		clib_warning("URR Event on Session Idx: %wd, %p\n", si, sx);
 		upf_pfcp_session_usage_report(sx, sxsm->now);
 	      }
 	    break;
@@ -956,6 +980,7 @@ sx_process (vlib_main_t * vm,
 	{
 	  _vec_len (event_data) = 0;
 	}
+      // vec_free (event_data);
     }
 
   return (0);
@@ -1029,6 +1054,7 @@ upf_pfcp_server_session_usage_report(upf_session_t *sess)
   vlib_main_t *vm = sx->vlib_main;
   upf_main_t *gtm = &upf_main;
 
+  clib_warning ("sending URR event on %wd\n", (uword)(sess - gtm->sessions));
   vlib_process_signal_event_mt(vm, sx_api_process_node.index, EVENT_URR, (uword)(sess - gtm->sessions));
 }
 
