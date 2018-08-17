@@ -163,7 +163,7 @@ static int urr_check_counter(u64 bytes, u64 consumed, u64 threshold, u64 quota)
 }
 
 static void
-upf_pfcp_session_usage_report(upf_session_t *sx)
+upf_pfcp_session_usage_report(upf_session_t *sx, f64 now)
 {
   pfcp_session_report_request_t req;
   struct rules *active;
@@ -201,7 +201,104 @@ upf_pfcp_session_usage_report(upf_session_t *sx)
 
       if (trigger != 0)
 	{
-	  build_usage_report(sx, urr, trigger, &req.usage_report);
+	  build_usage_report(sx, urr, trigger, now, &req.usage_report);
+	}
+    }
+
+  msg = build_sx_msg(sx, PFCP_SESSION_REPORT_REQUEST, &req.grp);
+  clib_warning("Msg: %p\n", msg);
+  if (msg)
+    {
+      upf_pfcp_send_data(msg);
+      sx_msg_free(msg);
+    }
+}
+
+void upf_pfcp_session_stop_urr_time(urr_time_t *t)
+{
+  sx_server_main_t *sx = &sx_server_main;
+
+  if (t->handle != ~0)
+    {
+      // stop timer ....
+      TW (tw_timer_stop) (&sx->urr_timer, t->handle);
+      t->handle = ~0;
+    }
+}
+
+void
+upf_pfcp_session_start_stop_urr_time(u32 si, u8 urr_id, u8 type, f64 now, urr_time_t *t)
+{
+  sx_server_main_t *sx = &sx_server_main;
+
+  if (t->handle != ~0)
+     upf_pfcp_session_stop_urr_time(t);
+
+  if (t->period != 0)
+    {
+      u32 id = SX_URR_TW_ID(si, urr_id, type);
+      u64 interval;
+
+      // start timer.....
+      interval = ((u64)(now - t->base) * 100) + (t->period * 100) + 1;
+      t->handle = TW (tw_timer_start) (&sx->urr_timer, id, 0, interval);
+
+      gtp_debug ("starting timer %u, %u, %u, now is %.3f, base is %.3f, expire in %lu ticks\n",
+		 type, urr_id, si, now, t->base, interval);
+    }
+}
+
+static void
+upf_pfcp_session_urr_timer(upf_session_t *sx, u16 urr_id, u8 timer_id, f64 now)
+{
+  gtp_debug ("upf_pfcp_session_urr_timer (%p, %u, %u, %.3f);", sx, urr_id, timer_id, now);
+
+  pfcp_session_report_request_t req;
+  struct rules *active;
+  upf_urr_t *urr;
+  sx_msg_t *msg;
+
+  active = sx_get_rules(sx, SX_ACTIVE);
+
+  memset(&req, 0, sizeof(req));
+  SET_BIT(req.grp.fields, SESSION_REPORT_REQUEST_REPORT_TYPE);
+  req.report_type = REPORT_TYPE_USAR;
+
+  SET_BIT(req.grp.fields, SESSION_REPORT_REQUEST_USAGE_REPORT);
+
+  vec_foreach(urr, active->urr)
+    {
+      u32 trigger = 0;
+
+#define urr_check(V, NOW)				\
+      (((V).base != 0) && ((V).period != 0) &&		\
+       ((V).base + (V).period <= (NOW)))
+
+      if (urr_check(urr->time_threshold, now))
+	{
+	  if (urr->triggers & REPORTING_TRIGGER_TIME_THRESHOLD)
+	    trigger |= USAGE_REPORT_TRIGGER_TIME_THRESHOLD;
+
+	  upf_pfcp_session_stop_urr_time(&urr->time_threshold);
+	}
+      if (urr_check(urr->time_quota, now))
+	{
+	  if (urr->triggers & REPORTING_TRIGGER_TIME_QUOTA)
+	    trigger |= USAGE_REPORT_TRIGGER_TIME_QUOTA;
+
+	  upf_pfcp_session_stop_urr_time(&urr->time_quota);
+	  urr->time_quota.period = 0;
+	}
+
+#undef urr_check
+
+      if (trigger != 0)
+	{
+	  build_usage_report(sx, urr, trigger, now, &req.usage_report);
+
+	  // clear reporting on the time based triggers, until rearmed by update
+	  urr->triggers &= ~(REPORTING_TRIGGER_TIME_THRESHOLD |
+			     REPORTING_TRIGGER_TIME_QUOTA);
 	}
     }
 
@@ -217,16 +314,42 @@ static uword
 sx_process (vlib_main_t * vm,
 	    vlib_node_runtime_t * rt, vlib_frame_t * f)
 {
+  sx_server_main_t *sx = &sx_server_main;
   upf_main_t *gtm = &upf_main;
+  u32 * expired = NULL;
+
+  sx->urr_timer.last_run_time = vlib_time_now (sx->vlib_main);
 
   while (1)
     {
       uword event_type, *event_data = 0;
+      u32 ticks_until_expiration;
+      f64 timeout;
+      f64 now, unix_now;
 
-      vlib_process_wait_for_event (vm);
+      ticks_until_expiration = TW (tw_timer_first_expires_in_ticks)(&sx->urr_timer);
+
+      /* Nothing on the fast wheel, sleep 10ms */
+      if (ticks_until_expiration == TW_SLOTS_PER_RING)
+	{
+	  timeout = 10e-3;
+	}
+      else
+	{
+	  timeout = (f64) ticks_until_expiration * 1e-5;
+	}
+
+      (void) vlib_process_wait_for_event_or_clock (vm, timeout);
       event_type = vlib_process_get_events (vm, &event_data);
+
+      now = vlib_time_now (sx->vlib_main);
+      unix_now = unix_time_now ();
+
       switch (event_type)
 	{
+	case ~0:                /* timeout */
+	  break;
+
 	case EVENT_RX:
 	  {
 	    for (int i = 0; i < vec_len (event_data); i++)
@@ -259,27 +382,43 @@ sx_process (vlib_main_t * vm,
 		upf_session_t *sx;
 
 		sx = pool_elt_at_index (gtm->sessions, si);
-		upf_pfcp_session_usage_report(sx);
+		upf_pfcp_session_usage_report(sx, unix_now);
 	      }
 	    break;
 	  }
-#if 0
-	case 2:         /* Stop and Wait for kickoff again */
-	  timeout = 1e9;
-	  break;
-	case 1:         /* kickoff : Check for unsent buffers */
-	  timeout = THREAD_PERIOD;
-	  break;
-#endif
-	case ~0:                /* timeout */
-	  gtp_debug ("timeout....");
-	  break;
+
 	default:
 	  gtp_debug ("event %ld, %p. ", event_type, event_data[0]);
 	  break;
 	}
 
-      vec_free (event_data);
+
+      expired = TW (tw_timer_expire_timers_vec) (&sx->urr_timer, now, expired);
+
+      u32 *p = NULL;
+      vec_foreach (p, expired)
+      {
+	const u32 si = SX_URR_TW_SESSION(*p);
+	const u16 urr_id = SX_URR_TW_URR(*p);
+	const u8 timer_id = SX_URR_TW_TIMER(*p);
+
+	if (!pool_is_free_index (gtm->sessions, si))
+	  {
+	    upf_session_t *sx;
+
+	    sx = pool_elt_at_index (gtm->sessions, si);
+	    upf_pfcp_session_urr_timer(sx, urr_id, timer_id, unix_now);
+	  }
+      }
+
+      if (expired)
+	{
+	  _vec_len (expired) = 0;
+	}
+      if (event_data)
+	{
+	  _vec_len (event_data) = 0;
+	}
     }
 
   return (0);
@@ -366,6 +505,7 @@ sx_server_main_init (vlib_main_t * vm)
   sx->vlib_main = vm;
   sx->start_time = time(NULL);
 
+  TW (tw_timer_wheel_init) (&sx->urr_timer, NULL, 10e-3 /* 10ms timer interval */ , ~0);
 
   udp_register_dst_port (vm, UDP_DST_PORT_SX,
 			 sx4_input_node.index, /* is_ip4 */ 1);

@@ -20,6 +20,7 @@
 #include <time.h>
 #include "upf.h"
 #include "pfcp.h"
+#include <vppinfra/tw_timer_1t_3w_1024sl_ov.h>
 
 typedef struct
 {
@@ -59,6 +60,8 @@ typedef struct
   time_t start_time;
   ip46_address_t address;
 
+  TWT(tw_timer_wheel) urr_timer;
+
   vlib_main_t *vlib_main;
 } sx_server_main_t;
 
@@ -68,6 +71,10 @@ extern vlib_node_registration_t sx4_input_node;
 extern vlib_node_registration_t sx6_input_node;
 
 #define UDP_DST_PORT_SX 8805
+
+void upf_pfcp_session_stop_urr_time(urr_time_t *t);
+void
+upf_pfcp_session_start_stop_urr_time(u32 si, u8 urr_id, u8 type, f64 now, urr_time_t *t);
 
 sx_msg_t * build_sx_msg(upf_session_t * sx, u8 type, struct pfcp_group *grp);
 void upf_pfcp_send_data (sx_msg_t * msg);

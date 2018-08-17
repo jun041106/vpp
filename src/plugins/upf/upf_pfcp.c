@@ -451,6 +451,8 @@ upf_session_t *sx_create_session(int sx_fib_index, const ip46_address_t *up_addr
   sx->cp_seid = cp_seid;
   sx->cp_address = *cp_address;
 
+  sx->unix_time_start = unix_time_now ();
+
   clib_spinlock_init(&sx->lock);
 
   //TODO sx->up_f_seid = sx - gtm->sessions;
@@ -1689,6 +1691,10 @@ int sx_update_apply(upf_session_t *sx)
   struct rules *pending = sx_get_rules(sx, SX_PENDING);
   struct rules *active = sx_get_rules(sx, SX_ACTIVE);
   int pending_pdr, pending_far, pending_urr;
+  upf_main_t *gtm = &upf_main;
+  u32 si = sx - gtm->sessions;
+  f64 now = unix_time_now ();
+  upf_urr_t *urr;
 
   if (!pending->pdr && !pending->far && !pending->urr)
     return 0;
@@ -1793,49 +1799,72 @@ int sx_update_apply(upf_session_t *sx)
   pending = sx_get_rules(sx, SX_PENDING);
   active = sx_get_rules(sx, SX_ACTIVE);
 
+
+  vec_foreach (urr, active->urr)
+    {
+      if ((urr->methods & SX_URR_TIME))
+	{
+	  if (urr->update_flags & SX_URR_UPDATE_TIME_THRESHOLD)
+	    {
+	      upf_pfcp_session_start_stop_urr_time
+		(si, urr->id, SX_URR_THRESHOLD_TIMER, now, &urr->time_threshold);
+	    }
+	  if (urr->update_flags & SX_URR_UPDATE_TIME_QUOTA)
+	    {
+	      urr->time_quota.base = urr->time_threshold.base;
+	      upf_pfcp_session_start_stop_urr_time
+		(si, urr->id, SX_URR_QUOTA_TIMER, now, &urr->time_quota);
+	    }
+	}
+    }
+
   if (!pending_pdr) pending->pdr = NULL;
   if (!pending_far) pending->far = NULL;
   if (pending_urr)
     {
-      /* something needs to be done here, TODO: figure out what exactly that is.... */
-      upf_urr_t *old_urr;
-
       clib_spinlock_lock (&sx->lock);
 
       /* copy rest traffic from old active (now pending) to current
        * new URR was initialized with zero, simply add the old values */
-      vec_foreach (old_urr, pending->urr)
+      vec_foreach (urr, pending->urr)
 	{
-	  upf_urr_t * new_urr = sx_get_urr_by_id(active, old_urr->id);
+	  upf_urr_t * new_urr = sx_get_urr_by_id(active, urr->id);
 
 	  if (!new_urr)
-	    continue;
+	    {
+	      if ((urr->methods & SX_URR_TIME))
+		{
+		  upf_pfcp_session_stop_urr_time(&urr->time_threshold);
+		  upf_pfcp_session_stop_urr_time(&urr->time_quota);
+		}
+	      continue;
+	    }
 
-	  if (!(new_urr->methods & SX_URR_VOLUME))
-	    continue;
+	  if ((new_urr->methods & SX_URR_VOLUME))
+	    {
+	      urr_volume_t *old_volume = &urr->volume;
+	      urr_volume_t *new_volume = &new_urr->volume;
 
-	  urr_volume_t *old_volume = &old_urr->volume;
-	  urr_volume_t *new_volume = &new_urr->volume;
-
-#define combine_volume_type(Dst, Src, T, D)			\
-	  (Dst)->measure.T.D += (Src)->measure.T.D
+#define combine_volume_type(Dst, Src, T, D)		\
+	      (Dst)->measure.T.D += (Src)->measure.T.D
 #define combine_volume(Dst, Src, T)				\
-	  do {							\
-	    combine_volume_type((Dst), (Src), T, ul);		\
-	    combine_volume_type((Dst), (Src), T, dl);		\
-	    combine_volume_type((Dst), (Src), T, total);	\
-	  } while (0)
+	      do {						\
+		combine_volume_type((Dst), (Src), T, ul);	\
+		combine_volume_type((Dst), (Src), T, dl);	\
+		combine_volume_type((Dst), (Src), T, total);	\
+	      } while (0)
 
-	  combine_volume(new_volume, old_volume, packets);
-	  combine_volume(new_volume, old_volume, bytes);
+	      combine_volume(new_volume, old_volume, packets);
+	      combine_volume(new_volume, old_volume, bytes);
 
-	  if (new_urr->update_flags & SX_URR_UPDATE_VOLUME_QUOTA)
-	    new_volume->measure.consumed = new_volume->measure.bytes;
-	  else
-	    combine_volume(new_volume, old_volume, consumed);
+	      if (new_urr->update_flags & SX_URR_UPDATE_VOLUME_QUOTA)
+		new_volume->measure.consumed = new_volume->measure.bytes;
+	      else
+		combine_volume(new_volume, old_volume, consumed);
 
 #undef combine_volume
 #undef combine_volume_type
+	    }
 	}
 
       clib_spinlock_unlock (&sx->lock);
@@ -1947,6 +1976,21 @@ static const char *urr_method_flags[] = {
   NULL
 };
 
+static const char *urr_trigger_flags[] = {
+  "PERIODIC REPORTING",
+  "VOLUME THRESHOLD",
+  "TIME THRESHOLD",
+  "QUOTA HOLDING TIME",
+  "START OF TRAFFIC",
+  "STOP OF TRAFFIC",
+  "DROPPED DL TRAFFIC THRESHOLD",
+  "LINKED USAGE REPORTING",
+  "VOLUME QUOTA",
+  "TIME QUOTA",
+  "ENVELOPE CLOSURE",
+  NULL
+};
+
 static const char * source_intf_name[] = {
   "Access",
   "Core",
@@ -1977,6 +2021,19 @@ format_urr_quota(u8 * s, va_list * args)
   return format(s, "Consumed: %20"PRIu64", Quota:    %20"PRIu64,
 		*(u64 *)(m + offsetof(urr_measure_t, consumed) + offs),
 		*(u64 *)(q + offs));
+}
+
+static u8 *
+format_urr_time(u8 * s, va_list * args)
+{
+  urr_time_t *t = va_arg (*args, urr_time_t *);
+  f64 now = unix_time_now ();
+
+  return format(s, "%20"PRIu64" secs @ %U, in %9.3f secs, handle 0x%08x",
+		t->period,
+		/* VPP does not support ISO dates... */
+		format_time_float, 0, t->base + (f64)t->period,
+		((f64)t->period) - (now - t->base), t->handle);
 }
 
 u8 *
@@ -2087,9 +2144,12 @@ format_sx_session(u8 * s, va_list * args)
   vec_foreach (urr, rules->urr)
     {
       s = format(s, "URR: %u\n"
-		 "  Measurement Method: %04x == %U\n",
-		 urr->id, urr->methods,
-		 format_flags, urr->methods, urr_method_flags);
+		 "  Measurement Method: %04x == %U\n"
+		 "  Reporting Triggers: %04x == %U\n",
+		 urr->id,
+		 urr->methods, format_flags, urr->methods, urr_method_flags,
+		 urr->triggers, format_flags, urr->triggers, urr_trigger_flags);
+      s = format(s, "  Start Time: %U\n", format_time_float, 0, urr->start_time);
       if (urr->methods & SX_URR_VOLUME)
 	{
 	  urr_volume_t *v = &urr->volume;
@@ -2104,6 +2164,12 @@ format_sx_session(u8 * s, va_list * args)
 		     format_urr_quota,   &v->measure, &v->quota, offsetof(urr_counter_t, dl),
 		     format_urr_counter, &v->measure, &v->threshold, offsetof(urr_counter_t, total),
 		     format_urr_quota,   &v->measure, &v->quota, offsetof(urr_counter_t, total));
+	}
+      if (urr->methods & SX_URR_TIME)
+	{
+	  s = format(s, "  Time\n    Quota:     %U\n    Threshold: %U\n",
+		     format_urr_time, &urr->time_quota,
+		     format_urr_time, &urr->time_threshold);
 	}
     }
   return s;

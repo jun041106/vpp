@@ -1289,7 +1289,7 @@ static int handle_remove_far(upf_session_t *sess, pfcp_remove_far_t *remove_far,
   return r;
 }
 
-static int handle_create_urr(upf_session_t *sess, pfcp_create_urr_t *create_urr,
+static int handle_create_urr(upf_session_t *sess, pfcp_create_urr_t *create_urr, f64 now,
 			     struct pfcp_group *grp,
 			     int failed_rule_id_field,
 			     pfcp_failed_rule_id_t *failed_rule_id)
@@ -1308,6 +1308,8 @@ static int handle_create_urr(upf_session_t *sess, pfcp_create_urr_t *create_urr,
       create->id = urr->urr_id;
       create->methods = urr->measurement_method;
       create->triggers = OPT(urr, CREATE_URR_REPORTING_TRIGGERS, reporting_triggers, 0);
+      create->start_time = now;
+
       //TODO: measurement_period;
       if (ISSET_BIT(urr->grp.fields, CREATE_URR_VOLUME_THRESHOLD))
 	{
@@ -1323,8 +1325,21 @@ static int handle_create_urr(upf_session_t *sess, pfcp_create_urr_t *create_urr,
 	  create->volume.quota.total = urr->volume_quota.total;
 	}
 
-      //TODO: time_threshold;
-      //TODO: time_quota;
+      if (ISSET_BIT(urr->grp.fields, CREATE_URR_TIME_THRESHOLD))
+	{
+	  create->update_flags |= SX_URR_UPDATE_TIME_THRESHOLD;
+	  create->time_threshold.period = urr->time_threshold;
+	  create->time_threshold.base = now;
+	  create->time_threshold.handle = ~0;
+	}
+      if (ISSET_BIT(urr->grp.fields, CREATE_URR_TIME_QUOTA))
+	{
+	  create->update_flags |= SX_URR_UPDATE_TIME_QUOTA;
+	  create->time_quota.period = urr->time_quota;
+	  create->time_quota.base = now;
+	  create->time_quota.handle = ~0;
+	}
+
       //TODO: quota_holding_time;
       //TODO: dropped_dl_traffic_threshold;
       //TODO: monitoring_time;
@@ -1354,7 +1369,7 @@ static int handle_create_urr(upf_session_t *sess, pfcp_create_urr_t *create_urr,
   return r;
 }
 
-static int handle_update_urr(upf_session_t *sess, pfcp_update_urr_t *update_urr,
+static int handle_update_urr(upf_session_t *sess, pfcp_update_urr_t *update_urr, f64 now,
 			     struct pfcp_group *grp,
 			     int failed_rule_id_field,
 			     pfcp_failed_rule_id_t *failed_rule_id)
@@ -1397,8 +1412,18 @@ static int handle_update_urr(upf_session_t *sess, pfcp_update_urr_t *update_urr,
 	  update->volume.quota.total = urr->volume_quota.total;
 	}
 
-      //TODO: time_threshold;
-      //TODO: time_quota;
+      if (ISSET_BIT(urr->grp.fields, UPDATE_URR_TIME_THRESHOLD))
+	{
+	  update->update_flags |= SX_URR_UPDATE_TIME_THRESHOLD;
+	  update->time_threshold.period = urr->time_threshold;
+	}
+      if (ISSET_BIT(urr->grp.fields, UPDATE_URR_TIME_QUOTA))
+	{
+	  update->update_flags |= SX_URR_UPDATE_TIME_QUOTA;
+	  update->time_quota.period = urr->time_quota;
+	  update->time_quota.base = update->start_time;
+	}
+
       //TODO: quota_holding_time;
       //TODO: dropped_dl_traffic_threshold;
       //TODO: monitoring_time;
@@ -1421,7 +1446,7 @@ static int handle_update_urr(upf_session_t *sess, pfcp_update_urr_t *update_urr,
   return r;
 }
 
-static int handle_remove_urr(upf_session_t *sess, pfcp_remove_urr_t *remove_urr,
+static int handle_remove_urr(upf_session_t *sess, pfcp_remove_urr_t *remove_urr, f64 now,
 			     struct pfcp_group *grp,
 			     int failed_rule_id_field,
 			     pfcp_failed_rule_id_t *failed_rule_id)
@@ -1453,7 +1478,7 @@ static int handle_remove_urr(upf_session_t *sess, pfcp_remove_urr_t *remove_urr,
 
 pfcp_usage_report_t *
 build_usage_report(upf_session_t *sess, upf_urr_t *urr,
-		   u32 trigger, pfcp_usage_report_t **report)
+		   u32 trigger, f64 now, pfcp_usage_report_t **report)
 {
   pfcp_usage_report_t *r;
   urr_volume_t volume;
@@ -1481,8 +1506,11 @@ build_usage_report(upf_session_t *sess, upf_urr_t *urr,
   if ((trigger & (USAGE_REPORT_TRIGGER_START_OF_TRAFFIC |
 		  USAGE_REPORT_TRIGGER_STOP_OF_TRAFFIC)) == 0)
     {
-      SET_BIT(r->grp.fields, USAGE_REPORT_START_TIME); // TODO
-      SET_BIT(r->grp.fields, USAGE_REPORT_END_TIME);   // TODO
+      SET_BIT(r->grp.fields, USAGE_REPORT_START_TIME);
+      SET_BIT(r->grp.fields, USAGE_REPORT_END_TIME);
+
+      r->start_time = urr->start_time;
+      r->end_time = now;
     }
 
   SET_BIT(r->grp.fields, USAGE_REPORT_VOLUME_MEASUREMENT);
@@ -1492,13 +1520,18 @@ build_usage_report(upf_session_t *sess, upf_urr_t *urr,
   r->volume_measurement.dl = volume.measure.bytes.dl;
   r->volume_measurement.total = volume.measure.bytes.total;
 
-  /* SET_BIT(r->grp.fields, USAGE_REPORT_DURATION_MEASUREMENT); */
+  SET_BIT(r->grp.fields, USAGE_REPORT_DURATION_MEASUREMENT);
+  r->duration_measurement = now - urr->start_time;
+
   /* SET_BIT(r->grp.fields, USAGE_REPORT_APPLICATION_DETECTION_INFORMATION); */
   /* SET_BIT(r->grp.fields, USAGE_REPORT_UE_IP_ADDRESS); */
   /* SET_BIT(r->grp.fields, USAGE_REPORT_NETWORK_INSTANCE); */
   /* SET_BIT(r->grp.fields, USAGE_REPORT_TIME_OF_FIRST_PACKET); */
   /* SET_BIT(r->grp.fields, USAGE_REPORT_TIME_OF_LAST_PACKET); */
   /* SET_BIT(r->grp.fields, USAGE_REPORT_USAGE_INFORMATION); */
+
+  urr->start_time = now;
+  if (urr->time_threshold.base) urr->time_threshold.base = now;
 
   _vec_len(*report)++;
 
@@ -1523,6 +1556,7 @@ handle_session_establishment_request(sx_msg_t * req, pfcp_session_establishment_
   pfcp_session_establishment_response_t resp;
   ip46_address_t up_address = ip46_address_initializer;
   ip46_address_t cp_address = ip46_address_initializer;
+  f64 now = unix_time_now ();
   upf_session_t *sess;
   int r = 0;
   int is_ip4;
@@ -1565,7 +1599,7 @@ handle_session_establishment_request(sx_msg_t * req, pfcp_session_establishment_
 			     &resp.failed_rule_id)) != 0)
     goto out_send_resp;
 
-  if ((r = handle_create_urr(sess, msg->create_urr, &resp.grp,
+  if ((r = handle_create_urr(sess, msg->create_urr, now, &resp.grp,
 			     SESSION_ESTABLISHMENT_RESPONSE_FAILED_RULE_ID,
 			     &resp.failed_rule_id)) != 0)
     goto out_send_resp;
@@ -1638,6 +1672,7 @@ handle_session_modification_request(sx_msg_t * req, pfcp_session_modification_re
 			 BIT(SESSION_MODIFICATION_REQUEST_UPDATE_BAR)))
     {
       /* invoke the update process only if a update is include */
+      f64 now = unix_time_now ();
 
       sx_update_session(sess);
 
@@ -1671,17 +1706,17 @@ handle_session_modification_request(sx_msg_t * req, pfcp_session_modification_re
 				 &resp.failed_rule_id)) != 0)
 	goto out_send_resp;
 
-      if ((r = handle_create_urr(sess, msg->create_urr, &resp.grp,
+      if ((r = handle_create_urr(sess, msg->create_urr, now, &resp.grp,
 				 SESSION_MODIFICATION_RESPONSE_FAILED_RULE_ID,
 				 &resp.failed_rule_id)) != 0)
 	goto out_send_resp;
 
-      if ((r = handle_update_urr(sess, msg->update_urr, &resp.grp,
+      if ((r = handle_update_urr(sess, msg->update_urr, now, &resp.grp,
 				 SESSION_MODIFICATION_RESPONSE_FAILED_RULE_ID,
 				 &resp.failed_rule_id)) != 0)
 	goto out_send_resp;
 
-      if ((r = handle_remove_urr(sess, msg->remove_urr, &resp.grp,
+      if ((r = handle_remove_urr(sess, msg->remove_urr, now, &resp.grp,
 				 SESSION_MODIFICATION_RESPONSE_FAILED_RULE_ID,
 				 &resp.failed_rule_id)) != 0)
 	goto out_send_resp;
@@ -1693,6 +1728,8 @@ handle_session_modification_request(sx_msg_t * req, pfcp_session_modification_re
   if (ISSET_BIT(msg->grp.fields, SESSION_MODIFICATION_REQUEST_QUERY_URR) &&
       vec_len(msg->query_urr) != 0)
     {
+      f64 now = unix_time_now ();
+
       SET_BIT(resp.grp.fields, SESSION_MODIFICATION_RESPONSE_USAGE_REPORT);
 
       vec_foreach(qry, msg->query_urr)
@@ -1703,7 +1740,7 @@ handle_session_modification_request(sx_msg_t * req, pfcp_session_modification_re
 	    continue;
 
 	  build_usage_report(sess, urr, USAGE_REPORT_TRIGGER_IMMEDIATE_REPORT,
-			     &resp.usage_report);
+			     now, &resp.usage_report);
 	}
     }
   else if (ISSET_BIT(msg->grp.fields, SESSION_MODIFICATION_REQUEST_SXSMREQ_FLAGS) &&
@@ -1714,6 +1751,7 @@ handle_session_modification_request(sx_msg_t * req, pfcp_session_modification_re
       active = sx_get_rules(sess, SX_ACTIVE);
       if (vec_len(active->urr) != 0)
 	{
+	  f64 now = unix_time_now ();
 	  upf_urr_t *urr;
 
 	  SET_BIT(resp.grp.fields, SESSION_MODIFICATION_RESPONSE_USAGE_REPORT);
@@ -1721,7 +1759,7 @@ handle_session_modification_request(sx_msg_t * req, pfcp_session_modification_re
 	  vec_foreach(urr, active->urr)
 	    {
 	      build_usage_report(sess, urr, USAGE_REPORT_TRIGGER_IMMEDIATE_REPORT,
-				 &resp.usage_report);
+				 now, &resp.usage_report);
 	    }
 	}
     }
@@ -1778,6 +1816,7 @@ handle_session_deletion_request(sx_msg_t * req, pfcp_session_deletion_request_t 
   active = sx_get_rules(sess, SX_ACTIVE);
   if (vec_len(active->urr) != 0)
     {
+      f64 now = unix_time_now ();
       upf_urr_t *urr;
 
       SET_BIT(resp.grp.fields, SESSION_DELETION_RESPONSE_USAGE_REPORT);
@@ -1785,7 +1824,7 @@ handle_session_deletion_request(sx_msg_t * req, pfcp_session_deletion_request_t 
       vec_foreach(urr, active->urr)
 	{
 	  build_usage_report(sess, urr, USAGE_REPORT_TRIGGER_TERMINATION_REPORT,
-			     &resp.usage_report);
+			     now, &resp.usage_report);
 	}
     }
 

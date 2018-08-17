@@ -322,26 +322,43 @@ typedef struct {
   urr_counter_t quota;
 } urr_volume_t;
 
+typedef struct {
+  f64 base;
+  u32 period;         /* relative duration in seconds */
+  u32 handle;
+} urr_time_t;
+
+#define SX_URR_TW_ID(s, u, i)  (((i) << 30) | ((u) << 22) | (s))
+#define SX_URR_TW_SESSION(i)   ((i) & 0x3fffff)
+#define SX_URR_TW_URR(i)       (((i) >> 22) & 0xff)
+#define SX_URR_TW_TIMER(i)     ((i) >> 30)
+
 /* Usage Reporting Rules */
 typedef struct {
-    u16 id;
-    u16 methods;
+  u16 id;
+  u16 methods;
 #define SX_URR_TIME   0x0001
 #define SX_URR_VOLUME 0x0002
 #define SX_URR_EVENT  0x0004
 
-    u16 triggers;
-#define SX_URR_PERIODIC         0x0001
-#define SX_URR_VOLUME_THRESHOLD 0x0002
-#define SX_URR_VOLUME_QUOTA     0x0004
-#define SX_URR_TIME_THRESHOLD   0x0008
-#define SX_URR_TIME_QUOTA       0x0010
-#define SX_URR_ENVELOPE         0x8000
+  u16 triggers;
 
   u8 update_flags;
-#define SX_URR_UPDATE_VOLUME_QUOTA BIT(0)
+#define SX_URR_UPDATE_VOLUME_QUOTA   BIT(0)
+#define SX_URR_UPDATE_TIME_QUOTA     BIT(1)
+#define SX_URR_UPDATE_TIME_THRESHOLD BIT(2)
+
+  f64 start_time;
 
   urr_volume_t volume;
+
+  urr_time_t measurement_period;  /* relative duration in seconds */
+  urr_time_t time_threshold;      /* relative duration in seconds */
+  urr_time_t time_quota;          /* relative duration in seconds */
+  urr_time_t quota_holding_time;  /* relative duration in seconds */
+  urr_time_t monitoring_time;     /* absolute UTC ts since 1900-01-01 00:00:00 */
+#define SX_URR_THRESHOLD_TIMER  1
+#define SX_URR_QUOTA_TIMER      2
 } upf_urr_t;
 
 typedef struct {
@@ -390,6 +407,8 @@ typedef struct {
   /* vnet intfc index */
   u32 sw_if_index;
   u32 hw_if_index;
+
+  f64 unix_time_start;
 } upf_session_t;
 
 
