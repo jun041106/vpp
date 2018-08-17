@@ -445,6 +445,11 @@ upf_session_t *sx_create_session(int sx_fib_index, const ip46_address_t *up_addr
   u32 sw_if_index = ~0;
   upf_session_t *sx;
 
+  clib_warning("CP F-SEID: 0x%016" PRIx64 " @ %U\n"
+	       "UP F-SEID: 0x%016" PRIx64 " @ %U\n",
+	       cp_seid, format_ip46_address, cp_address, IP46_TYPE_ANY,
+	       cp_seid, format_ip46_address, up_address, IP46_TYPE_ANY);
+
   pool_get_aligned (gtm->sessions, sx, CLIB_CACHE_LINE_BYTES);
   memset (sx, 0, sizeof (*sx));
 
@@ -1954,6 +1959,8 @@ u32 process_urrs(vlib_main_t *vm, upf_session_t *sess,
 		 u8 is_dl, u8 is_ul, u32 next)
 {
   u16 *urr_id;
+
+  clib_warning("DL: %d, UL: %d\n", is_dl, is_ul);
 
   vec_foreach (urr_id, pdr->urr_ids)
     {

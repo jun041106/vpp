@@ -18,6 +18,9 @@
 #ifndef __included_upf_h__
 #define __included_upf_h__
 
+#undef CLIB_DEBUG
+#define CLIB_DEBUG 0
+
 #include <vnet/vnet.h>
 #include <vnet/ip/ip.h>
 #include <vnet/ethernet/ethernet.h>

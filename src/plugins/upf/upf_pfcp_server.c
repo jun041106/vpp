@@ -36,6 +36,8 @@
 #include "upf_pfcp_api.h"
 #include "upf_pfcp_server.h"
 
+#undef CLIB_DEBUG
+#define CLIB_DEBUG 1
 #if CLIB_DEBUG > 0
 #define gtp_debug clib_warning
 #else
@@ -152,7 +154,19 @@ sx_msg_t * build_sx_msg(upf_session_t * sx, u8 type, struct pfcp_group *grp)
   msg->rmt.address = sx->cp_address;
   msg->lcl.port = clib_host_to_net_u16 (UDP_DST_PORT_SX);
   msg->rmt.port = clib_host_to_net_u16 (UDP_DST_PORT_SX);
+  clib_warning("PFCP Msg no VRF %d from %U:%d to %U:%d\n",
+	       msg->fib_index,
+	       format_ip46_address, &msg->lcl.address, IP46_TYPE_ANY,
+	       clib_net_to_host_u16 (msg->lcl.port),
+	       format_ip46_address, &msg->rmt.address, IP46_TYPE_ANY,
+	       clib_net_to_host_u16 (msg->rmt.port));
 
+  clib_warning("PFCP Msg no VRF %d from %U:%d to %U:%d\n",
+	       msg->fib_index,
+	       format_ip46_address, &sx->up_address, IP46_TYPE_ANY,
+	       clib_net_to_host_u16 (msg->lcl.port),
+	       format_ip46_address, &sx->cp_address, IP46_TYPE_ANY,
+	       clib_net_to_host_u16 (msg->rmt.port));
   return msg;
 }
 
@@ -179,6 +193,8 @@ upf_pfcp_session_usage_report(upf_session_t *sx, f64 now)
 
   active = sx_get_rules(sx, SX_ACTIVE);
 
+  clib_warning("Active: %p (%d)\n", active, vec_len(active->urr));
+
   if (vec_len(active->urr) == 0)
     /* how could that happen? */
     return;
@@ -192,6 +208,8 @@ upf_pfcp_session_usage_report(upf_session_t *sx, f64 now)
   vec_foreach(urr, active->urr)
     {
       u32 trigger = 0;
+
+      clib_warning("URR: %p\n", urr);
 
 #define urr_check(V, D)					\
       urr_check_counter(				\
@@ -253,8 +271,13 @@ upf_pfcp_session_start_stop_urr_time(u32 si, u8 urr_id, u8 type, f64 now,
       interval = clib_max(interval, 1);		 /* make sure interval is at least 1 */
       t->handle = TW (tw_timer_start) (&sx->urr_timer, id, 0, interval);
 
-      gtp_debug ("starting timer %u, %u, %u, now is %.3f, base is %.3f, expire in %lu ticks\n",
-		 type, urr_id, si, now, t->base, interval);
+      gtp_debug ("starting timer %u, %u, %u, now is %.3f, base is %.3f, expire in %lu ticks,"
+		 " alternate %.4f, %.4f, clib_now %.4f, current tick: %u",
+		 type, urr_id, si, now, t->base, interval,
+		 ((t->base + (f64)interval) - now) * 100,
+		 ((t->base + interval) - now) * 100,
+		 vlib_time_now (sx->vlib_main),
+		 sx->urr_timer.current_tick);
     }
 }
 
@@ -281,9 +304,10 @@ upf_pfcp_session_start_stop_urr_time_abs(u32 si, u8 urr_id, u8 type, f64 now, ur
 }
 
 static void
-upf_pfcp_session_urr_timer(upf_session_t *sx, u16 urr_id, u8 timer_id, f64 now)
+upf_pfcp_session_urr_timer(upf_session_t *sx, u16 urr_id, u8 timer_id, f64 now, f64 cnow)
 {
-  gtp_debug ("upf_pfcp_session_urr_timer (%p, %u, %u, %.3f);", sx, urr_id, timer_id, now);
+  gtp_debug ("upf_pfcp_session_urr_timer (%p, %u, %u, %.3f, %.4f",
+	     sx, urr_id, timer_id, now, cnow);
 
   pfcp_session_report_request_t req;
   upf_main_t *gtm = &upf_main;
@@ -307,6 +331,22 @@ upf_pfcp_session_urr_timer(upf_session_t *sx, u16 urr_id, u8 timer_id, f64 now)
 #define urr_check(V, NOW)					\
       (((V).base != 0) && ((V).period != 0) &&			\
        (trunc(((NOW) - (V).base - (f64)(V).period) * 100) >= 0))
+
+#define urr_debug(Label, t)						\
+      clib_warning( "%-10s %20lu secs @ %U, in %9.3f secs (%9.3f  %9.3f), %.4f, handle 0x%08x, check: %u", \
+		    (Label), (t).period,				\
+		    /* VPP does not support ISO dates... */		\
+		    format_time_float, 0, (t).base + (f64)(t).period,	\
+		    ((f64)(t).period) - (now - (t).base),		\
+		    (now - (t).base - (t).period) * 100,		\
+		    trunc((now - (t).base - (t).period) * 100),		\
+		    cnow, (t).handle, urr_check(t, now));
+
+      clib_warning("URR: %p, Id: %u", urr, urr->id);
+      urr_debug("Period", urr->measurement_period);
+      urr_debug("Threshold", urr->time_threshold);
+      urr_debug("Quota", urr->time_quota);
+      urr_debug("Monitoring", urr->monitoring_time);
 
       if (urr_check(urr->measurement_period, now))
 	{
@@ -373,6 +413,7 @@ upf_pfcp_session_urr_timer(upf_session_t *sx, u16 urr_id, u8 timer_id, f64 now)
   if (send_report)
     {
       msg = build_sx_msg(sx, PFCP_SESSION_REPORT_REQUEST, &req.grp);
+      clib_warning("Msg: %p\n", msg);
       if (msg)
 	{
 	  upf_pfcp_send_data(msg);
@@ -422,6 +463,7 @@ sx_process (vlib_main_t * vm,
       switch (event_type)
 	{
 	case ~0:                /* timeout */
+	  // gtp_debug ("timeout....");
 	  break;
 
 	case EVENT_RX:
@@ -456,6 +498,7 @@ sx_process (vlib_main_t * vm,
 		upf_session_t *sx;
 
 		sx = pool_elt_at_index (gtm->sessions, si);
+		clib_warning("URR Event on Session Idx: %wd, %p\n", si, sx);
 		upf_pfcp_session_usage_report(sx, sxsm->now);
 	      }
 	    break;
@@ -466,7 +509,13 @@ sx_process (vlib_main_t * vm,
 	  break;
 	}
 
+      /*
+	gtp_debug ("advancing wheel, now is %lu", now);
+	gtp_debug ("tw_timer_expire_timers_vec (%p, %lu, %p);", &sx->urr_timer, now, expired);
+      */
+
       expired = TW (tw_timer_expire_timers_vec) (&sxsm->urr_timer, now, expired);
+      //gtp_debug ("Expired %d elements", vec_len (expired));
 
       u32 *p = NULL;
       vec_foreach (p, expired)
@@ -479,8 +528,9 @@ sx_process (vlib_main_t * vm,
 	  {
 	    upf_session_t *sx;
 
+	    gtp_debug("wheel current tick: %u", sxsm->urr_timer.current_tick);
 	    sx = pool_elt_at_index (gtm->sessions, si);
-	    upf_pfcp_session_urr_timer(sx, urr_id, timer_id, sxsm->now);
+	    upf_pfcp_session_urr_timer(sx, urr_id, timer_id, sxsm->now, now);
 	  }
       }
 
@@ -492,6 +542,7 @@ sx_process (vlib_main_t * vm,
 	{
 	  _vec_len (event_data) = 0;
 	}
+      // vec_free (event_data);
     }
 
   return (0);
@@ -561,6 +612,7 @@ upf_pfcp_server_session_usage_report(upf_session_t *sess)
   vlib_main_t *vm = sx->vlib_main;
   upf_main_t *gtm = &upf_main;
 
+  clib_warning ("sending URR event on %wd\n", (uword)(sess - gtm->sessions));
   vlib_process_signal_event_mt(vm, sx_api_process_node.index, EVENT_URR, (uword)(sess - gtm->sessions));
 }
 

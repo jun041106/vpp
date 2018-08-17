@@ -1879,6 +1879,8 @@ handle_session_modification_request(sx_msg_t * req, pfcp_session_modification_re
  out_update_finish:
   sx_update_finish(sess);
 
+  fformat(stderr, "%U", format_sx_session, sess, SX_ACTIVE);
+
  out_send_resp:
   if (r == 0)
     resp.response.cause = PFCP_CAUSE_REQUEST_ACCEPTED;
