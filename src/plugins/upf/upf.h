@@ -343,6 +343,10 @@ typedef struct {
 
   u16 triggers;
 
+  u8 status;
+#define URR_STATUS_NORMAL 0
+#define URR_OVER_QUOTA    1
+
   u8 update_flags;
 #define SX_URR_UPDATE_VOLUME_QUOTA   BIT(0)
 #define SX_URR_UPDATE_TIME_QUOTA     BIT(1)
@@ -533,6 +537,15 @@ extern vlib_node_registration_t gtpu4_input_node;
 extern vlib_node_registration_t gtpu6_input_node;
 extern vlib_node_registration_t upf4_encap_node;
 extern vlib_node_registration_t upf6_encap_node;
+
+typedef enum {
+  UPF_CLASSIFY_NEXT_DROP,
+  UPF_CLASSIFY_NEXT_GTP_IP4_ENCAP,
+  UPF_CLASSIFY_NEXT_GTP_IP6_ENCAP,
+  UPF_CLASSIFY_NEXT_IP_INPUT,
+  UPF_CLASSIFY_NEXT_IP_LOCAL,
+  UPF_CLASSIFY_N_NEXT,
+} upf_classify_next_t;
 
 int upf_enable_disable (upf_main_t * sm, u32 sw_if_index,
 			  int enable_disable);

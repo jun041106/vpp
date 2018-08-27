@@ -60,10 +60,11 @@ static inline struct rules *sx_get_rules(upf_session_t *sx, int rules)
 
 void vlib_free_combined_counter (vlib_combined_counter_main_t * cm);
 
-void process_urrs(vlib_main_t *vm, upf_session_t *sess,
-		  struct rules *r,
-		  upf_pdr_t *pdr, vlib_buffer_t * b,
-		  u8 is_dl, u8 is_ul);
+u32 process_urrs(vlib_main_t *vm, upf_session_t *sess,
+		 struct rules *r,
+		 upf_pdr_t *pdr, vlib_buffer_t * b,
+		 u8 is_dl, u8 is_ul,
+		 u32 next);
 
 void upf_pfcp_error_report(upf_session_t * sx, gtp_error_ind_t * error);
 

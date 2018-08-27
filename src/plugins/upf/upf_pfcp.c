@@ -1918,10 +1918,10 @@ static int urr_increment_and_check_counter(u64 * packets, u64 * bytes, u64 * con
   return r;
 }
 
-void process_urrs(vlib_main_t *vm, upf_session_t *sess,
-		  struct rules *r,
-		  upf_pdr_t *pdr, vlib_buffer_t * b,
-		  u8 is_dl, u8 is_ul)
+u32 process_urrs(vlib_main_t *vm, upf_session_t *sess,
+		 struct rules *r,
+		 upf_pdr_t *pdr, vlib_buffer_t * b,
+		 u8 is_dl, u8 is_ul, u32 next)
 {
   u16 *urr_id;
 
@@ -1935,7 +1935,7 @@ void process_urrs(vlib_main_t *vm, upf_session_t *sess,
 
       clib_spinlock_lock (&sess->lock);
 
-      if (urr->methods & SX_URR_VOLUME)
+      if (urr->methods & SX_URR_VOLUME && urr->status == URR_STATUS_NORMAL)
 	{
 #define urr_incr_and_check(V, D, L)					\
 	  urr_increment_and_check_counter(&V.measure.packets.D,		\
@@ -1951,13 +1951,21 @@ void process_urrs(vlib_main_t *vm, upf_session_t *sess,
 	    r |= urr_incr_and_check(urr->volume, dl, vlib_buffer_length_in_chain (vm, b));
 
 	  r |= urr_incr_and_check(urr->volume, total, vlib_buffer_length_in_chain (vm, b));
+
+	  if (unlikely(r & URR_QUOTA_EXHAUSTED))
+	    urr->status = URR_OVER_QUOTA;
 	}
 
       clib_spinlock_unlock (&sess->lock);
 
+      if (unlikely(urr->status == URR_OVER_QUOTA))
+	next = UPF_CLASSIFY_NEXT_DROP;
+
       if (unlikely(r != URR_OK))
 	upf_pfcp_server_session_usage_report(sess);
     }
+
+  return next;
 }
 
 static const char *apply_action_flags[] = {
@@ -2145,10 +2153,12 @@ format_sx_session(u8 * s, va_list * args)
     {
       s = format(s, "URR: %u\n"
 		 "  Measurement Method: %04x == %U\n"
-		 "  Reporting Triggers: %04x == %U\n",
+		 "  Reporting Triggers: %04x == %U\n"
+		 "  Status: %d\n",
 		 urr->id,
 		 urr->methods, format_flags, urr->methods, urr_method_flags,
-		 urr->triggers, format_flags, urr->triggers, urr_trigger_flags);
+		 urr->triggers, format_flags, urr->triggers, urr_trigger_flags,
+		 urr->status);
       s = format(s, "  Start Time: %U\n", format_time_float, 0, urr->start_time);
       if (urr->methods & SX_URR_VOLUME)
 	{
