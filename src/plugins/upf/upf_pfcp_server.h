@@ -60,6 +60,7 @@ typedef struct
   u32 seq_no;
   time_t start_time;
   ip46_address_t address;
+  f64 now;
 
   TWT(tw_timer_wheel) urr_timer;
 

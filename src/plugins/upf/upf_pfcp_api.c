@@ -1559,7 +1559,8 @@ handle_session_establishment_request(sx_msg_t * req, pfcp_session_establishment_
   pfcp_session_establishment_response_t resp;
   ip46_address_t up_address = ip46_address_initializer;
   ip46_address_t cp_address = ip46_address_initializer;
-  f64 now = unix_time_now ();
+  sx_server_main_t *sxsm = &sx_server_main;
+  f64 now = sxsm->now;
   upf_session_t *sess;
   int r = 0;
   int is_ip4;
@@ -1638,8 +1639,10 @@ static int
 handle_session_modification_request(sx_msg_t * req, pfcp_session_modification_request_t *msg)
 {
   pfcp_session_modification_response_t resp;
+  sx_server_main_t *sxsm = &sx_server_main;
   pfcp_query_urr_t *qry;
   upf_session_t *sess;
+  f64 now = sxsm->now;
   u64 cp_seid = 0;
   int r = 0;
 
@@ -1675,8 +1678,6 @@ handle_session_modification_request(sx_msg_t * req, pfcp_session_modification_re
 			 BIT(SESSION_MODIFICATION_REQUEST_UPDATE_BAR)))
     {
       /* invoke the update process only if a update is include */
-      f64 now = unix_time_now ();
-
       sx_update_session(sess);
 
       if ((r = handle_create_pdr(sess, msg->create_pdr, &resp.grp,
@@ -1731,8 +1732,6 @@ handle_session_modification_request(sx_msg_t * req, pfcp_session_modification_re
   if (ISSET_BIT(msg->grp.fields, SESSION_MODIFICATION_REQUEST_QUERY_URR) &&
       vec_len(msg->query_urr) != 0)
     {
-      f64 now = unix_time_now ();
-
       SET_BIT(resp.grp.fields, SESSION_MODIFICATION_RESPONSE_USAGE_REPORT);
 
       vec_foreach(qry, msg->query_urr)
@@ -1754,7 +1753,6 @@ handle_session_modification_request(sx_msg_t * req, pfcp_session_modification_re
       active = sx_get_rules(sess, SX_ACTIVE);
       if (vec_len(active->urr) != 0)
 	{
-	  f64 now = unix_time_now ();
 	  upf_urr_t *urr;
 
 	  SET_BIT(resp.grp.fields, SESSION_MODIFICATION_RESPONSE_USAGE_REPORT);
@@ -1788,7 +1786,9 @@ handle_session_modification_response(sx_msg_t * req, pfcp_session_modification_r
 static int
 handle_session_deletion_request(sx_msg_t * req, pfcp_session_deletion_request_t *msg)
 {
+  sx_server_main_t *sxsm = &sx_server_main;
   pfcp_session_deletion_response_t resp;
+  f64 now = sxsm->now;
   upf_session_t *sess;
   struct rules *active;
   u64 cp_seid = 0;
@@ -1819,7 +1819,6 @@ handle_session_deletion_request(sx_msg_t * req, pfcp_session_deletion_request_t 
   active = sx_get_rules(sess, SX_ACTIVE);
   if (vec_len(active->urr) != 0)
     {
-      f64 now = unix_time_now ();
       upf_urr_t *urr;
 
       SET_BIT(resp.grp.fields, SESSION_DELETION_RESPONSE_USAGE_REPORT);

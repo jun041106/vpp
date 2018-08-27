@@ -436,6 +436,7 @@ void sx_release_association(upf_node_assoc_t *n)
 upf_session_t *sx_create_session(int sx_fib_index, const ip46_address_t *up_address,
 				    uint64_t cp_seid, const ip46_address_t *cp_address)
 {
+  sx_server_main_t *sxsm = &sx_server_main;
   vnet_main_t *vnm = upf_main.vnet_main;
   l2input_main_t *l2im = &l2input_main;
   upf_main_t *gtm = &upf_main;
@@ -451,7 +452,7 @@ upf_session_t *sx_create_session(int sx_fib_index, const ip46_address_t *up_addr
   sx->cp_seid = cp_seid;
   sx->cp_address = *cp_address;
 
-  sx->unix_time_start = unix_time_now ();
+  sx->unix_time_start = sxsm->now;
 
   clib_spinlock_init(&sx->lock);
 
@@ -1691,9 +1692,10 @@ int sx_update_apply(upf_session_t *sx)
   struct rules *pending = sx_get_rules(sx, SX_PENDING);
   struct rules *active = sx_get_rules(sx, SX_ACTIVE);
   int pending_pdr, pending_far, pending_urr;
+  sx_server_main_t *sxsm = &sx_server_main;
   upf_main_t *gtm = &upf_main;
   u32 si = sx - gtm->sessions;
-  f64 now = unix_time_now ();
+  f64 now = sxsm->now;
   upf_urr_t *urr;
 
   if (!pending->pdr && !pending->far && !pending->urr)

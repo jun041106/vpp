@@ -320,20 +320,21 @@ static uword
 sx_process (vlib_main_t * vm,
 	    vlib_node_runtime_t * rt, vlib_frame_t * f)
 {
-  sx_server_main_t *sx = &sx_server_main;
+  sx_server_main_t *sxsm = &sx_server_main;
   upf_main_t *gtm = &upf_main;
   u32 * expired = NULL;
 
-  sx->urr_timer.last_run_time = vlib_time_now (sx->vlib_main);
+  sxsm->urr_timer.last_run_time = vlib_time_now (sxsm->vlib_main);
+  sxsm->now = unix_time_now ();
 
   while (1)
     {
       uword event_type, *event_data = 0;
       u32 ticks_until_expiration;
       f64 timeout;
-      f64 now, unix_now;
+      f64 now;
 
-      ticks_until_expiration = TW (tw_timer_first_expires_in_ticks)(&sx->urr_timer);
+      ticks_until_expiration = TW (tw_timer_first_expires_in_ticks)(&sxsm->urr_timer);
 
       /* Nothing on the fast wheel, sleep 10ms */
       if (ticks_until_expiration == TW_SLOTS_PER_RING)
@@ -348,8 +349,8 @@ sx_process (vlib_main_t * vm,
       (void) vlib_process_wait_for_event_or_clock (vm, timeout);
       event_type = vlib_process_get_events (vm, &event_data);
 
-      now = vlib_time_now (sx->vlib_main);
-      unix_now = unix_time_now ();
+      now = vlib_time_now (sxsm->vlib_main);
+      sxsm->now = unix_time_now ();
 
       switch (event_type)
 	{
@@ -388,7 +389,7 @@ sx_process (vlib_main_t * vm,
 		upf_session_t *sx;
 
 		sx = pool_elt_at_index (gtm->sessions, si);
-		upf_pfcp_session_usage_report(sx, unix_now);
+		upf_pfcp_session_usage_report(sx, sxsm->now);
 	      }
 	    break;
 	  }
@@ -398,8 +399,7 @@ sx_process (vlib_main_t * vm,
 	  break;
 	}
 
-
-      expired = TW (tw_timer_expire_timers_vec) (&sx->urr_timer, now, expired);
+      expired = TW (tw_timer_expire_timers_vec) (&sxsm->urr_timer, now, expired);
 
       u32 *p = NULL;
       vec_foreach (p, expired)
@@ -413,7 +413,7 @@ sx_process (vlib_main_t * vm,
 	    upf_session_t *sx;
 
 	    sx = pool_elt_at_index (gtm->sessions, si);
-	    upf_pfcp_session_urr_timer(sx, urr_id, timer_id, unix_now);
+	    upf_pfcp_session_urr_timer(sx, urr_id, timer_id, sxsm->now);
 	  }
       }
 
