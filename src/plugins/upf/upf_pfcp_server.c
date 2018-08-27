@@ -115,6 +115,7 @@ void upf_pfcp_send_data (sx_msg_t * msg)
 
 sx_msg_t * build_sx_msg(upf_session_t * sx, u8 type, struct pfcp_group *grp)
 {
+  sx_server_main_t *sxs = &sx_server_main;
   sx_msg_t * msg;
   int r = 0;
 
@@ -128,7 +129,11 @@ sx_msg_t * build_sx_msg(upf_session_t * sx, u8 type, struct pfcp_group *grp)
   msg->hdr->type = type;
 
   msg->hdr->session_hdr.seid = clib_host_to_net_u64(sx->cp_seid);
-  //TODO: sequence number....
+  msg->hdr->session_hdr.sequence[0] = (sxs->seq_no >> 16) & 0xff;
+  msg->hdr->session_hdr.sequence[1] = (sxs->seq_no >>  8) & 0xff;
+  msg->hdr->session_hdr.sequence[2] = sxs->seq_no & 0xff;
+  sxs->seq_no = (sxs->seq_no + 1) % 0x1000000;
+
   _vec_len(msg->data) = offsetof(pfcp_header_t, session_hdr.ies);
 
   r = pfcp_encode_msg(type, grp, &msg->data);

@@ -1498,7 +1498,8 @@ build_usage_report(upf_session_t *sess, upf_urr_t *urr,
   r->urr_id = urr->id;
 
   SET_BIT(r->grp.fields, USAGE_REPORT_UR_SEQN);
-  r->ur_seqn = 0;   // TODO
+  r->ur_seqn = urr->seq_no;
+  urr->seq_no++;
 
   SET_BIT(r->grp.fields, USAGE_REPORT_USAGE_REPORT_TRIGGER);
   r->usage_report_trigger = trigger;

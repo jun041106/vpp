@@ -57,6 +57,7 @@ typedef struct
 
 typedef struct
 {
+  u32 seq_no;
   time_t start_time;
   ip46_address_t address;
 

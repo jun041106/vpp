@@ -348,6 +348,7 @@ typedef struct {
 #define SX_URR_UPDATE_TIME_QUOTA     BIT(1)
 #define SX_URR_UPDATE_TIME_THRESHOLD BIT(2)
 
+  u32 seq_no;
   f64 start_time;
 
   urr_volume_t volume;
