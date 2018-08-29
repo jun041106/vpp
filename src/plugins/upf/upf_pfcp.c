@@ -1937,7 +1937,8 @@ u32 process_urrs(vlib_main_t *vm, upf_session_t *sess,
 
       clib_spinlock_lock (&sess->lock);
 
-      if (urr->methods & SX_URR_VOLUME && urr->status == URR_STATUS_NORMAL)
+      if ((urr->methods & SX_URR_VOLUME) &&
+	  !(urr->status & URR_OVER_QUOTA))
 	{
 #define urr_incr_and_check(V, D, L)					\
 	  urr_increment_and_check_counter(&V.measure.packets.D,		\
@@ -1955,12 +1956,12 @@ u32 process_urrs(vlib_main_t *vm, upf_session_t *sess,
 	  r |= urr_incr_and_check(urr->volume, total, vlib_buffer_length_in_chain (vm, b));
 
 	  if (unlikely(r & URR_QUOTA_EXHAUSTED))
-	    urr->status = URR_OVER_QUOTA;
+	    urr->status |= URR_OVER_QUOTA;
 	}
 
       clib_spinlock_unlock (&sess->lock);
 
-      if (unlikely(urr->status == URR_OVER_QUOTA))
+      if (unlikely(urr->status & URR_OVER_QUOTA))
 	next = UPF_CLASSIFY_NEXT_DROP;
 
       if (unlikely(r != URR_OK))
@@ -1998,6 +1999,11 @@ static const char *urr_trigger_flags[] = {
   "VOLUME QUOTA",
   "TIME QUOTA",
   "ENVELOPE CLOSURE",
+  NULL
+};
+
+static const char *urr_status_flags[] = {
+  "OVER QUOTA",
   NULL
 };
 
@@ -2156,11 +2162,11 @@ format_sx_session(u8 * s, va_list * args)
       s = format(s, "URR: %u\n"
 		 "  Measurement Method: %04x == %U\n"
 		 "  Reporting Triggers: %04x == %U\n"
-		 "  Status: %d\n",
+		 "  Status: %d == %U\n",
 		 urr->id,
-		 urr->methods, format_flags, urr->methods, urr_method_flags,
-		 urr->triggers, format_flags, urr->triggers, urr_trigger_flags,
-		 urr->status);
+		 urr->methods, format_flags, (u64)urr->methods, urr_method_flags,
+		 urr->triggers, format_flags, (u64)urr->triggers, urr_trigger_flags,
+		 urr->status, format_flags, (u64)urr->status, urr_status_flags);
       s = format(s, "  Start Time: %U\n", format_time_float, 0, urr->start_time);
       if (urr->methods & SX_URR_VOLUME)
 	{

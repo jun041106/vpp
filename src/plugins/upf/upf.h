@@ -344,8 +344,7 @@ typedef struct {
   u16 triggers;
 
   u8 status;
-#define URR_STATUS_NORMAL 0
-#define URR_OVER_QUOTA    1
+#define URR_OVER_QUOTA                  BIT(0)
 
   u8 update_flags;
 #define SX_URR_UPDATE_VOLUME_QUOTA   BIT(0)

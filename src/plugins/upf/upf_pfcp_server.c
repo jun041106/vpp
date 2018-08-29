@@ -293,7 +293,7 @@ upf_pfcp_session_urr_timer(upf_session_t *sx, u16 urr_id, u8 timer_id, f64 now)
 
 	  upf_pfcp_session_stop_urr_time(&urr->time_quota);
 	  urr->time_quota.period = 0;
-	  urr->status = URR_OVER_QUOTA;
+	  urr->status |= URR_OVER_QUOTA;
 	}
 
 #undef urr_check

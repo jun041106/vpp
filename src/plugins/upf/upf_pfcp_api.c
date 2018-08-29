@@ -1395,7 +1395,7 @@ static int handle_update_urr(upf_session_t *sess, pfcp_update_urr_t *update_urr,
       update->methods = urr->measurement_method;
       update->triggers = OPT(urr, UPDATE_URR_REPORTING_TRIGGERS,
 			     reporting_triggers, update->triggers);
-      update->status = URR_STATUS_NORMAL;
+      update->status &= ~URR_OVER_QUOTA;
 
       //TODO: measurement_period;
       if (ISSET_BIT(urr->grp.fields, UPDATE_URR_VOLUME_THRESHOLD))
