@@ -316,6 +316,8 @@ upf_pfcp_session_urr_timer(upf_session_t *sx, u16 urr_id, u8 timer_id, f64 now)
       upf_pfcp_send_data(msg);
       sx_msg_free(msg);
     }
+
+  pfcp_free_msg(PFCP_SESSION_REPORT_REQUEST, &req.grp);
 }
 
 static uword
