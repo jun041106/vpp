@@ -20,6 +20,8 @@
 #define _LGPL_SOURCE            /* LGPL v3.0 is compatible with Apache 2.0 */
 #include <urcu-qsbr.h>          /* QSBR RCU flavor */
 
+#include <math.h>
+
 #include <vnet/ip/ip.h>
 #include <vnet/udp/udp.h>
 #include <vnet/session/session.h>
@@ -245,7 +247,7 @@ upf_pfcp_session_start_stop_urr_time(u32 si, u8 urr_id, u8 type, f64 now, urr_ti
       u64 interval;
 
       // start timer.....
-      interval = ((u64)(now - t->base) * 100) + (t->period * 100) + 1;
+      interval = ceil((now - t->base) * 100.0) + t->period * 100;
       t->handle = TW (tw_timer_start) (&sx->urr_timer, id, 0, interval);
 
       gtp_debug ("starting timer %u, %u, %u, now is %.3f, base is %.3f, expire in %lu ticks\n",
