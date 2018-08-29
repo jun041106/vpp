@@ -825,6 +825,7 @@ int sx_disable_session(upf_session_t *sx)
   ip46_address_fib_t *vrf_ip;
   gtpu4_tunnel_key_t *v4_teid;
   gtpu6_tunnel_key_t *v6_teid;
+  upf_urr_t *urr;
 
   hash_unset (gtm->session_by_id, sx->cp_seid);
   vec_foreach (v4_teid, active->v4_teid)
@@ -844,6 +845,13 @@ int sx_disable_session(upf_session_t *sx)
   /* make sure session is removed from l2 bd or xconnect */
   set_int_l2_mode (gtm->vlib_main, vnm, MODE_L3, sx->sw_if_index, 0, 0, 0, 0);
   gtm->session_index_by_sw_if_index[sx->sw_if_index] = ~0;
+
+  /* stop all timers */
+  vec_foreach (urr, active->urr)
+    {
+      upf_pfcp_session_stop_urr_time(&urr->time_threshold);
+      upf_pfcp_session_stop_urr_time(&urr->time_quota);
+    }
 
   return 0;
 }
@@ -1834,11 +1842,10 @@ int sx_update_apply(upf_session_t *sx)
 
 	  if (!new_urr)
 	    {
-	      if ((urr->methods & SX_URR_TIME))
-		{
-		  upf_pfcp_session_stop_urr_time(&urr->time_threshold);
-		  upf_pfcp_session_stop_urr_time(&urr->time_quota);
-		}
+	      /* stop all timers */
+	      upf_pfcp_session_stop_urr_time(&urr->time_threshold);
+	      upf_pfcp_session_stop_urr_time(&urr->time_quota);
+
 	      continue;
 	    }
 
