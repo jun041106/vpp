@@ -465,7 +465,11 @@ typedef u8 pfcp_bar_id_t;
 typedef u32 pfcp_cp_function_features_t;
 
 #define PFCP_IE_USAGE_INFORMATION			90
-typedef u32 pfcp_usage_information_t;
+typedef u8 pfcp_usage_information_t;
+#define USAGE_INFORMATION_BEFORE			BIT(0)
+#define USAGE_INFORMATION_AFTER				BIT(1)
+#define USAGE_INFORMATION_AFTER_QoS_ENFORCEMENT		BIT(2)
+#define USAGE_INFORMATION_BEFORE_QoS_ENFORCEMENT	BIT(3)
 
 #define PFCP_IE_APPLICATION_INSTANCE_ID			91
 typedef u32 pfcp_application_instance_id_t;

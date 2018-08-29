@@ -2040,20 +2040,32 @@ static u8 * format_usage_information(u8 * s, va_list * args)
 {
   pfcp_usage_information_t *v = va_arg (*args, pfcp_usage_information_t *);
 
-  return format(s, "TODO: %U", format_hex_bytes, v, sizeof(*v));
+  s = format (s, "UBE:%d,UAE:%d,AFT:%d,BEF:%d",
+	      !!(*v & USAGE_INFORMATION_BEFORE_QoS_ENFORCEMENT),
+	      !!(*v & USAGE_INFORMATION_AFTER_QoS_ENFORCEMENT),
+	      !!(*v & USAGE_INFORMATION_AFTER),
+	      !!(*v & USAGE_INFORMATION_BEFORE));
+
+  return s;
 }
 
 static int decode_usage_information(u8 *data, u16 length, void *p)
 {
-  pfcp_usage_information_t *v __attribute__ ((unused)) = p;
+  pfcp_usage_information_t *v = p;
+
+  if (length < 1)
+    return PFCP_CAUSE_INVALID_LENGTH;
+
+  *v = get_u8(data);
 
   return 0;
 }
 
 static int encode_usage_information(void *p, u8 **vec)
 {
-  pfcp_usage_information_t *v __attribute__ ((unused)) = p;
+  pfcp_usage_information_t *v = p;
 
+  put_u8(*vec, *v);
   return 0;
 }
 
