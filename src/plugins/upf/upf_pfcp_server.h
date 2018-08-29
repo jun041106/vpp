@@ -77,6 +77,8 @@ extern vlib_node_registration_t sx6_input_node;
 void upf_pfcp_session_stop_urr_time(urr_time_t *t);
 void
 upf_pfcp_session_start_stop_urr_time(u32 si, u8 urr_id, u8 type, f64 now, urr_time_t *t);
+void
+upf_pfcp_session_start_stop_urr_time_abs(u32 si, u8 urr_id, u8 type, f64 now, urr_time_t *t);
 
 sx_msg_t * build_sx_msg(upf_session_t * sx, u8 type, struct pfcp_group *grp);
 void upf_pfcp_send_data (sx_msg_t * msg);

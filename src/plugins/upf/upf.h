@@ -345,11 +345,13 @@ typedef struct {
 
   u8 status;
 #define URR_OVER_QUOTA                  BIT(0)
+#define URR_AFTER_MONITORING_TIME       BIT(1)
 
   u8 update_flags;
-#define SX_URR_UPDATE_VOLUME_QUOTA   BIT(0)
-#define SX_URR_UPDATE_TIME_QUOTA     BIT(1)
-#define SX_URR_UPDATE_TIME_THRESHOLD BIT(2)
+#define SX_URR_UPDATE_VOLUME_QUOTA      BIT(0)
+#define SX_URR_UPDATE_TIME_QUOTA        BIT(1)
+#define SX_URR_UPDATE_TIME_THRESHOLD    BIT(2)
+#define SX_URR_UPDATE_MONITORING_TIME   BIT(3)
 
   u32 seq_no;
   f64 start_time;
@@ -363,6 +365,12 @@ typedef struct {
   urr_time_t monitoring_time;     /* absolute UTC ts since 1900-01-01 00:00:00 */
 #define SX_URR_THRESHOLD_TIMER  1
 #define SX_URR_QUOTA_TIMER      2
+#define SX_URR_MONITORING_TIMER 3
+
+  struct {
+    f64 start_time;
+    urr_measure_t volume;
+  } usage_before_monitoring_time;
 } upf_urr_t;
 
 typedef struct {

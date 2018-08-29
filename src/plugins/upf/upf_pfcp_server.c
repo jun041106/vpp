@@ -255,6 +255,28 @@ upf_pfcp_session_start_stop_urr_time(u32 si, u8 urr_id, u8 type, f64 now, urr_ti
     }
 }
 
+void
+upf_pfcp_session_start_stop_urr_time_abs(u32 si, u8 urr_id, u8 type, f64 now, urr_time_t *t)
+{
+  sx_server_main_t *sx = &sx_server_main;
+
+  if (t->handle != ~0)
+     upf_pfcp_session_stop_urr_time(t);
+
+  if (t->base != 0 && t->base > now)
+    {
+      u32 id = SX_URR_TW_ID(si, urr_id, type);
+      u64 ticks;
+
+      // start timer.....
+      ticks = ceil((t->base - now) * 100.0);
+      t->handle = TW (tw_timer_start) (&sx->urr_timer, id, 0, ticks);
+
+      gtp_debug ("starting abs timer %u, %u, %u, now is %.3f, base is %.3f, expire in %lu ticks\n",
+		 type, urr_id, si, now, t->base, ticks);
+    }
+}
+
 static void
 upf_pfcp_session_urr_timer(upf_session_t *sx, u16 urr_id, u8 timer_id, f64 now)
 {
@@ -263,7 +285,6 @@ upf_pfcp_session_urr_timer(upf_session_t *sx, u16 urr_id, u8 timer_id, f64 now)
   pfcp_session_report_request_t req;
   struct rules *active;
   upf_urr_t *urr;
-  sx_msg_t *msg;
 
   active = sx_get_rules(sx, SX_ACTIVE);
 
@@ -302,19 +323,39 @@ upf_pfcp_session_urr_timer(upf_session_t *sx, u16 urr_id, u8 timer_id, f64 now)
 
       if (trigger != 0)
 	{
+	  sx_msg_t *msg;
+
 	  build_usage_report(sx, urr, trigger, now, &req.usage_report);
 
 	  // clear reporting on the time based triggers, until rearmed by update
 	  urr->triggers &= ~(REPORTING_TRIGGER_TIME_THRESHOLD |
 			     REPORTING_TRIGGER_TIME_QUOTA);
-	}
-    }
 
-  msg = build_sx_msg(sx, PFCP_SESSION_REPORT_REQUEST, &req.grp);
-  if (msg)
-    {
-      upf_pfcp_send_data(msg);
-      sx_msg_free(msg);
+	  msg = build_sx_msg(sx, PFCP_SESSION_REPORT_REQUEST, &req.grp);
+	  if (msg)
+	    {
+	      upf_pfcp_send_data(msg);
+	      sx_msg_free(msg);
+	    }
+	}
+      else if (!(urr->status & URR_AFTER_MONITORING_TIME) &&
+	       (urr->monitoring_time.base != 0) &&
+	       (urr->monitoring_time.base <= now))
+	{
+	  clib_spinlock_lock (&sx->lock);
+
+	  urr->usage_before_monitoring_time.volume = urr->volume.measure;
+	  memset(&urr->volume.measure.packets, 0, sizeof(urr->volume.measure.packets));
+	  memset(&urr->volume.measure.bytes, 0, sizeof(urr->volume.measure.bytes));
+
+	  clib_spinlock_unlock (&sx->lock);
+
+	  upf_pfcp_session_stop_urr_time(&urr->monitoring_time);
+
+	  urr->usage_before_monitoring_time.start_time = urr->start_time;
+	  urr->start_time = now;
+	  urr->status |= URR_AFTER_MONITORING_TIME;
+	}
     }
 
   pfcp_free_msg(PFCP_SESSION_REPORT_REQUEST, &req.grp);

@@ -849,6 +849,7 @@ int sx_disable_session(upf_session_t *sx)
   /* stop all timers */
   vec_foreach (urr, active->urr)
     {
+      upf_pfcp_session_stop_urr_time(&urr->monitoring_time);
       upf_pfcp_session_stop_urr_time(&urr->time_threshold);
       upf_pfcp_session_stop_urr_time(&urr->time_quota);
     }
@@ -1826,6 +1827,11 @@ int sx_update_apply(upf_session_t *sx)
 	      upf_pfcp_session_start_stop_urr_time
 		(si, urr->id, SX_URR_QUOTA_TIMER, now, &urr->time_quota);
 	    }
+	  if (urr->update_flags & SX_URR_UPDATE_MONITORING_TIME)
+	    {
+	      upf_pfcp_session_start_stop_urr_time_abs
+		      (si, urr->id, SX_URR_MONITORING_TIMER, now, &urr->monitoring_time);
+	    }
 	}
     }
 
@@ -1844,6 +1850,7 @@ int sx_update_apply(upf_session_t *sx)
 	  if (!new_urr)
 	    {
 	      /* stop all timers */
+	      upf_pfcp_session_stop_urr_time(&urr->monitoring_time);
 	      upf_pfcp_session_stop_urr_time(&urr->time_threshold);
 	      upf_pfcp_session_stop_urr_time(&urr->time_quota);
 
@@ -2012,6 +2019,7 @@ static const char *urr_trigger_flags[] = {
 
 static const char *urr_status_flags[] = {
   "OVER QUOTA",
+  "AFTER MONITORING TIME",
   NULL
 };
 
@@ -2058,6 +2066,18 @@ format_urr_time(u8 * s, va_list * args)
 		/* VPP does not support ISO dates... */
 		format_time_float, 0, t->base + (f64)t->period,
 		((f64)t->period) - (now - t->base), t->handle);
+}
+
+static u8 *
+format_urr_time_abs(u8 * s, va_list * args)
+{
+  urr_time_t *t = va_arg (*args, urr_time_t *);
+  f64 now = unix_time_now ();
+
+  return format(s, "%U, in %9.3f secs, handle 0x%08x",
+		/* VPP does not support ISO dates... */
+		format_time_float, 0, t->base,
+		t->base - now, t->handle);
 }
 
 u8 *
@@ -2196,6 +2216,35 @@ format_sx_session(u8 * s, va_list * args)
 	  s = format(s, "  Time\n    Quota:     %U\n    Threshold: %U\n",
 		     format_urr_time, &urr->time_quota,
 		     format_urr_time, &urr->time_threshold);
+	}
+      if (urr->monitoring_time.base != 0)
+	{
+	  s = format(s, "  Monitoring Time: %U\n",
+		     format_urr_time_abs, &urr->monitoring_time);
+
+	  if (urr->status & URR_AFTER_MONITORING_TIME)
+	    {
+	      s = format(s, "  Usage Before Monitoring Time\n");
+	      if (urr->methods & SX_URR_VOLUME)
+		{
+		  urr_measure_t *v = &urr->usage_before_monitoring_time.volume;
+
+		  s = format(s, "    Volume\n"
+			     "      Up:    %20"PRIu64", Pkts: %10"PRIu64"\n"
+			     "      Down:  %20"PRIu64", Pkts: %10"PRIu64"\n"
+			     "      Total: %20"PRIu64", Pkts: %10"PRIu64"\n",
+			     v->bytes.ul, v->packets.ul,
+			     v->bytes.dl, v->packets.dl,
+			     v->bytes.total, v->packets.total);
+		}
+	      if (urr->methods & SX_URR_TIME)
+		{
+		  s = format(s, "    Start Time %U, End Time %U, %9.3f secs\n",
+			     format_time_float, 0, urr->usage_before_monitoring_time.start_time,
+			     format_time_float, 0, urr->start_time,
+			     urr->start_time - urr->usage_before_monitoring_time.start_time);
+		}
+	    }
 	}
     }
   return s;

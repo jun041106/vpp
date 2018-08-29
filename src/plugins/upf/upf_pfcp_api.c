@@ -1342,7 +1342,14 @@ static int handle_create_urr(upf_session_t *sess, pfcp_create_urr_t *create_urr,
 
       //TODO: quota_holding_time;
       //TODO: dropped_dl_traffic_threshold;
-      //TODO: monitoring_time;
+
+      if (ISSET_BIT(urr->grp.fields, CREATE_URR_MONITORING_TIME))
+	{
+	  create->update_flags |= SX_URR_UPDATE_MONITORING_TIME;
+	  create->monitoring_time.base = urr->monitoring_time;
+	  create->monitoring_time.handle = ~0;
+	}
+
       //TODO: subsequent_volume_threshold;
       //TODO: subsequent_time_threshold;
       //TODO: inactivity_detection_time;
@@ -1428,7 +1435,14 @@ static int handle_update_urr(upf_session_t *sess, pfcp_update_urr_t *update_urr,
 
       //TODO: quota_holding_time;
       //TODO: dropped_dl_traffic_threshold;
-      //TODO: monitoring_time;
+
+      if (ISSET_BIT(urr->grp.fields, UPDATE_URR_MONITORING_TIME))
+	{
+	  update->update_flags |= SX_URR_UPDATE_MONITORING_TIME;
+	  update->monitoring_time.base = urr->monitoring_time;
+	  update->monitoring_time.handle = ~0;
+	}
+
       //TODO: subsequent_volume_threshold;
       //TODO: subsequent_time_threshold;
       //TODO: inactivity_detection_time;
@@ -1478,6 +1492,27 @@ static int handle_remove_urr(upf_session_t *sess, pfcp_remove_urr_t *remove_urr,
   return r;
 }
 
+static pfcp_usage_report_t *
+init_usage_report(upf_urr_t *urr, u32 trigger, pfcp_usage_report_t **report)
+{
+  pfcp_usage_report_t *r;
+
+  vec_alloc(*report, 1);
+  r = vec_end(*report);
+
+  SET_BIT(r->grp.fields, USAGE_REPORT_URR_ID);
+  r->urr_id = urr->id;
+
+  SET_BIT(r->grp.fields, USAGE_REPORT_UR_SEQN);
+  r->ur_seqn = urr->seq_no;
+  urr->seq_no++;
+
+  SET_BIT(r->grp.fields, USAGE_REPORT_USAGE_REPORT_TRIGGER);
+  r->usage_report_trigger = trigger;
+
+  return r;
+}
+
 pfcp_usage_report_t *
 build_usage_report(upf_session_t *sess, upf_urr_t *urr,
 		   u32 trigger, f64 now, pfcp_usage_report_t **report)
@@ -1494,18 +1529,50 @@ build_usage_report(upf_session_t *sess, upf_urr_t *urr,
 
   clib_spinlock_unlock (&sess->lock);
 
-  vec_alloc(*report, 1);
-  r = vec_end(*report);
+  if (urr->status & URR_AFTER_MONITORING_TIME)
+    {
+      r = init_usage_report(urr, USAGE_REPORT_TRIGGER_MONITORING_TIME, report);
 
-  SET_BIT(r->grp.fields, USAGE_REPORT_URR_ID);
-  r->urr_id = urr->id;
+      SET_BIT(r->grp.fields, USAGE_REPORT_USAGE_INFORMATION);
+      r->usage_information = USAGE_INFORMATION_BEFORE;
 
-  SET_BIT(r->grp.fields, USAGE_REPORT_UR_SEQN);
-  r->ur_seqn = urr->seq_no;
-  urr->seq_no++;
+      /* TODO: apply proper rounding, the f64 to u32 conversion works a trunc */
+      start = urr->usage_before_monitoring_time.start_time;
+      end = urr->start_time;
 
-  SET_BIT(r->grp.fields, USAGE_REPORT_USAGE_REPORT_TRIGGER);
-  r->usage_report_trigger = trigger;
+      if ((trigger & (USAGE_REPORT_TRIGGER_START_OF_TRAFFIC |
+		      USAGE_REPORT_TRIGGER_STOP_OF_TRAFFIC)) == 0)
+	{
+	  SET_BIT(r->grp.fields, USAGE_REPORT_START_TIME);
+	  SET_BIT(r->grp.fields, USAGE_REPORT_END_TIME);
+
+	  r->start_time = start;
+	  r->end_time = end;
+	}
+
+      SET_BIT(r->grp.fields, USAGE_REPORT_VOLUME_MEASUREMENT);
+      r->volume_measurement.fields = 7;
+
+      r->volume_measurement.ul = urr->usage_before_monitoring_time.volume.bytes.ul;
+      r->volume_measurement.dl = urr->usage_before_monitoring_time.volume.bytes.dl;
+      r->volume_measurement.total = urr->usage_before_monitoring_time.volume.bytes.total;
+
+      SET_BIT(r->grp.fields, USAGE_REPORT_DURATION_MEASUREMENT);
+      r->duration_measurement = end - start;
+
+      urr->monitoring_time.base = 0;
+      urr->status &= ~URR_AFTER_MONITORING_TIME;
+
+      _vec_len(*report)++;
+    }
+
+  r = init_usage_report(urr, trigger, report);
+
+  if (urr->status & URR_AFTER_MONITORING_TIME)
+    {
+      SET_BIT(r->grp.fields, USAGE_REPORT_USAGE_INFORMATION);
+      r->usage_information = USAGE_INFORMATION_AFTER;
+    }
 
   /* TODO: apply proper rounding, the f64 to u32 conversion works a trunc */
   start = urr->start_time;
