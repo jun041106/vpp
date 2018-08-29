@@ -1484,6 +1484,7 @@ build_usage_report(upf_session_t *sess, upf_urr_t *urr,
 {
   pfcp_usage_report_t *r;
   urr_volume_t volume;
+  u32 start, end;
 
   clib_spinlock_lock (&sess->lock);
 
@@ -1506,14 +1507,18 @@ build_usage_report(upf_session_t *sess, upf_urr_t *urr,
   SET_BIT(r->grp.fields, USAGE_REPORT_USAGE_REPORT_TRIGGER);
   r->usage_report_trigger = trigger;
 
+  /* TODO: apply proper rounding, the f64 to u32 conversion works a trunc */
+  start = urr->start_time;
+  end = now;
+
   if ((trigger & (USAGE_REPORT_TRIGGER_START_OF_TRAFFIC |
 		  USAGE_REPORT_TRIGGER_STOP_OF_TRAFFIC)) == 0)
     {
       SET_BIT(r->grp.fields, USAGE_REPORT_START_TIME);
       SET_BIT(r->grp.fields, USAGE_REPORT_END_TIME);
 
-      r->start_time = urr->start_time;
-      r->end_time = now;
+      r->start_time = start;
+      r->end_time = end;
     }
 
   SET_BIT(r->grp.fields, USAGE_REPORT_VOLUME_MEASUREMENT);
@@ -1524,7 +1529,7 @@ build_usage_report(upf_session_t *sess, upf_urr_t *urr,
   r->volume_measurement.total = volume.measure.bytes.total;
 
   SET_BIT(r->grp.fields, USAGE_REPORT_DURATION_MEASUREMENT);
-  r->duration_measurement = now - urr->start_time;
+  r->duration_measurement = end - start;
 
   /* SET_BIT(r->grp.fields, USAGE_REPORT_APPLICATION_DETECTION_INFORMATION); */
   /* SET_BIT(r->grp.fields, USAGE_REPORT_UE_IP_ADDRESS); */
