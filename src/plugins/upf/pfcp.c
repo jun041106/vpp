@@ -2724,6 +2724,489 @@ static void free_user_plane_ip_resource_information(void *p)
   vec_free(v->network_instance);
 }
 
+static u8 * format_user_plane_inactivity_timer(u8 * s, va_list * args)
+{
+  pfcp_user_plane_inactivity_timer_t *v = va_arg (*args, pfcp_user_plane_inactivity_timer_t *);
+
+  return format(s, "TODO: %U", format_hex_bytes, v, sizeof(*v));
+}
+
+static int decode_user_plane_inactivity_timer(u8 *data, u16 length, void *p)
+{
+  pfcp_user_plane_inactivity_timer_t *v __attribute__ ((unused)) = p;
+
+  return 0;
+}
+
+static int encode_user_plane_inactivity_timer(void *p, u8 **vec)
+{
+  pfcp_user_plane_inactivity_timer_t *v __attribute__ ((unused)) = p;
+
+  return 0;
+}
+
+static u8 * format_multiplier(u8 * s, va_list * args)
+{
+  pfcp_multiplier_t *v = va_arg (*args, pfcp_multiplier_t *);
+
+  return format(s, "TODO: %U", format_hex_bytes, v, sizeof(*v));
+}
+
+static int decode_multiplier(u8 *data, u16 length, void *p)
+{
+  pfcp_multiplier_t *v __attribute__ ((unused)) = p;
+
+  return 0;
+}
+
+static int encode_multiplier(void *p, u8 **vec)
+{
+  pfcp_multiplier_t *v __attribute__ ((unused)) = p;
+
+  return 0;
+}
+
+static u8 * format_aggregated_urr_id(u8 * s, va_list * args)
+{
+  pfcp_aggregated_urr_id_t *v = va_arg (*args, pfcp_aggregated_urr_id_t *);
+
+  return format(s, "TODO: %U", format_hex_bytes, v, sizeof(*v));
+}
+
+static int decode_aggregated_urr_id(u8 *data, u16 length, void *p)
+{
+  pfcp_aggregated_urr_id_t *v __attribute__ ((unused)) = p;
+
+  return 0;
+}
+
+static int encode_aggregated_urr_id(void *p, u8 **vec)
+{
+  pfcp_aggregated_urr_id_t *v __attribute__ ((unused)) = p;
+
+  return 0;
+}
+
+static u8 * format_subsequent_volume_quota(u8 * s, va_list * args)
+{
+  pfcp_subsequent_volume_quota_t *v = va_arg (*args, pfcp_subsequent_volume_quota_t *);
+
+  return format(s, "TODO: %U", format_hex_bytes, v, sizeof(*v));
+}
+
+static int decode_subsequent_volume_quota(u8 *data, u16 length, void *p)
+{
+  pfcp_subsequent_volume_quota_t *v __attribute__ ((unused)) = p;
+
+  return 0;
+}
+
+static int encode_subsequent_volume_quota(void *p, u8 **vec)
+{
+  pfcp_subsequent_volume_quota_t *v __attribute__ ((unused)) = p;
+
+  return 0;
+}
+
+static u8 * format_subsequent_time_quota(u8 * s, va_list * args)
+{
+  pfcp_subsequent_time_quota_t *v = va_arg (*args, pfcp_subsequent_time_quota_t *);
+
+  return format(s, "TODO: %U", format_hex_bytes, v, sizeof(*v));
+}
+
+static int decode_subsequent_time_quota(u8 *data, u16 length, void *p)
+{
+  pfcp_subsequent_time_quota_t *v __attribute__ ((unused)) = p;
+
+  return 0;
+}
+
+static int encode_subsequent_time_quota(void *p, u8 **vec)
+{
+  pfcp_subsequent_time_quota_t *v __attribute__ ((unused)) = p;
+
+  return 0;
+}
+
+static u8 * format_rqi(u8 * s, va_list * args)
+{
+  pfcp_rqi_t *v = va_arg (*args, pfcp_rqi_t *);
+
+  return format(s, "TODO: %U", format_hex_bytes, v, sizeof(*v));
+}
+
+static int decode_rqi(u8 *data, u16 length, void *p)
+{
+  pfcp_rqi_t *v __attribute__ ((unused)) = p;
+
+  return 0;
+}
+
+static int encode_rqi(void *p, u8 **vec)
+{
+  pfcp_rqi_t *v __attribute__ ((unused)) = p;
+
+  return 0;
+}
+
+static u8 * format_qfi(u8 * s, va_list * args)
+{
+  pfcp_qfi_t *v = va_arg (*args, pfcp_qfi_t *);
+
+  return format(s, "TODO: %U", format_hex_bytes, v, sizeof(*v));
+}
+
+static int decode_qfi(u8 *data, u16 length, void *p)
+{
+  pfcp_qfi_t *v __attribute__ ((unused)) = p;
+
+  return 0;
+}
+
+static int encode_qfi(void *p, u8 **vec)
+{
+  pfcp_qfi_t *v __attribute__ ((unused)) = p;
+
+  return 0;
+}
+
+static u8 * format_query_urr_reference(u8 * s, va_list * args)
+{
+  pfcp_query_urr_reference_t *v = va_arg (*args, pfcp_query_urr_reference_t *);
+
+  return format(s, "TODO: %U", format_hex_bytes, v, sizeof(*v));
+}
+
+static int decode_query_urr_reference(u8 *data, u16 length, void *p)
+{
+  pfcp_query_urr_reference_t *v __attribute__ ((unused)) = p;
+
+  return 0;
+}
+
+static int encode_query_urr_reference(void *p, u8 **vec)
+{
+  pfcp_query_urr_reference_t *v __attribute__ ((unused)) = p;
+
+  return 0;
+}
+
+static u8 * format_additional_usage_reports_information(u8 * s, va_list * args)
+{
+  pfcp_additional_usage_reports_information_t *v = va_arg (*args, pfcp_additional_usage_reports_information_t *);
+
+  return format(s, "TODO: %U", format_hex_bytes, v, sizeof(*v));
+}
+
+static int decode_additional_usage_reports_information(u8 *data, u16 length, void *p)
+{
+  pfcp_additional_usage_reports_information_t *v __attribute__ ((unused)) = p;
+
+  return 0;
+}
+
+static int encode_additional_usage_reports_information(void *p, u8 **vec)
+{
+  pfcp_additional_usage_reports_information_t *v __attribute__ ((unused)) = p;
+
+  return 0;
+}
+
+static u8 * format_traffic_endpoint_id(u8 * s, va_list * args)
+{
+  pfcp_traffic_endpoint_id_t *v = va_arg (*args, pfcp_traffic_endpoint_id_t *);
+
+  return format(s, "TODO: %U", format_hex_bytes, v, sizeof(*v));
+}
+
+static int decode_traffic_endpoint_id(u8 *data, u16 length, void *p)
+{
+  pfcp_traffic_endpoint_id_t *v __attribute__ ((unused)) = p;
+
+  return 0;
+}
+
+static int encode_traffic_endpoint_id(void *p, u8 **vec)
+{
+  pfcp_traffic_endpoint_id_t *v __attribute__ ((unused)) = p;
+
+  return 0;
+}
+
+static u8 * format_mac_address(u8 * s, va_list * args)
+{
+  pfcp_mac_address_t *v = va_arg (*args, pfcp_mac_address_t *);
+
+  return format(s, "TODO: %U", format_hex_bytes, v, sizeof(*v));
+}
+
+static int decode_mac_address(u8 *data, u16 length, void *p)
+{
+  pfcp_mac_address_t *v __attribute__ ((unused)) = p;
+
+  return 0;
+}
+
+static int encode_mac_address(void *p, u8 **vec)
+{
+  pfcp_mac_address_t *v __attribute__ ((unused)) = p;
+
+  return 0;
+}
+
+static u8 * format_c_tag(u8 * s, va_list * args)
+{
+  pfcp_c_tag_t *v = va_arg (*args, pfcp_c_tag_t *);
+
+  return format(s, "TODO: %U", format_hex_bytes, v, sizeof(*v));
+}
+
+static int decode_c_tag(u8 *data, u16 length, void *p)
+{
+  pfcp_c_tag_t *v __attribute__ ((unused)) = p;
+
+  return 0;
+}
+
+static int encode_c_tag(void *p, u8 **vec)
+{
+  pfcp_c_tag_t *v __attribute__ ((unused)) = p;
+
+  return 0;
+}
+
+static u8 * format_s_tag(u8 * s, va_list * args)
+{
+  pfcp_s_tag_t *v = va_arg (*args, pfcp_s_tag_t *);
+
+  return format(s, "TODO: %U", format_hex_bytes, v, sizeof(*v));
+}
+
+static int decode_s_tag(u8 *data, u16 length, void *p)
+{
+  pfcp_s_tag_t *v __attribute__ ((unused)) = p;
+
+  return 0;
+}
+
+static int encode_s_tag(void *p, u8 **vec)
+{
+  pfcp_s_tag_t *v __attribute__ ((unused)) = p;
+
+  return 0;
+}
+
+static u8 * format_ethertype(u8 * s, va_list * args)
+{
+  pfcp_ethertype_t *v = va_arg (*args, pfcp_ethertype_t *);
+
+  return format(s, "TODO: %U", format_hex_bytes, v, sizeof(*v));
+}
+
+static int decode_ethertype(u8 *data, u16 length, void *p)
+{
+  pfcp_ethertype_t *v __attribute__ ((unused)) = p;
+
+  return 0;
+}
+
+static int encode_ethertype(void *p, u8 **vec)
+{
+  pfcp_ethertype_t *v __attribute__ ((unused)) = p;
+
+  return 0;
+}
+
+static u8 * format_proxying(u8 * s, va_list * args)
+{
+  pfcp_proxying_t *v = va_arg (*args, pfcp_proxying_t *);
+
+  return format(s, "TODO: %U", format_hex_bytes, v, sizeof(*v));
+}
+
+static int decode_proxying(u8 *data, u16 length, void *p)
+{
+  pfcp_proxying_t *v __attribute__ ((unused)) = p;
+
+  return 0;
+}
+
+static int encode_proxying(void *p, u8 **vec)
+{
+  pfcp_proxying_t *v __attribute__ ((unused)) = p;
+
+  return 0;
+}
+
+static u8 * format_ethernet_filter_id(u8 * s, va_list * args)
+{
+  pfcp_ethernet_filter_id_t *v = va_arg (*args, pfcp_ethernet_filter_id_t *);
+
+  return format(s, "TODO: %U", format_hex_bytes, v, sizeof(*v));
+}
+
+static int decode_ethernet_filter_id(u8 *data, u16 length, void *p)
+{
+  pfcp_ethernet_filter_id_t *v __attribute__ ((unused)) = p;
+
+  return 0;
+}
+
+static int encode_ethernet_filter_id(void *p, u8 **vec)
+{
+  pfcp_ethernet_filter_id_t *v __attribute__ ((unused)) = p;
+
+  return 0;
+}
+
+static u8 * format_ethernet_filter_properties(u8 * s, va_list * args)
+{
+  pfcp_ethernet_filter_properties_t *v = va_arg (*args, pfcp_ethernet_filter_properties_t *);
+
+  return format(s, "TODO: %U", format_hex_bytes, v, sizeof(*v));
+}
+
+static int decode_ethernet_filter_properties(u8 *data, u16 length, void *p)
+{
+  pfcp_ethernet_filter_properties_t *v __attribute__ ((unused)) = p;
+
+  return 0;
+}
+
+static int encode_ethernet_filter_properties(void *p, u8 **vec)
+{
+  pfcp_ethernet_filter_properties_t *v __attribute__ ((unused)) = p;
+
+  return 0;
+}
+
+static u8 * format_suggested_buffering_packets_count(u8 * s, va_list * args)
+{
+  pfcp_suggested_buffering_packets_count_t *v = va_arg (*args, pfcp_suggested_buffering_packets_count_t *);
+
+  return format(s, "TODO: %U", format_hex_bytes, v, sizeof(*v));
+}
+
+static int decode_suggested_buffering_packets_count(u8 *data, u16 length, void *p)
+{
+  pfcp_suggested_buffering_packets_count_t *v __attribute__ ((unused)) = p;
+
+  return 0;
+}
+
+static int encode_suggested_buffering_packets_count(void *p, u8 **vec)
+{
+  pfcp_suggested_buffering_packets_count_t *v __attribute__ ((unused)) = p;
+
+  return 0;
+}
+
+static u8 * format_user_id(u8 * s, va_list * args)
+{
+  pfcp_user_id_t *v = va_arg (*args, pfcp_user_id_t *);
+
+  return format(s, "TODO: %U", format_hex_bytes, v, sizeof(*v));
+}
+
+static int decode_user_id(u8 *data, u16 length, void *p)
+{
+  pfcp_user_id_t *v __attribute__ ((unused)) = p;
+
+  return 0;
+}
+
+static int encode_user_id(void *p, u8 **vec)
+{
+  pfcp_user_id_t *v __attribute__ ((unused)) = p;
+
+  return 0;
+}
+
+static u8 * format_ethernet_pdu_session_information(u8 * s, va_list * args)
+{
+  pfcp_ethernet_pdu_session_information_t *v = va_arg (*args, pfcp_ethernet_pdu_session_information_t *);
+
+  return format(s, "TODO: %U", format_hex_bytes, v, sizeof(*v));
+}
+
+static int decode_ethernet_pdu_session_information(u8 *data, u16 length, void *p)
+{
+  pfcp_ethernet_pdu_session_information_t *v __attribute__ ((unused)) = p;
+
+  return 0;
+}
+
+static int encode_ethernet_pdu_session_information(void *p, u8 **vec)
+{
+  pfcp_ethernet_pdu_session_information_t *v __attribute__ ((unused)) = p;
+
+  return 0;
+}
+
+static u8 * format_mac_addresses_detected(u8 * s, va_list * args)
+{
+  pfcp_mac_addresses_detected_t *v = va_arg (*args, pfcp_mac_addresses_detected_t *);
+
+  return format(s, "TODO: %U", format_hex_bytes, v, sizeof(*v));
+}
+
+static int decode_mac_addresses_detected(u8 *data, u16 length, void *p)
+{
+  pfcp_mac_addresses_detected_t *v __attribute__ ((unused)) = p;
+
+  return 0;
+}
+
+static int encode_mac_addresses_detected(void *p, u8 **vec)
+{
+  pfcp_mac_addresses_detected_t *v __attribute__ ((unused)) = p;
+
+  return 0;
+}
+
+static u8 * format_mac_addresses_removed(u8 * s, va_list * args)
+{
+  pfcp_mac_addresses_removed_t *v = va_arg (*args, pfcp_mac_addresses_removed_t *);
+
+  return format(s, "TODO: %U", format_hex_bytes, v, sizeof(*v));
+}
+
+static int decode_mac_addresses_removed(u8 *data, u16 length, void *p)
+{
+  pfcp_mac_addresses_removed_t *v __attribute__ ((unused)) = p;
+
+  return 0;
+}
+
+static int encode_mac_addresses_removed(void *p, u8 **vec)
+{
+  pfcp_mac_addresses_removed_t *v __attribute__ ((unused)) = p;
+
+  return 0;
+}
+
+static u8 * format_ethernet_inactivity_timer(u8 * s, va_list * args)
+{
+  pfcp_ethernet_inactivity_timer_t *v = va_arg (*args, pfcp_ethernet_inactivity_timer_t *);
+
+  return format(s, "TODO: %U", format_hex_bytes, v, sizeof(*v));
+}
+
+static int decode_ethernet_inactivity_timer(u8 *data, u16 length, void *p)
+{
+  pfcp_ethernet_inactivity_timer_t *v __attribute__ ((unused)) = p;
+
+  return 0;
+}
+
+static int encode_ethernet_inactivity_timer(void *p, u8 **vec)
+{
+  pfcp_ethernet_inactivity_timer_t *v __attribute__ ((unused)) = p;
+
+  return 0;
+}
+
 /* Grouped Information Elements */
 
 
@@ -2793,6 +3276,18 @@ static struct pfcp_group_ie_def pfcp_pdi_group[] =
       .type = PFCP_IE_APPLICATION_ID,
       .offset = offsetof(pfcp_pdi_t, application_id)
     },
+    [PDI_ETHERNET_PDU_SESSION_INFORMATION] = {
+      .type = PFCP_IE_ETHERNET_PDU_SESSION_INFORMATION,
+      .offset = offsetof(pfcp_pdi_t, ethernet_pdu_session_information)
+    },
+    [PDI_ETHERNET_PACKET_FILTER] = {
+      .type = PFCP_IE_ETHERNET_PACKET_FILTER,
+      .offset = offsetof(pfcp_pdi_t, ethernet_packet_filter)
+    },
+    [PDI_QFI] = {
+      .type = PFCP_IE_QFI,
+      .offset = offsetof(pfcp_pdi_t, qfi)
+    },
   };
 
 static struct pfcp_group_ie_def pfcp_create_far_group[] =
@@ -2848,6 +3343,14 @@ static struct pfcp_group_ie_def pfcp_forwarding_parameters_group[] =
     [FORWARDING_PARAMETERS_HEADER_ENRICHMENT] = {
       .type = PFCP_IE_HEADER_ENRICHMENT,
       .offset = offsetof(pfcp_forwarding_parameters_t, header_enrichment)
+    },
+    [FORWARDING_PARAMETERS_LINKED_TRAFFIC_ENDPOINT_ID] = {
+      .type = PFCP_IE_TRAFFIC_ENDPOINT_ID,
+      .offset = offsetof(pfcp_forwarding_parameters_t, linked_traffic_endpoint_id)
+    },
+    [FORWARDING_PARAMETERS_PROXYING] = {
+      .type = PFCP_IE_PROXYING,
+      .offset = offsetof(pfcp_forwarding_parameters_t, proxying)
     },
   };
 
@@ -2941,6 +3444,18 @@ static struct pfcp_group_ie_def pfcp_create_urr_group[] =
       .type = PFCP_IE_TIME_QUOTA_MECHANISM,
       .offset = offsetof(pfcp_create_urr_t, time_quota_mechanism)
     },
+    [CREATE_URR_AGGREGATED_URRS] = {
+      .type = PFCP_IE_AGGREGATED_URRS,
+      .offset = offsetof(pfcp_create_urr_t, aggregated_urrs)
+    },
+    [CREATE_URR_FAR_ID_FOR_QUOTE_ACTION] = {
+      .type = PFCP_IE_FAR_ID,
+      .offset = offsetof(pfcp_create_urr_t, far_id_for_quota_action)
+    },
+    [CREATE_URR_ETHERNET_INACTIVITY_TIMER] = {
+      .type = PFCP_IE_ETHERNET_INACTIVITY_TIMER,
+      .offset = offsetof(pfcp_create_urr_t, ethernet_inactivity_timer)
+    },
   };
 
 static struct pfcp_group_ie_def pfcp_create_qer_group[] =
@@ -2972,6 +3487,14 @@ static struct pfcp_group_ie_def pfcp_create_qer_group[] =
     [CREATE_QER_DL_FLOW_LEVEL_MARKING] = {
       .type = PFCP_IE_DL_FLOW_LEVEL_MARKING,
       .offset = offsetof(pfcp_create_qer_t, dl_flow_level_marking)
+    },
+    [CREATE_QER_QOS_FLOW_IDENTIFIER] = {
+      .type = PFCP_IE_QFI,
+      .offset = offsetof(pfcp_create_qer_t, qos_flow_identifier)
+    },
+    [CREATE_QER_REFLECTIVE_QOS] = {
+      .type = PFCP_IE_RQI,
+      .offset = offsetof(pfcp_create_qer_t, reflective_qos)
     },
   };
 
@@ -3087,6 +3610,10 @@ static struct pfcp_group_ie_def pfcp_update_forwarding_parameters_group[] =
       .type = PFCP_IE_SXSMREQ_FLAGS,
       .offset = offsetof(pfcp_update_forwarding_parameters_t, sxsmreq_flags)
     },
+    [UPDATE_FORWARDING_PARAMETERS_LINKED_TRAFFIC_ENDPOINT_ID] = {
+      .type = PFCP_IE_TRAFFIC_ENDPOINT_ID,
+      .offset = offsetof(pfcp_update_forwarding_parameters_t, linked_traffic_endpoint_id)
+    },
   };
 
 static struct pfcp_group_ie_def pfcp_update_bar_response_group[] =
@@ -3106,6 +3633,10 @@ static struct pfcp_group_ie_def pfcp_update_bar_response_group[] =
     [UPDATE_BAR_RESPONSE_DL_BUFFERING_SUGGESTED_PACKET_COUNT] = {
       .type = PFCP_IE_DL_BUFFERING_SUGGESTED_PACKET_COUNT,
       .offset = offsetof(pfcp_update_bar_response_t, dl_buffering_suggested_packet_count)
+    },
+    [UPDATE_BAR_RESPONSE_SUGGESTED_BUFFERING_PACKETS_COUNT] = {
+      .type = PFCP_IE_SUGGESTED_BUFFERING_PACKETS_COUNT,
+      .offset = offsetof(pfcp_update_bar_response_t, suggested_buffering_packets_count)
     },
   };
 
@@ -3179,6 +3710,18 @@ static struct pfcp_group_ie_def pfcp_update_urr_group[] =
       .type = PFCP_IE_TIME_QUOTA_MECHANISM,
       .offset = offsetof(pfcp_update_urr_t, time_quota_mechanism)
     },
+    [UPDATE_URR_AGGREGATED_URRS] = {
+      .type = PFCP_IE_AGGREGATED_URRS,
+      .offset = offsetof(pfcp_update_urr_t, aggregated_urrs)
+    },
+    [UPDATE_URR_FAR_ID_FOR_QUOTE_ACTION] = {
+      .type = PFCP_IE_FAR_ID,
+      .offset = offsetof(pfcp_update_urr_t, far_id_for_quota_action)
+    },
+    [UPDATE_URR_ETHERNET_INACTIVITY_TIMER] = {
+      .type = PFCP_IE_ETHERNET_INACTIVITY_TIMER,
+      .offset = offsetof(pfcp_update_urr_t, ethernet_inactivity_timer)
+    },
   };
 
 static struct pfcp_group_ie_def pfcp_update_qer_group[] =
@@ -3210,6 +3753,14 @@ static struct pfcp_group_ie_def pfcp_update_qer_group[] =
     [UPDATE_QER_DL_FLOW_LEVEL_MARKING] = {
       .type = PFCP_IE_DL_FLOW_LEVEL_MARKING,
       .offset = offsetof(pfcp_update_qer_t, dl_flow_level_marking)
+    },
+    [UPDATE_QER_QOS_FLOW_IDENTIFIER] = {
+      .type = PFCP_IE_QFI,
+      .offset = offsetof(pfcp_update_qer_t, qos_flow_identifier)
+    },
+    [UPDATE_QER_REFLECTIVE_QOS] = {
+      .type = PFCP_IE_RQI,
+      .offset = offsetof(pfcp_update_qer_t, reflective_qos)
     },
   };
 
@@ -3365,6 +3916,14 @@ static struct pfcp_group_ie_def pfcp_usage_report_smr_group[] =
       .type = PFCP_IE_USAGE_INFORMATION,
       .offset = offsetof(pfcp_usage_report_t, usage_information)
     },
+    [USAGE_REPORT_QUERY_URR_REFERENCE] = {
+      .type = PFCP_IE_QUERY_URR_REFERENCE,
+      .offset = offsetof(pfcp_usage_report_t, query_urr_reference)
+    },
+    [USAGE_REPORT_ETHERNET_TRAFFIC_INFORMATION] = {
+      .type = PFCP_IE_ETHERNET_TRAFFIC_INFORMATION,
+      .offset = offsetof(pfcp_usage_report_t, ethernet_traffic_information)
+    },
   };
 
 static struct pfcp_group_ie_def pfcp_usage_report_sdr_group[] =
@@ -3408,6 +3967,10 @@ static struct pfcp_group_ie_def pfcp_usage_report_sdr_group[] =
     [USAGE_REPORT_USAGE_INFORMATION] = {
       .type = PFCP_IE_USAGE_INFORMATION,
       .offset = offsetof(pfcp_usage_report_t, usage_information)
+    },
+    [USAGE_REPORT_ETHERNET_TRAFFIC_INFORMATION] = {
+      .type = PFCP_IE_ETHERNET_TRAFFIC_INFORMATION,
+      .offset = offsetof(pfcp_usage_report_t, ethernet_traffic_information)
     },
   };
 
@@ -3465,6 +4028,14 @@ static struct pfcp_group_ie_def pfcp_usage_report_srr_group[] =
       .type = PFCP_IE_USAGE_INFORMATION,
       .offset = offsetof(pfcp_usage_report_t, usage_information)
     },
+    [USAGE_REPORT_QUERY_URR_REFERENCE] = {
+      .type = PFCP_IE_QUERY_URR_REFERENCE,
+      .offset = offsetof(pfcp_usage_report_t, query_urr_reference)
+    },
+    [USAGE_REPORT_ETHERNET_TRAFFIC_INFORMATION] = {
+      .type = PFCP_IE_ETHERNET_TRAFFIC_INFORMATION,
+      .offset = offsetof(pfcp_usage_report_t, ethernet_traffic_information)
+    },
   };
 
 static struct pfcp_group_ie_def pfcp_downlink_data_report_group[] =
@@ -3491,6 +4062,10 @@ static struct pfcp_group_ie_def pfcp_create_bar_group[] =
       .type = PFCP_IE_DOWNLINK_DATA_NOTIFICATION_DELAY,
       .offset = offsetof(pfcp_create_bar_t, downlink_data_notification_delay)
     },
+    [CREATE_BAR_SUGGESTED_BUFFERING_PACKETS_COUNT] = {
+      .type = PFCP_IE_SUGGESTED_BUFFERING_PACKETS_COUNT,
+      .offset = offsetof(pfcp_create_bar_t, suggested_buffering_packets_count)
+    },
   };
 
 static struct pfcp_group_ie_def pfcp_update_bar_request_group[] =
@@ -3502,6 +4077,10 @@ static struct pfcp_group_ie_def pfcp_update_bar_request_group[] =
     [UPDATE_BAR_REQUEST_DOWNLINK_DATA_NOTIFICATION_DELAY] = {
       .type = PFCP_IE_DOWNLINK_DATA_NOTIFICATION_DELAY,
       .offset = offsetof(pfcp_update_bar_request_t, downlink_data_notification_delay)
+    },
+    [UPDATE_BAR_REQUEST_SUGGESTED_BUFFERING_PACKETS_COUNT] = {
+      .type = PFCP_IE_SUGGESTED_BUFFERING_PACKETS_COUNT,
+      .offset = offsetof(pfcp_update_bar_request_t, suggested_buffering_packets_count)
     },
   };
 
@@ -3548,6 +4127,126 @@ static struct pfcp_group_ie_def pfcp_update_duplicating_parameters_group[] =
     [UPDATE_DUPLICATING_PARAMETERS_FORWARDING_POLICY] = {
       .type = PFCP_IE_FORWARDING_POLICY,
       .offset = offsetof(pfcp_update_duplicating_parameters_t, forwarding_policy)
+    },
+  };
+
+static struct pfcp_group_ie_def pfcp_aggregated_urrs_group[] =
+  {
+    [AGGREGATED_URRS_AGGREGATED_URR_ID] = {
+      .type = PFCP_IE_AGGREGATED_URR_ID,
+      .offset = offsetof(pfcp_aggregated_urrs_t, aggregated_urr_id)
+    },
+    [AGGREGATED_URRS_MULTIPLIER] = {
+      .type = PFCP_IE_MULTIPLIER,
+      .offset = offsetof(pfcp_aggregated_urrs_t, multiplier)
+    },
+  };
+
+static struct pfcp_group_ie_def pfcp_create_traffic_endpoint_group[] =
+  {
+    [CREATE_TRAFFIC_ENDPOINT_TRAFFIC_ENDPOINT_ID] = {
+      .type = PFCP_IE_TRAFFIC_ENDPOINT_ID,
+      .offset = offsetof(pfcp_create_traffic_endpoint_t, traffic_endpoint_id)
+    },
+    [CREATE_TRAFFIC_ENDPOINT_F_TEID] = {
+      .type = PFCP_IE_F_TEID,
+      .offset = offsetof(pfcp_create_traffic_endpoint_t, f_teid)
+    },
+    [CREATE_TRAFFIC_ENDPOINT_NETWORK_INSTANCE] = {
+      .type = PFCP_IE_NETWORK_INSTANCE,
+      .offset = offsetof(pfcp_create_traffic_endpoint_t, network_instance)
+    },
+    [CREATE_TRAFFIC_ENDPOINT_UE_IP_ADDRESS] = {
+      .type = PFCP_IE_UE_IP_ADDRESS,
+      .offset = offsetof(pfcp_create_traffic_endpoint_t, ue_ip_address)
+    },
+    [CREATE_TRAFFIC_ENDPOINT_ETHERNET_PDU_SESSION_INFORMATION] = {
+      .type = PFCP_IE_ETHERNET_PDU_SESSION_INFORMATION,
+      .offset = offsetof(pfcp_create_traffic_endpoint_t, ethernet_pdu_session_information)
+    },
+  };
+
+static struct pfcp_group_ie_def pfcp_created_traffic_endpoint_group[] =
+  {
+    [CREATED_TRAFFIC_ENDPOINT_TRAFFIC_ENDPOINT_ID] = {
+      .type = PFCP_IE_TRAFFIC_ENDPOINT_ID,
+      .offset = offsetof(pfcp_created_traffic_endpoint_t, traffic_endpoint_id)
+    },
+    [CREATED_TRAFFIC_ENDPOINT_F_TEID] = {
+      .type = PFCP_IE_F_TEID,
+      .offset = offsetof(pfcp_created_traffic_endpoint_t, f_teid)
+    },
+  };
+
+static struct pfcp_group_ie_def pfcp_update_traffic_endpoint_group[] =
+  {
+    [UPDATE_TRAFFIC_ENDPOINT_TRAFFIC_ENDPOINT_ID] = {
+      .type = PFCP_IE_TRAFFIC_ENDPOINT_ID,
+      .offset = offsetof(pfcp_update_traffic_endpoint_t, traffic_endpoint_id)
+    },
+    [UPDATE_TRAFFIC_ENDPOINT_F_TEID] = {
+      .type = PFCP_IE_F_TEID,
+      .offset = offsetof(pfcp_update_traffic_endpoint_t, f_teid)
+    },
+    [UPDATE_TRAFFIC_ENDPOINT_NETWORK_INSTANCE] = {
+      .type = PFCP_IE_NETWORK_INSTANCE,
+      .offset = offsetof(pfcp_update_traffic_endpoint_t, network_instance)
+    },
+    [UPDATE_TRAFFIC_ENDPOINT_UE_IP_ADDRESS] = {
+      .type = PFCP_IE_UE_IP_ADDRESS,
+      .offset = offsetof(pfcp_update_traffic_endpoint_t, ue_ip_address)
+    },
+  };
+
+static struct pfcp_group_ie_def pfcp_remove_traffic_endpoint_group[] =
+  {
+    [REMOVE_TRAFFIC_ENDPOINT_TRAFFIC_ENDPOINT_ID] = {
+      .type = PFCP_IE_TRAFFIC_ENDPOINT_ID,
+      .offset = offsetof(pfcp_remove_traffic_endpoint_t, traffic_endpoint_id)
+    },
+  };
+
+static struct pfcp_group_ie_def pfcp_ethernet_packet_filter_group[] =
+  {
+    [ETHERNET_PACKET_FILTER_ETHERNET_FILTER_ID] = {
+      .type = PFCP_IE_ETHERNET_FILTER_ID,
+      .offset = offsetof(pfcp_ethernet_packet_filter_t, ethernet_filter_id)
+    },
+    [ETHERNET_PACKET_FILTER_ETHERNET_FILTER_PROPERTIES] = {
+      .type = PFCP_IE_ETHERNET_FILTER_PROPERTIES,
+      .offset = offsetof(pfcp_ethernet_packet_filter_t, ethernet_filter_properties)
+    },
+    [ETHERNET_PACKET_FILTER_MAC_ADDRESS] = {
+      .type = PFCP_IE_MAC_ADDRESS,
+      .offset = offsetof(pfcp_ethernet_packet_filter_t, mac_address)
+    },
+    [ETHERNET_PACKET_FILTER_ETHERTYPE] = {
+      .type = PFCP_IE_ETHERTYPE,
+      .offset = offsetof(pfcp_ethernet_packet_filter_t, ethertype)
+    },
+    [ETHERNET_PACKET_FILTER_C_TAG] = {
+      .type = PFCP_IE_C_TAG,
+      .offset = offsetof(pfcp_ethernet_packet_filter_t, c_tag)
+    },
+    [ETHERNET_PACKET_FILTER_S_TAG] = {
+      .type = PFCP_IE_S_TAG,
+      .offset = offsetof(pfcp_ethernet_packet_filter_t, s_tag)
+    },
+    [ETHERNET_PACKET_FILTER_SDF_FILTER] = {
+      .type = PFCP_IE_SDF_FILTER,
+      .offset = offsetof(pfcp_ethernet_packet_filter_t, sdf_filter)
+    },
+  };
+
+static struct pfcp_group_ie_def pfcp_ethernet_traffic_information_group[] =
+  {
+    [ETHERNET_TRAFFIC_INFORMATION_MAC_ADDRESSES_DETECTED] = {
+      .type = PFCP_IE_MAC_ADDRESSES_DETECTED,
+      .offset = offsetof(pfcp_ethernet_traffic_information_t, mac_addresses_detected)
+    },
+    [ETHERNET_TRAFFIC_INFORMATION_MAC_ADDRESSES_REMOVED] = {
+      .type = PFCP_IE_MAC_ADDRESSES_REMOVED,
+      .offset = offsetof(pfcp_ethernet_traffic_information_t, mac_addresses_removed)
     },
   };
 
@@ -3614,7 +4313,8 @@ static struct pfcp_ie_def group_specs[] =
     {
       .length = sizeof(pfcp_create_urr_t),
       .mandatory = (BIT(CREATE_URR_URR_ID) |
-		    BIT(CREATE_URR_MEASUREMENT_METHOD)),
+		    BIT(CREATE_URR_MEASUREMENT_METHOD) |
+		    BIT(CREATE_URR_REPORTING_TRIGGERS)),
       .size = ARRAY_LEN(pfcp_create_urr_group),
       .group = pfcp_create_urr_group,
     },
@@ -3650,7 +4350,6 @@ static struct pfcp_ie_def group_specs[] =
     [PFCP_IE_UPDATE_FORWARDING_PARAMETERS] =
     {
       .length = sizeof(pfcp_update_forwarding_parameters_t),
-      .mandatory = BIT(0),
       .size = ARRAY_LEN(pfcp_update_forwarding_parameters_group),
       .group = pfcp_update_forwarding_parameters_group,
     },
@@ -3891,7 +4590,6 @@ static struct pfcp_ie_def group_specs[] =
     [PFCP_IE_UPDATE_DUPLICATING_PARAMETERS] =
     {
       .length = sizeof(pfcp_update_duplicating_parameters_t),
-      .mandatory = BIT(0),
       .size = ARRAY_LEN(pfcp_update_duplicating_parameters_group),
       .group = pfcp_update_duplicating_parameters_group,
     },
@@ -3906,6 +4604,77 @@ static struct pfcp_ie_def group_specs[] =
     SIMPLE_IE(PFCP_IE_FAILED_RULE_ID, failed_rule_id),
     SIMPLE_IE(PFCP_IE_TIME_QUOTA_MECHANISM, time_quota_mechanism),
     SIMPLE_IE_FREE(PFCP_IE_USER_PLANE_IP_RESOURCE_INFORMATION, user_plane_ip_resource_information),
+    SIMPLE_IE(PFCP_IE_USER_PLANE_INACTIVITY_TIMER, user_plane_inactivity_timer),
+    [PFCP_IE_AGGREGATED_URRS] =
+    {
+      .length = sizeof(pfcp_aggregated_urrs_t),
+      .mandatory = (BIT(AGGREGATED_URRS_AGGREGATED_URR_ID) |
+		    BIT(AGGREGATED_URRS_MULTIPLIER)),
+      .size = ARRAY_LEN(pfcp_aggregated_urrs_group),
+      .group = pfcp_aggregated_urrs_group,
+    },
+    SIMPLE_IE(PFCP_IE_MULTIPLIER, multiplier),
+    SIMPLE_IE(PFCP_IE_AGGREGATED_URR_ID, aggregated_urr_id),
+    SIMPLE_IE(PFCP_IE_SUBSEQUENT_VOLUME_QUOTA, subsequent_volume_quota),
+    SIMPLE_IE(PFCP_IE_SUBSEQUENT_TIME_QUOTA, subsequent_time_quota),
+    SIMPLE_IE(PFCP_IE_RQI, rqi),
+    SIMPLE_IE(PFCP_IE_QFI, qfi),
+    SIMPLE_IE(PFCP_IE_QUERY_URR_REFERENCE, query_urr_reference),
+    SIMPLE_IE(PFCP_IE_ADDITIONAL_USAGE_REPORTS_INFORMATION, additional_usage_reports_information),
+    [PFCP_IE_CREATE_TRAFFIC_ENDPOINT] =
+    {
+      .length = sizeof(pfcp_create_traffic_endpoint_t),
+      .mandatory = BIT(CREATE_TRAFFIC_ENDPOINT_TRAFFIC_ENDPOINT_ID),
+      .size = ARRAY_LEN(pfcp_create_traffic_endpoint_group),
+      .group = pfcp_create_traffic_endpoint_group,
+    },
+    [PFCP_IE_CREATED_TRAFFIC_ENDPOINT] =
+    {
+      .length = sizeof(pfcp_created_traffic_endpoint_t),
+      .mandatory = BIT(CREATED_TRAFFIC_ENDPOINT_TRAFFIC_ENDPOINT_ID),
+      .size = ARRAY_LEN(pfcp_created_traffic_endpoint_group),
+      .group = pfcp_created_traffic_endpoint_group,
+    },
+    [PFCP_IE_UPDATE_TRAFFIC_ENDPOINT] =
+    {
+      .length = sizeof(pfcp_update_traffic_endpoint_t),
+      .mandatory = BIT(UPDATE_TRAFFIC_ENDPOINT_TRAFFIC_ENDPOINT_ID),
+      .size = ARRAY_LEN(pfcp_update_traffic_endpoint_group),
+      .group = pfcp_update_traffic_endpoint_group,
+    },
+    [PFCP_IE_REMOVE_TRAFFIC_ENDPOINT] =
+    {
+      .length = sizeof(pfcp_remove_traffic_endpoint_t),
+      .mandatory = BIT(REMOVE_TRAFFIC_ENDPOINT_TRAFFIC_ENDPOINT_ID),
+      .size = ARRAY_LEN(pfcp_remove_traffic_endpoint_group),
+      .group = pfcp_remove_traffic_endpoint_group,
+    },
+    SIMPLE_IE(PFCP_IE_TRAFFIC_ENDPOINT_ID, traffic_endpoint_id),
+    [PFCP_IE_ETHERNET_PACKET_FILTER] =
+    {
+      .length = sizeof(pfcp_ethernet_packet_filter_t),
+      .size = ARRAY_LEN(pfcp_ethernet_packet_filter_group),
+      .group = pfcp_ethernet_packet_filter_group,
+    },
+    SIMPLE_IE(PFCP_IE_MAC_ADDRESS, mac_address),
+    SIMPLE_IE(PFCP_IE_C_TAG, c_tag),
+    SIMPLE_IE(PFCP_IE_S_TAG, s_tag),
+    SIMPLE_IE(PFCP_IE_ETHERTYPE, ethertype),
+    SIMPLE_IE(PFCP_IE_PROXYING, proxying),
+    SIMPLE_IE(PFCP_IE_ETHERNET_FILTER_ID, ethernet_filter_id),
+    SIMPLE_IE(PFCP_IE_ETHERNET_FILTER_PROPERTIES, ethernet_filter_properties),
+    SIMPLE_IE(PFCP_IE_SUGGESTED_BUFFERING_PACKETS_COUNT, suggested_buffering_packets_count),
+    SIMPLE_IE(PFCP_IE_USER_ID, user_id),
+    SIMPLE_IE(PFCP_IE_ETHERNET_PDU_SESSION_INFORMATION, ethernet_pdu_session_information),
+    [PFCP_IE_ETHERNET_TRAFFIC_INFORMATION] =
+    {
+      .length = sizeof(pfcp_ethernet_traffic_information_t),
+      .size = ARRAY_LEN(pfcp_ethernet_traffic_information_group),
+      .group = pfcp_ethernet_traffic_information_group,
+    },
+    SIMPLE_IE(PFCP_IE_MAC_ADDRESSES_DETECTED, mac_addresses_detected),
+    SIMPLE_IE(PFCP_IE_MAC_ADDRESSES_REMOVED, mac_addresses_removed),
+    SIMPLE_IE(PFCP_IE_ETHERNET_INACTIVITY_TIMER, ethernet_inactivity_timer),
   };
 
 /**********************************************************/
@@ -4173,6 +4942,11 @@ static struct pfcp_group_ie_def pfcp_session_establishment_request_group[] =
       .is_array = true,
       .offset = offsetof(pfcp_session_establishment_request_t, create_bar)
     },
+     [SESSION_ESTABLISHMENT_REQUEST_CREATE_TRAFFIC_ENDPOINT] = {
+      .type = PFCP_IE_CREATE_TRAFFIC_ENDPOINT,
+      .is_array = true,
+      .offset = offsetof(pfcp_session_establishment_request_t, create_traffic_endpoint)
+    },
     [SESSION_ESTABLISHMENT_REQUEST_PDN_TYPE] = {
       .type = PFCP_IE_PDN_TYPE,
       .offset = offsetof(pfcp_session_establishment_request_t, pdn_type)
@@ -4182,6 +4956,15 @@ static struct pfcp_group_ie_def pfcp_session_establishment_request_group[] =
       .is_array = true,
       .offset = offsetof(pfcp_session_establishment_request_t, fq_csid)
     },
+    [SESSION_ESTABLISHMENT_REQUEST_USER_PLANE_INACTIVITY_TIMER] = {
+      .type = PFCP_IE_USER_PLANE_INACTIVITY_TIMER,
+      .offset = offsetof(pfcp_session_establishment_request_t, user_plane_inactivity_timer)
+    },
+    [SESSION_ESTABLISHMENT_REQUEST_USER_ID] = {
+      .type = PFCP_IE_USER_ID,
+      .offset = offsetof(pfcp_session_establishment_request_t, user_id)
+    },
+
   };
 
 static struct pfcp_group_ie_def pfcp_session_establishment_response_group[] =
@@ -4224,6 +5007,11 @@ static struct pfcp_group_ie_def pfcp_session_establishment_response_group[] =
       .type = PFCP_IE_FAILED_RULE_ID,
       .offset = offsetof(pfcp_session_establishment_response_t, failed_rule_id)
     },
+    [SESSION_ESTABLISHMENT_RESPONSE_CREATED_TRAFFIC_ENDPOINT] = {
+      .type = PFCP_IE_CREATED_TRAFFIC_ENDPOINT,
+      .is_array = true,
+      .offset = offsetof(pfcp_session_establishment_response_t, created_traffic_endpoint)
+    },
   };
 
 static struct pfcp_group_ie_def pfcp_session_modification_request_group[] =
@@ -4257,6 +5045,11 @@ static struct pfcp_group_ie_def pfcp_session_modification_request_group[] =
       .is_array = true,
       .offset = offsetof(pfcp_session_modification_request_t, remove_bar)
     },
+    [SESSION_MODIFICATION_REQUEST_REMOVE_TRAFFIC_ENDPOINT] = {
+      .type = PFCP_IE_REMOVE_TRAFFIC_ENDPOINT,
+      .is_array = true,
+      .offset = offsetof(pfcp_session_modification_request_t, remove_traffic_endpoint)
+    },
     [SESSION_MODIFICATION_REQUEST_CREATE_PDR] = {
       .type = PFCP_IE_CREATE_PDR,
       .is_array = true,
@@ -4281,6 +5074,11 @@ static struct pfcp_group_ie_def pfcp_session_modification_request_group[] =
       .type = PFCP_IE_CREATE_BAR,
       .is_array = true,
       .offset = offsetof(pfcp_session_modification_request_t, create_bar)
+    },
+    [SESSION_MODIFICATION_REQUEST_CREATE_TRAFFIC_ENDPOINT] = {
+      .type = PFCP_IE_CREATE_TRAFFIC_ENDPOINT,
+      .is_array = true,
+      .offset = offsetof(pfcp_session_modification_request_t, create_traffic_endpoint)
     },
     [SESSION_MODIFICATION_REQUEST_UPDATE_PDR] = {
       .type = PFCP_IE_UPDATE_PDR,
@@ -4307,6 +5105,11 @@ static struct pfcp_group_ie_def pfcp_session_modification_request_group[] =
       .is_array = true,
       .offset = offsetof(pfcp_session_modification_request_t, update_bar)
     },
+    [SESSION_MODIFICATION_REQUEST_UPDATE_TRAFFIC_ENDPOINT] = {
+      .type = PFCP_IE_UPDATE_TRAFFIC_ENDPOINT,
+      .is_array = true,
+      .offset = offsetof(pfcp_session_modification_request_t, update_traffic_endpoint)
+    },
     [SESSION_MODIFICATION_REQUEST_SXSMREQ_FLAGS] = {
       .type = PFCP_IE_SXSMREQ_FLAGS,
       .offset = offsetof(pfcp_session_modification_request_t, sxsmreq_flags)
@@ -4320,6 +5123,14 @@ static struct pfcp_group_ie_def pfcp_session_modification_request_group[] =
       .type = PFCP_IE_FQ_CSID,
       .is_array = true,
       .offset = offsetof(pfcp_session_modification_request_t, fq_csid)
+    },
+    [SESSION_MODIFICATION_REQUEST_USER_PLANE_INACTIVITY_TIMER] = {
+      .type = PFCP_IE_USER_PLANE_INACTIVITY_TIMER,
+      .offset = offsetof(pfcp_session_modification_request_t, user_plane_inactivity_timer)
+    },
+    [SESSION_MODIFICATION_REQUEST_QUERY_URR_REFERENCE] = {
+      .type = PFCP_IE_QUERY_URR_REFERENCE,
+      .offset = offsetof(pfcp_session_modification_request_t, query_urr_reference)
     },
   };
 
@@ -4354,6 +5165,15 @@ static struct pfcp_group_ie_def pfcp_session_modification_response_group[] =
     [SESSION_MODIFICATION_RESPONSE_FAILED_RULE_ID] = {
       .type = PFCP_IE_FAILED_RULE_ID,
       .offset = offsetof(pfcp_session_modification_response_t, failed_rule_id)
+    },
+    [SESSION_MODIFICATION_RESPONSE_ADDITIONAL_USAGE_REPORTS_INFORMATION] = {
+      .type = PFCP_IE_ADDITIONAL_USAGE_REPORTS_INFORMATION,
+      .offset = offsetof(pfcp_session_modification_response_t, additional_usage_reports_information)
+    },
+    [SESSION_MODIFICATION_RESPONSE_CREATED_TRAFFIC_ENDPOINT] = {
+      .type = PFCP_IE_CREATED_TRAFFIC_ENDPOINT,
+      .is_array = true,
+      .offset = offsetof(pfcp_session_modification_response_t, created_traffic_endpoint)
     },
   };
 
@@ -4409,6 +5229,10 @@ static struct pfcp_group_ie_def pfcp_session_report_request_group[] =
       .type = PFCP_IE_OVERLOAD_CONTROL_INFORMATION,
       .offset = offsetof(pfcp_session_report_request_t, overload_control_information)
     },
+    [SESSION_REPORT_REQUEST_ADDITIONAL_USAGE_REPORTS_INFORMATION] = {
+      .type = PFCP_IE_ADDITIONAL_USAGE_REPORTS_INFORMATION,
+      .offset = offsetof(pfcp_session_report_request_t, additional_usage_reports_information)
+    },
   };
 
 static struct pfcp_group_ie_def pfcp_session_report_response_group[] =
@@ -4431,6 +5255,7 @@ static struct pfcp_group_ie_def pfcp_session_report_response_group[] =
       .offset = offsetof(pfcp_session_report_response_t, sxsrrsp_flags)
     },
   };
+
 
 static struct pfcp_ie_def msg_specs[] =
   {
