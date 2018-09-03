@@ -284,6 +284,7 @@ upf_pfcp_session_urr_timer(upf_session_t *sx, u16 urr_id, u8 timer_id, f64 now)
   gtp_debug ("upf_pfcp_session_urr_timer (%p, %u, %u, %.3f);", sx, urr_id, timer_id, now);
 
   pfcp_session_report_request_t req;
+  upf_main_t *gtm = &upf_main;
   struct rules *active;
   upf_urr_t *urr;
 
@@ -303,6 +304,20 @@ upf_pfcp_session_urr_timer(upf_session_t *sx, u16 urr_id, u8 timer_id, f64 now)
       (((V).base != 0) && ((V).period != 0) &&		\
        ((V).base + (V).period <= (NOW)))
 
+      if (urr_check(urr->measurement_period, now))
+	{
+	  u32 si = sx - gtm->sessions;
+
+	  if (urr->triggers & REPORTING_TRIGGER_PERIODIC_REPORTING)
+	    trigger |= USAGE_REPORT_TRIGGER_PERIODIC_REPORTING;
+
+	  urr->measurement_period.base += urr->measurement_period.period;
+
+	  /* rearm Measurement Period */
+	  upf_pfcp_session_start_stop_urr_time
+	    (si, urr->id, SX_URR_PERIODIC_TIMER, now, &urr->measurement_period, 1);
+
+	}
       if (urr_check(urr->time_threshold, now))
 	{
 	  if (urr->triggers & REPORTING_TRIGGER_TIME_THRESHOLD)

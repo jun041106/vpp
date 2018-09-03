@@ -348,24 +348,26 @@ typedef struct {
 #define URR_AFTER_MONITORING_TIME       BIT(1)
 
   u8 update_flags;
-#define SX_URR_UPDATE_VOLUME_QUOTA      BIT(0)
-#define SX_URR_UPDATE_TIME_QUOTA        BIT(1)
-#define SX_URR_UPDATE_TIME_THRESHOLD    BIT(2)
-#define SX_URR_UPDATE_MONITORING_TIME   BIT(3)
+#define SX_URR_UPDATE_VOLUME_QUOTA		BIT(0)
+#define SX_URR_UPDATE_TIME_QUOTA		BIT(1)
+#define SX_URR_UPDATE_TIME_THRESHOLD		BIT(2)
+#define SX_URR_UPDATE_MONITORING_TIME		BIT(3)
+#define SX_URR_UPDATE_MEASUREMENT_PERIOD	BIT(4)
 
   u32 seq_no;
   f64 start_time;
 
   urr_volume_t volume;
 
-  urr_time_t measurement_period;  /* relative duration in seconds */
-  urr_time_t time_threshold;      /* relative duration in seconds */
-  urr_time_t time_quota;          /* relative duration in seconds */
-  urr_time_t quota_holding_time;  /* relative duration in seconds */
-  urr_time_t monitoring_time;     /* absolute UTC ts since 1900-01-01 00:00:00 */
-#define SX_URR_THRESHOLD_TIMER  1
-#define SX_URR_QUOTA_TIMER      2
-#define SX_URR_MONITORING_TIMER 3
+  urr_time_t measurement_period;	/* relative duration in seconds */
+  urr_time_t time_threshold;		/* relative duration in seconds */
+  urr_time_t time_quota;		/* relative duration in seconds */
+  urr_time_t quota_holding_time;	/* relative duration in seconds */
+  urr_time_t monitoring_time;		/* absolute UTC ts since 1900-01-01 00:00:00 */
+#define SX_URR_THRESHOLD_TIMER		1
+#define SX_URR_QUOTA_TIMER		2
+#define SX_URR_MONITORING_TIMER		3
+#define SX_URR_PERIODIC_TIMER		4
 
   struct {
     f64 start_time;

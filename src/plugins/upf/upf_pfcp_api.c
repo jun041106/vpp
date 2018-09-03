@@ -1310,7 +1310,14 @@ static int handle_create_urr(upf_session_t *sess, pfcp_create_urr_t *create_urr,
       create->triggers = OPT(urr, CREATE_URR_REPORTING_TRIGGERS, reporting_triggers, 0);
       create->start_time = now;
 
-      //TODO: measurement_period;
+      if (ISSET_BIT(urr->grp.fields, CREATE_URR_MEASUREMENT_PERIOD))
+	{
+	  create->update_flags |= SX_URR_UPDATE_MEASUREMENT_PERIOD;
+	  create->measurement_period.period = urr->measurement_period;
+	  create->measurement_period.base = now;
+	  create->measurement_period.handle = ~0;
+	}
+
       if (ISSET_BIT(urr->grp.fields, CREATE_URR_VOLUME_THRESHOLD))
 	{
 	  create->volume.threshold.ul = urr->volume_threshold.ul;
@@ -1404,7 +1411,14 @@ static int handle_update_urr(upf_session_t *sess, pfcp_update_urr_t *update_urr,
 			     reporting_triggers, update->triggers);
       update->status &= ~URR_OVER_QUOTA;
 
-      //TODO: measurement_period;
+      if (ISSET_BIT(urr->grp.fields, UPDATE_URR_MEASUREMENT_PERIOD))
+	{
+	  update->update_flags |= SX_URR_UPDATE_MEASUREMENT_PERIOD;
+	  update->measurement_period.period = urr->measurement_period;
+	  update->measurement_period.base = now;
+	  update->measurement_period.handle = ~0;
+	}
+
       if (ISSET_BIT(urr->grp.fields, UPDATE_URR_VOLUME_THRESHOLD))
 	{
 	  update->volume.threshold.ul = urr->volume_threshold.ul;

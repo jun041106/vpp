@@ -849,6 +849,7 @@ int sx_disable_session(upf_session_t *sx)
   /* stop all timers */
   vec_foreach (urr, active->urr)
     {
+      upf_pfcp_session_stop_urr_time(&urr->measurement_period);
       upf_pfcp_session_stop_urr_time(&urr->monitoring_time);
       upf_pfcp_session_stop_urr_time(&urr->time_threshold);
       upf_pfcp_session_stop_urr_time(&urr->time_quota);
@@ -1813,6 +1814,13 @@ int sx_update_apply(upf_session_t *sx)
 
   vec_foreach (urr, active->urr)
     {
+      if (urr->update_flags & SX_URR_UPDATE_MEASUREMENT_PERIOD)
+	{
+	  upf_pfcp_session_start_stop_urr_time
+	    (si, urr->id, SX_URR_PERIODIC_TIMER, now, &urr->measurement_period,
+	     !!(urr->triggers & REPORTING_TRIGGER_PERIODIC_REPORTING));
+	}
+
       if (urr->update_flags & SX_URR_UPDATE_MONITORING_TIME)
 	{
 	  upf_pfcp_session_start_stop_urr_time_abs
@@ -1853,6 +1861,7 @@ int sx_update_apply(upf_session_t *sx)
 	  if (!new_urr)
 	    {
 	      /* stop all timers */
+	      upf_pfcp_session_stop_urr_time(&urr->measurement_period);
 	      upf_pfcp_session_stop_urr_time(&urr->monitoring_time);
 	      upf_pfcp_session_stop_urr_time(&urr->time_threshold);
 	      upf_pfcp_session_stop_urr_time(&urr->time_quota);
@@ -2214,6 +2223,12 @@ format_sx_session(u8 * s, va_list * args)
 		     format_urr_counter, &v->measure, &v->threshold, offsetof(urr_counter_t, total),
 		     format_urr_quota,   &v->measure, &v->quota, offsetof(urr_counter_t, total));
 	}
+      if (urr->measurement_period.base != 0)
+	{
+	  s = format(s, "  Measurement Period: %U\n",
+		     format_urr_time, &urr->measurement_period);
+	}
+
       if (urr->methods & SX_URR_TIME)
 	{
 	  s = format(s, "  Time\n    Quota:     %U\n    Threshold: %U\n",
