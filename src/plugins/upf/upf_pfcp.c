@@ -1813,6 +1813,12 @@ int sx_update_apply(upf_session_t *sx)
 
   vec_foreach (urr, active->urr)
     {
+      if (urr->update_flags & SX_URR_UPDATE_MONITORING_TIME)
+	{
+	  upf_pfcp_session_start_stop_urr_time_abs
+	    (si, urr->id, SX_URR_MONITORING_TIMER, now, &urr->monitoring_time);
+	}
+
       if ((urr->methods & SX_URR_TIME))
 	{
 	  if (urr->update_flags & SX_URR_UPDATE_TIME_THRESHOLD)
@@ -1828,11 +1834,6 @@ int sx_update_apply(upf_session_t *sx)
 	      upf_pfcp_session_start_stop_urr_time
 		(si, urr->id, SX_URR_QUOTA_TIMER, now, &urr->time_quota,
 		 !!(urr->triggers & REPORTING_TRIGGER_TIME_QUOTA));
-	    }
-	  if (urr->update_flags & SX_URR_UPDATE_MONITORING_TIME)
-	    {
-	      upf_pfcp_session_start_stop_urr_time_abs
-		      (si, urr->id, SX_URR_MONITORING_TIMER, now, &urr->monitoring_time);
 	    }
 	}
     }
