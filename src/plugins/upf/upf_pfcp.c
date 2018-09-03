@@ -1818,14 +1818,16 @@ int sx_update_apply(upf_session_t *sx)
 	  if (urr->update_flags & SX_URR_UPDATE_TIME_THRESHOLD)
 	    {
 	      upf_pfcp_session_start_stop_urr_time
-		(si, urr->id, SX_URR_THRESHOLD_TIMER, now, &urr->time_threshold);
+		(si, urr->id, SX_URR_THRESHOLD_TIMER, now, &urr->time_threshold,
+		 !!(urr->triggers & REPORTING_TRIGGER_TIME_THRESHOLD));
 	    }
 	  if (urr->update_flags & SX_URR_UPDATE_TIME_QUOTA)
 	    {
 	      urr->time_quota.base =
 		(urr->time_threshold.base != 0) ? urr->time_threshold.base : now;
 	      upf_pfcp_session_start_stop_urr_time
-		(si, urr->id, SX_URR_QUOTA_TIMER, now, &urr->time_quota);
+		(si, urr->id, SX_URR_QUOTA_TIMER, now, &urr->time_quota,
+		 !!(urr->triggers & REPORTING_TRIGGER_TIME_QUOTA));
 	    }
 	  if (urr->update_flags & SX_URR_UPDATE_MONITORING_TIME)
 	    {

@@ -234,14 +234,15 @@ void upf_pfcp_session_stop_urr_time(urr_time_t *t)
 }
 
 void
-upf_pfcp_session_start_stop_urr_time(u32 si, u8 urr_id, u8 type, f64 now, urr_time_t *t)
+upf_pfcp_session_start_stop_urr_time(u32 si, u8 urr_id, u8 type, f64 now,
+				     urr_time_t *t, u8 start_it)
 {
   sx_server_main_t *sx = &sx_server_main;
 
   if (t->handle != ~0)
      upf_pfcp_session_stop_urr_time(t);
 
-  if (t->period != 0)
+  if (t->period != 0 && start_it)
     {
       u32 id = SX_URR_TW_ID(si, urr_id, type);
       u64 interval;
