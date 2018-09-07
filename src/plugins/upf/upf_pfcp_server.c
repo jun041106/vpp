@@ -245,10 +245,12 @@ upf_pfcp_session_start_stop_urr_time(u32 si, u8 urr_id, u8 type, f64 now,
   if (t->period != 0 && start_it)
     {
       u32 id = SX_URR_TW_ID(si, urr_id, type);
-      u64 interval;
+      i64 interval;
 
       // start timer.....
-      interval = ceil((now - t->base) * 100.0) + t->period * 100;
+
+      interval = t->period * 100 - ceil((now - t->base) * 100.0) + 1;
+      interval = clib_max(interval, 1);		 /* make sure interval is at least 1 */
       t->handle = TW (tw_timer_start) (&sx->urr_timer, id, 0, interval);
 
       gtp_debug ("starting timer %u, %u, %u, now is %.3f, base is %.3f, expire in %lu ticks\n",
@@ -302,9 +304,9 @@ upf_pfcp_session_urr_timer(upf_session_t *sx, u16 urr_id, u8 timer_id, f64 now)
     {
       u32 trigger = 0;
 
-#define urr_check(V, NOW)				\
-      (((V).base != 0) && ((V).period != 0) &&		\
-       ((V).base + (V).period <= (NOW)))
+#define urr_check(V, NOW)					\
+      (((V).base != 0) && ((V).period != 0) &&			\
+       (trunc(((NOW) - (V).base - (f64)(V).period) * 100) >= 0))
 
       if (urr_check(urr->measurement_period, now))
 	{
