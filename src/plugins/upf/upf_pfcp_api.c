@@ -1305,6 +1305,11 @@ static int handle_create_urr(upf_session_t *sess, pfcp_create_urr_t *create_urr,
       create = clib_mem_alloc_no_fail(sizeof(*create));
       memset(create, 0, sizeof(*create));
 
+      create->measurement_period.handle =
+	      create->monitoring_time.handle =
+	      create->time_threshold.handle =
+	      create->time_quota.handle = ~0;
+
       create->id = urr->urr_id;
       create->methods = urr->measurement_method;
       create->triggers = OPT(urr, CREATE_URR_REPORTING_TRIGGERS, reporting_triggers, 0);
@@ -1315,7 +1320,6 @@ static int handle_create_urr(upf_session_t *sess, pfcp_create_urr_t *create_urr,
 	  create->update_flags |= SX_URR_UPDATE_MEASUREMENT_PERIOD;
 	  create->measurement_period.period = urr->measurement_period;
 	  create->measurement_period.base = now;
-	  create->measurement_period.handle = ~0;
 	}
 
       if (ISSET_BIT(urr->grp.fields, CREATE_URR_VOLUME_THRESHOLD))
@@ -1337,14 +1341,12 @@ static int handle_create_urr(upf_session_t *sess, pfcp_create_urr_t *create_urr,
 	  create->update_flags |= SX_URR_UPDATE_TIME_THRESHOLD;
 	  create->time_threshold.period = urr->time_threshold;
 	  create->time_threshold.base = now;
-	  create->time_threshold.handle = ~0;
 	}
       if (ISSET_BIT(urr->grp.fields, CREATE_URR_TIME_QUOTA))
 	{
 	  create->update_flags |= SX_URR_UPDATE_TIME_QUOTA;
 	  create->time_quota.period = urr->time_quota;
 	  create->time_quota.base = now;
-	  create->time_quota.handle = ~0;
 	}
 
       //TODO: quota_holding_time;
@@ -1354,7 +1356,6 @@ static int handle_create_urr(upf_session_t *sess, pfcp_create_urr_t *create_urr,
 	{
 	  create->update_flags |= SX_URR_UPDATE_MONITORING_TIME;
 	  create->monitoring_time.base = urr->monitoring_time;
-	  create->monitoring_time.handle = ~0;
 	}
 
       //TODO: subsequent_volume_threshold;
@@ -1416,7 +1417,6 @@ static int handle_update_urr(upf_session_t *sess, pfcp_update_urr_t *update_urr,
 	  update->update_flags |= SX_URR_UPDATE_MEASUREMENT_PERIOD;
 	  update->measurement_period.period = urr->measurement_period;
 	  update->measurement_period.base = now;
-	  update->measurement_period.handle = ~0;
 	}
 
       if (ISSET_BIT(urr->grp.fields, UPDATE_URR_VOLUME_THRESHOLD))
@@ -1454,7 +1454,6 @@ static int handle_update_urr(upf_session_t *sess, pfcp_update_urr_t *update_urr,
 	{
 	  update->update_flags |= SX_URR_UPDATE_MONITORING_TIME;
 	  update->monitoring_time.base = urr->monitoring_time;
-	  update->monitoring_time.handle = ~0;
 	}
 
       //TODO: subsequent_volume_threshold;
