@@ -2288,3 +2288,11 @@ void sx_session_dump_tbls()
 		       *(uint32_t *)next_key, *(uint32_t *)next_key, next_data);
 #endif
 }
+
+/*
+ * fd.io coding-style-patch-verification: ON
+ *
+ * Local Variables:
+ * eval: (c-set-style "gnu")
+ * End:
+ */

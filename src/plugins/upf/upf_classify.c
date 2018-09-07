@@ -458,3 +458,11 @@ VLIB_REGISTER_NODE (upf_ip6_classify_node) = {
 };
 
 VLIB_NODE_FUNCTION_MULTIARCH (upf_ip6_classify_node, upf_ip6_classify)
+
+/*
+ * fd.io coding-style-patch-verification: ON
+ *
+ * Local Variables:
+ * eval: (c-set-style "gnu")
+ * End:
+ */

@@ -6027,3 +6027,11 @@ void pfcp_free_msg(u16 type, struct pfcp_group *grp)
 
   free_group(&msg_specs[type], grp);
 }
+
+/*
+ * fd.io coding-style-patch-verification: ON
+ *
+ * Local Variables:
+ * eval: (c-set-style "gnu")
+ * End:
+ */

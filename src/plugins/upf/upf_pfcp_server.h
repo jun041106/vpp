@@ -90,3 +90,11 @@ void upf_pfcp_handle_input (vlib_main_t * vm, vlib_buffer_t *b, int is_ip4);
 clib_error_t * sx_server_main_init (vlib_main_t * vm);
 
 #endif /* _UPF_SX_SERVER_H */
+
+/*
+ * fd.io coding-style-patch-verification: ON
+ *
+ * Local Variables:
+ * eval: (c-set-style "gnu")
+ * End:
+ */

@@ -217,3 +217,11 @@ VLIB_REGISTER_NODE (upf_if_input_node) = {
 };
 
 VLIB_NODE_FUNCTION_MULTIARCH (upf_if_input_node, upf_if_input)
+
+/*
+ * fd.io coding-style-patch-verification: ON
+ *
+ * Local Variables:
+ * eval: (c-set-style "gnu")
+ * End:
+ */

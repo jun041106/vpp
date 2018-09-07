@@ -93,3 +93,11 @@ static inline int ipfilter_address_cmp_const(const ipfilter_address_t *a, const 
 };
 
 #endif /* _UPF_SX_H_ */
+
+/*
+ * fd.io coding-style-patch-verification: ON
+ *
+ * Local Variables:
+ * eval: (c-set-style "gnu")
+ * End:
+ */

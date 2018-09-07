@@ -31,3 +31,11 @@ pfcp_usage_report_t *build_usage_report(upf_session_t *sess, upf_urr_t *urr,
 u8 * format_ipfilter(u8 * s, va_list * args);
 
 #endif /* _UPF_SX_ERL_H */
+
+/*
+ * fd.io coding-style-patch-verification: ON
+ *
+ * Local Variables:
+ * eval: (c-set-style "gnu")
+ * End:
+ */

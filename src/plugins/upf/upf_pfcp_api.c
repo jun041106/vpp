@@ -2057,3 +2057,11 @@ void upf_pfcp_error_report(upf_session_t * sx, gtp_error_ind_t * error)
 
   send_session_request(sx, PFCP_SESSION_REPORT_REQUEST, &req.grp);
 }
+
+/*
+ * fd.io coding-style-patch-verification: ON
+ *
+ * Local Variables:
+ * eval: (c-set-style "gnu")
+ * End:
+ */

@@ -73,3 +73,11 @@ static inline u32 upf_http_redirect_session(u32 fib_index, int is_ip4)
 }
 
 #endif
+
+/*
+ * fd.io coding-style-patch-verification: ON
+ *
+ * Local Variables:
+ * eval: (c-set-style "gnu")
+ * End:
+ */
