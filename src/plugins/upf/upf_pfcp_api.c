@@ -424,6 +424,48 @@ static int send_response(sx_msg_t * req, u64 cp_seid, u8 type, struct pfcp_group
   return 0;
 }
 
+/* message helpers */
+
+static void
+build_user_plane_ip_resource_information(pfcp_user_plane_ip_resource_information_t **upip)
+{
+  upf_main_t * gtm = &upf_main;
+  upf_nwi_t * nwi;
+
+  pool_foreach (nwi, gtm->nwis,
+    ({
+      upf_nwi_ip_res_t * ip_res;
+
+      pool_foreach (ip_res, nwi->ip_res,
+	({
+	  pfcp_user_plane_ip_resource_information_t *r;
+
+	  vec_alloc(*upip, 1);
+	  r = vec_end(*upip);
+
+	  r->network_instance = vec_dup(nwi->name);
+	  if (ip_res->mask != 0)
+	    {
+	      r->teid_range_indication = __builtin_popcount(ip_res->mask);
+	      r->teid_range = (ip_res->teid >> 24);
+	    }
+
+	  if (ip46_address_is_ip4 (&ip_res->ip))
+	    {
+	      r->flags |= USER_PLANE_IP_RESOURCE_INFORMATION_V4;
+	      r->ip4 = ip_res->ip.ip4;
+	    }
+	  else
+	    {
+	      r->flags |= USER_PLANE_IP_RESOURCE_INFORMATION_V6;
+	      r->ip6 = ip_res->ip.ip6;
+	    }
+
+	  _vec_len(*upip)++;
+	}));
+    }));
+}
+
 /* message handlers */
 
 static int
@@ -467,9 +509,7 @@ handle_association_setup_request(sx_msg_t * req, pfcp_association_setup_request_
 {
   sx_server_main_t *sx = &sx_server_main;
   pfcp_association_setup_response_t resp;
-  upf_main_t * gtm = &upf_main;
   upf_node_assoc_t *n;
-  upf_nwi_t * nwi;
   int r = 0;
 
   memset(&resp, 0, sizeof(resp));
@@ -501,39 +541,9 @@ handle_association_setup_request(sx_msg_t * req, pfcp_association_setup_request_
   resp.up_function_features |= F_UPFF_EMPU;
   /* currently no optional features are supported */
 
-  pool_foreach (nwi, gtm->nwis,
-    ({
-      upf_nwi_ip_res_t * ip_res;
-
-      pool_foreach (ip_res, nwi->ip_res,
-	({
-	  pfcp_user_plane_ip_resource_information_t *r;
-
-	  vec_alloc(resp.user_plane_ip_resource_information, 1);
-	  r = vec_end(resp.user_plane_ip_resource_information);
-
-	  r->network_instance = vec_dup(nwi->name);
-	  if (ip_res->mask != 0)
-	    {
-	      r->teid_range_indication = __builtin_popcount(ip_res->mask);
-	      r->teid_range = (ip_res->teid >> 24);
-	    }
-
-	  if (ip46_address_is_ip4 (&ip_res->ip))
-	    {
-	      r->flags |= USER_PLANE_IP_RESOURCE_INFORMATION_V4;
-	      r->ip4 = ip_res->ip.ip4;
-	    }
-	  else
-	    {
-	      r->flags |= USER_PLANE_IP_RESOURCE_INFORMATION_V6;
-	      r->ip6 = ip_res->ip.ip6;
-	    }
-
-	  _vec_len(resp.user_plane_ip_resource_information)++;
-	  SET_BIT(resp.grp.fields, ASSOCIATION_SETUP_RESPONSE_USER_PLANE_IP_RESOURCE_INFORMATION);
-	}));
-    }));
+  build_user_plane_ip_resource_information(&resp.user_plane_ip_resource_information);
+  if (vec_len(resp.user_plane_ip_resource_information) != 0)
+    SET_BIT(resp.grp.fields, ASSOCIATION_SETUP_RESPONSE_USER_PLANE_IP_RESOURCE_INFORMATION);
 
  out_send_resp:
   if (r == 0)
