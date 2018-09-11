@@ -1655,14 +1655,23 @@ handle_session_establishment_request(sx_msg_t * req, pfcp_session_establishment_
   ip46_address_t up_address = ip46_address_initializer;
   ip46_address_t cp_address = ip46_address_initializer;
   sx_server_main_t *sxsm = &sx_server_main;
+  upf_session_t *sess = NULL;
   f64 now = sxsm->now;
-  upf_session_t *sess;
   int r = 0;
   int is_ip4;
 
   memset(&resp, 0, sizeof(resp));
   SET_BIT(resp.grp.fields, SESSION_ESTABLISHMENT_RESPONSE_CAUSE);
   resp.response.cause = PFCP_CAUSE_REQUEST_REJECTED;
+
+  assoc = sx_get_association(&msg->request.node_id);
+  if (!assoc)
+    {
+      resp.response.cause = PFCP_CAUSE_NO_ESTABLISHED_SX_ASSOCIATION;
+      send_response(req, msg->f_seid.seid, PFCP_SESSION_ESTABLISHMENT_RESPONSE, &resp.grp);
+
+      return -1;
+    }
 
   SET_BIT(resp.grp.fields, SESSION_ESTABLISHMENT_RESPONSE_UP_F_SEID);
   resp.up_f_seid.seid = msg->f_seid.seid;
@@ -1720,6 +1729,13 @@ handle_session_establishment_request(sx_msg_t * req, pfcp_session_establishment_
     resp.response.cause = PFCP_CAUSE_REQUEST_ACCEPTED;
 
   send_response(req, sess->cp_seid, PFCP_SESSION_ESTABLISHMENT_RESPONSE, &resp.grp);
+
+  if (r != 0)
+    {
+      if (sx_disable_session(sess) != 0)
+	clib_error("failed to remove UPF session 0x%016" PRIx64, sess->cp_seid);
+      sx_free_session(sess);
+    }
 
   return r;
 }

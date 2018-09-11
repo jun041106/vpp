@@ -5880,6 +5880,25 @@ static int decode_group(u8 *p, int len, const struct pfcp_ie_def *grp_def,
     pos += length + 4;
   }
 
+  if ((grp->fields & grp_def->mandatory) != grp_def->mandatory)
+    {
+      u32 missing = ~grp->fields & grp_def->mandatory;
+
+      pfcp_debug("Mandatory IE Missing: expected: %08x, got: %08x, Missing: %08x",
+		 grp_def->mandatory, (grp->fields & grp_def->mandatory), missing);
+
+      for (int i = 0; missing; i++, missing >>= 1)
+	{
+	  if (!(missing & 1))
+	    continue;
+
+	  pfcp_debug("Missing IE Type: %s, %u",
+		     ie_desc[grp_def->group[i].type], grp_def->group[i].type);
+	}
+
+      return PFCP_CAUSE_MANDATORY_IE_MISSING;
+    }
+
   return r;
 }
 
