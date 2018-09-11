@@ -1584,7 +1584,6 @@ build_usage_report(upf_session_t *sess, upf_urr_t *urr,
       r->duration_measurement = end - start;
 
       urr->monitoring_time.base = 0;
-      urr->status &= ~URR_AFTER_MONITORING_TIME;
 
       _vec_len(*report)++;
     }
@@ -1628,10 +1627,11 @@ build_usage_report(upf_session_t *sess, upf_urr_t *urr,
   /* SET_BIT(r->grp.fields, USAGE_REPORT_TIME_OF_LAST_PACKET); */
   /* SET_BIT(r->grp.fields, USAGE_REPORT_USAGE_INFORMATION); */
 
+  _vec_len(*report)++;
+
+  urr->status &= ~URR_AFTER_MONITORING_TIME;
   urr->start_time = now;
   if (urr->time_threshold.base) urr->time_threshold.base = now;
-
-  _vec_len(*report)++;
 
   return r;
 }
