@@ -406,7 +406,8 @@ upf_node_assoc_t *sx_new_association(pfcp_node_id_t *node_id)
       break;
 
     case NID_FQDN:
-      hash_set_mem (gtm->node_index_by_fqdn, node_id->fqdn, n - gtm->nodes);
+      n->node_id.fqdn = vec_dup(node_id->fqdn);
+      hash_set_mem (gtm->node_index_by_fqdn, n->node_id.fqdn, n - gtm->nodes);
       break;
     }
 
