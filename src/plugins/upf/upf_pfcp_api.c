@@ -1656,6 +1656,7 @@ handle_session_establishment_request(sx_msg_t * req, pfcp_session_establishment_
   ip46_address_t cp_address = ip46_address_initializer;
   sx_server_main_t *sxsm = &sx_server_main;
   upf_session_t *sess = NULL;
+  upf_node_assoc_t *assoc;
   f64 now = sxsm->now;
   int r = 0;
   int is_ip4;
@@ -1694,7 +1695,7 @@ handle_session_establishment_request(sx_msg_t * req, pfcp_session_establishment_
       ip_set(&cp_address, &msg->f_seid.ip6, 0);
     }
 
-  sess = sx_create_session(req->fib_index, &up_address,
+  sess = sx_create_session(assoc, req->fib_index, &up_address,
 			   msg->f_seid.seid, &cp_address);
 
   if ((r = handle_create_pdr(sess, msg->create_pdr, &resp.grp,
