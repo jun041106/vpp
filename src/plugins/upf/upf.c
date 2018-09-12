@@ -773,6 +773,98 @@ VLIB_CLI_COMMAND (upf_show_session_command, static) =
 };
 /* *INDENT-ON* */
 
+static clib_error_t *
+upf_show_assoc_command_fn (vlib_main_t * vm,
+			       unformat_input_t * main_input,
+			       vlib_cli_command_t * cmd)
+{
+  unformat_input_t _line_input, *line_input = &_line_input;
+  upf_main_t * gtm = &upf_main;
+  clib_error_t * error = NULL;
+  u8 has_ip = 0, has_fqdn = 0;
+  ip46_address_t node_ip;
+  upf_node_assoc_t *node;
+  u8 verbose = 0;
+  u8 * fqdn = 0;
+
+  if (unformat_user (main_input, unformat_line_input, line_input))
+    {
+      while (unformat_check_input (line_input) != UNFORMAT_END_OF_INPUT)
+	{
+	  if (unformat (line_input, "ip %U",
+			unformat_ip46_address, &node_ip, IP46_TYPE_ANY))
+	    has_ip = 1;
+	  else if (unformat (line_input, "fqdn %_%v%_", &fqdn))
+	    has_fqdn = 1;
+	  if (unformat (line_input, "verbose"))
+	    verbose = 1;
+	  else {
+	    error = unformat_parse_error (line_input);
+	    unformat_free (line_input);
+	    goto done;
+	  }
+	}
+
+      unformat_free (line_input);
+    }
+
+  if (has_ip && has_fqdn)
+    {
+      error = clib_error_return (0, "Only one selector is allowed, eith ip or fqdn");
+      goto done;
+    }
+
+  if (has_ip && has_fqdn)
+    {
+      pfcp_node_id_t node_id;
+
+      if (has_ip)
+	{
+	  node_id.type = ip46_address_is_ip4(&node_ip) ? NID_IPv4 : NID_IPv6;
+	  node_id.ip = node_ip;
+	}
+      if (has_fqdn)
+	{
+	  node_id.type = NID_FQDN;
+	  node_id.fqdn = upf_name_to_labels(fqdn);
+	}
+
+      node = sx_get_association(&node_id);
+
+      if (node_id.type == NID_FQDN)
+	vec_free(node_id.fqdn);
+
+      if (!node)
+	{
+	  error = clib_error_return (0, "Association not found");
+	  goto done;
+	}
+
+      vlib_cli_output (vm, "%U", format_sx_node_association, node, verbose);
+    }
+  else
+    pool_foreach (node, gtm->nodes,
+      ({
+	vlib_cli_output (vm, "%U", format_sx_node_association, node, verbose);
+      }));
+
+ done:
+  if (fqdn)
+    vec_free(fqdn);
+
+  return error;
+}
+
+/* *INDENT-OFF* */
+VLIB_CLI_COMMAND (upf_show_assoc_command, static) =
+{
+  .path = "show upf association",
+  .short_help =
+  "show upf association",
+  .function = upf_show_assoc_command_fn,
+};
+/* *INDENT-ON* */
+
 static clib_error_t * upf_init (vlib_main_t * vm)
 {
   upf_main_t * sm = &upf_main;

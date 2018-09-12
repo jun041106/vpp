@@ -24,8 +24,9 @@ upf_node_assoc_t *sx_get_association(pfcp_node_id_t *node_id);
 upf_node_assoc_t *sx_new_association(pfcp_node_id_t *node_id);
 void sx_release_association(upf_node_assoc_t *n);
 
-upf_session_t *sx_create_session(int sx_fib_index, const ip46_address_t *up_address,
-				    uint64_t cp_seid, const ip46_address_t *cp_address);
+upf_session_t *sx_create_session(upf_node_assoc_t *assoc, int sx_fib_index,
+				 const ip46_address_t *up_address, uint64_t cp_seid,
+				 const ip46_address_t *cp_address);
 void sx_update_session(upf_session_t *sx);
 int sx_disable_session(upf_session_t *sx);
 void sx_free_session(upf_session_t *sx);
@@ -69,6 +70,7 @@ u32 process_urrs(vlib_main_t *vm, upf_session_t *sess,
 void upf_pfcp_error_report(upf_session_t * sx, gtp_error_ind_t * error);
 
 /* format functions */
+u8 * format_sx_node_association(u8 * s, va_list * args);
 u8 * format_sx_session(u8 * s, va_list * args);
 
 /**

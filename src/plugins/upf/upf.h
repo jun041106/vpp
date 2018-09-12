@@ -389,6 +389,12 @@ typedef struct {
   u64 cp_seid;
   ip46_address_t cp_address;
 
+  struct {
+    u32 node;
+    u32 next;
+    u32 prev;
+  } assoc;
+
   uint32_t flags;
 #define SX_UPDATING    0x8000
 
@@ -483,6 +489,8 @@ typedef struct {
 typedef struct {
   pfcp_node_id_t node_id;
   pfcp_recovery_time_stamp_t recovery_time_stamp;
+
+  u32 sessions;
 } upf_node_assoc_t;
 
 #define UPF_MAPPING_BUCKETS      1024
