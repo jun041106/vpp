@@ -115,15 +115,23 @@ void upf_pfcp_send_data (sx_msg_t * msg)
   vlib_put_frame_to_node (vm, to_node_index, f);
 }
 
-sx_msg_t * build_sx_msg(upf_session_t * sx, u8 type, struct pfcp_group *grp)
+always_inline void sx_msg_free (sx_server_main_t *sxsm, sx_msg_t * m)
+{
+  if (!m)
+    return;
+
+  vec_free(m->data);
+  pool_put (sxsm->msg_pool, m);
+}
+
+static int encode_sx_msg(upf_session_t * sx, u8 type, struct pfcp_group * grp, sx_msg_t * msg)
 {
   sx_server_main_t *sxs = &sx_server_main;
-  sx_msg_t * msg;
   int r = 0;
 
-  msg = clib_mem_alloc_no_fail(sizeof(sx_msg_t));
-  memset(msg, 0, sizeof(sx_msg_t));
+  memset (msg, 0, sizeof (*msg));
 
+  msg->seq_no = clib_smp_atomic_add(&sxs->seq_no, 1) % 0x1000000;
   msg->data = vec_new(u8, 2048);
 
   msg->hdr->version = 1;
@@ -131,18 +139,17 @@ sx_msg_t * build_sx_msg(upf_session_t * sx, u8 type, struct pfcp_group *grp)
   msg->hdr->type = type;
 
   msg->hdr->session_hdr.seid = clib_host_to_net_u64(sx->cp_seid);
-  msg->hdr->session_hdr.sequence[0] = (sxs->seq_no >> 16) & 0xff;
-  msg->hdr->session_hdr.sequence[1] = (sxs->seq_no >>  8) & 0xff;
-  msg->hdr->session_hdr.sequence[2] = sxs->seq_no & 0xff;
-  sxs->seq_no = (sxs->seq_no + 1) % 0x1000000;
+  msg->hdr->session_hdr.sequence[0] = (msg->seq_no >> 16) & 0xff;
+  msg->hdr->session_hdr.sequence[1] = (msg->seq_no >>  8) & 0xff;
+  msg->hdr->session_hdr.sequence[2] = msg->seq_no & 0xff;
 
   _vec_len(msg->data) = offsetof(pfcp_header_t, session_hdr.ies);
 
   r = pfcp_encode_msg(type, grp, &msg->data);
   if (r != 0)
     {
-      sx_msg_free(msg);
-      return NULL;
+      vec_free(msg->data);
+      return r;
     }
 
   msg->hdr->length = clib_host_to_net_u16(_vec_len(msg->data) - 4);
@@ -153,7 +160,180 @@ sx_msg_t * build_sx_msg(upf_session_t * sx, u8 type, struct pfcp_group *grp)
   msg->lcl.port = clib_host_to_net_u16 (UDP_DST_PORT_SX);
   msg->rmt.port = clib_host_to_net_u16 (UDP_DST_PORT_SX);
 
+  clib_warning("PFCP Msg no VRF %d from %U:%d to %U:%d\n",
+	       msg->fib_index,
+	       format_ip46_address, &msg->lcl.address, IP46_TYPE_ANY,
+	       clib_net_to_host_u16 (msg->lcl.port),
+	       format_ip46_address, &msg->rmt.address, IP46_TYPE_ANY,
+	       clib_net_to_host_u16 (msg->rmt.port));
+
+  clib_warning("PFCP Msg no VRF %d from %U:%d to %U:%d\n",
+	       msg->fib_index,
+	       format_ip46_address, &sx->up_address, IP46_TYPE_ANY,
+	       clib_net_to_host_u16 (msg->lcl.port),
+	       format_ip46_address, &sx->cp_address, IP46_TYPE_ANY,
+	       clib_net_to_host_u16 (msg->rmt.port));
+
+  return 0;
+}
+
+static int upf_pfcp_server_rx_msg(sx_msg_t * msg)
+{
+  int len = vec_len(msg->data);
+  u8 * seq_no;
+
+  if (len < 4)
+    return -1;
+
+  gtp_debug ("%U", format_pfcp_msg_hdr, msg->hdr);
+
+  if (msg->hdr->version != 1)
+    {
+      sx_msg_t * resp = NULL;
+
+      gtp_debug ("PFCP: msg version invalid: %d.", msg->hdr->version);
+
+      resp = upf_pfcp_make_response(msg, sizeof(pfcp_header_t));
+
+      resp->hdr->version = 1;
+      resp->hdr->type = PFCP_VERSION_NOT_SUPPORTED_RESPONSE;
+      resp->hdr->length = clib_host_to_net_u16(offsetof(pfcp_header_t, msg_hdr.ies) - 4);
+      _vec_len(resp->data) = offsetof(pfcp_header_t, msg_hdr.ies);
+
+      upf_pfcp_send_data(resp);
+      return 0;
+  }
+
+  if (len != (clib_net_to_host_u16(msg->hdr->length) + 4) ||
+      (!msg->hdr->s_flag && len < offsetof(pfcp_header_t, msg_hdr.ies)) ||
+      (msg->hdr->s_flag && len < offsetof(pfcp_header_t, session_hdr.ies)))
+    {
+      gtp_debug ("PFCP: msg length invalid, data %d, msg %d.",
+		    len, clib_net_to_host_u16(msg->hdr->length));
+      return -1;
+    }
+
+  seq_no = (msg->hdr->s_flag) ?
+    &msg->hdr->session_hdr.sequence[0] : &msg->hdr->msg_hdr.sequence[0];
+  msg->seq_no = (seq_no[0] << 16) |  (seq_no[1] << 8) |  seq_no[2];
+
+  /* TODO: duplicate message detection, resent last reply */
+
+  upf_pfcp_handle_msg(msg);
+
+  return 0;
+}
+
+static sx_msg_t * build_sx_msg(upf_session_t * sx, u8 type, struct pfcp_group * grp)
+{
+  sx_server_main_t *sxsm = &sx_server_main;
+  sx_msg_t * msg;
+  int r = 0;
+
+  pool_get_aligned (sxsm->msg_pool, msg, CLIB_CACHE_LINE_BYTES);
+  memset (msg, 0, sizeof (*msg));
+
+  if ((r = encode_sx_msg(sx, type, grp, msg)) != 0)
+    {
+      pool_put (sxsm->msg_pool, msg);
+      return NULL;
+    }
+
   return msg;
+}
+
+int upf_pfcp_send_request(upf_session_t * sx, u8 type, struct pfcp_group *grp)
+{
+  sx_server_main_t *sxsm = &sx_server_main;
+  vlib_main_t *vm = sxsm->vlib_main;
+  sx_msg_t * msg;
+  int r = -1;
+
+  msg = clib_mem_alloc_no_fail(sizeof(*msg));
+  if (msg)
+    {
+      if ((r = encode_sx_msg(sx, type, grp, msg)) != 0)
+	{
+	  clib_mem_free(msg);
+	  goto out_free;
+	}
+
+      gtp_debug ("sending NOTIFY event %p", msg);
+      vlib_process_signal_event_mt(vm, sx_api_process_node.index, EVENT_NOTIFY, (uword)msg);
+    }
+
+ out_free:
+  pfcp_free_msg(type, grp);
+  return r;
+}
+
+void upf_pfcp_server_send_request(upf_session_t * sx, u8 type, struct pfcp_group *grp)
+{
+  sx_server_main_t *sxsm = &sx_server_main;
+  sx_msg_t * msg;
+
+  if ((msg = build_sx_msg(sx, type, grp)))
+    {
+      clib_warning("Msg: %p\n", msg);
+      upf_pfcp_send_data(msg);
+      sx_msg_free(sxsm, msg);
+    }
+}
+
+sx_msg_t * upf_pfcp_make_response(sx_msg_t * req, size_t len)
+{
+  sx_msg_t * resp;
+
+  resp = clib_mem_alloc_no_fail(sizeof(sx_msg_t));
+  memset(resp, 0, sizeof(sx_msg_t));
+
+  resp->fib_index = req->fib_index;
+  resp->lcl = req->lcl;
+  resp->rmt = req->rmt;
+  vec_alloc(resp->data, len);
+
+  return resp;
+}
+
+int upf_pfcp_send_response(sx_msg_t * req, u64 cp_seid, u8 type, struct pfcp_group *grp)
+{
+  sx_msg_t * resp;
+  int r = 0;
+
+  resp = upf_pfcp_make_response(req, 2048);
+
+  resp->hdr->version = req->hdr->version;
+  resp->hdr->s_flag = req->hdr->s_flag;
+  resp->hdr->type = type;
+
+  if (req->hdr->s_flag)
+    {
+      resp->hdr->s_flag = 1;
+      resp->hdr->session_hdr.seid = clib_host_to_net_u64(cp_seid);
+
+      memcpy(resp->hdr->session_hdr.sequence, req->hdr->session_hdr.sequence,
+	     sizeof(resp->hdr->session_hdr.sequence));
+      _vec_len(resp->data) = offsetof(pfcp_header_t, session_hdr.ies);
+    }
+  else
+    {
+      memcpy(resp->hdr->msg_hdr.sequence, req->hdr->msg_hdr.sequence,
+	     sizeof(resp->hdr->session_hdr.sequence));
+      _vec_len(resp->data) = offsetof(pfcp_header_t, msg_hdr.ies);
+    }
+
+  r = pfcp_encode_msg(type, grp, &resp->data);
+  if (r != 0)
+    goto out_free;
+
+  /* vector resp might have changed */
+  resp->hdr->length = clib_host_to_net_u16(_vec_len(resp->data) - 4);
+
+  upf_pfcp_send_data(resp);
+
+ out_free:
+  pfcp_free_msg(type, grp);
+  return 0;
 }
 
 static int urr_check_counter(u64 bytes, u64 consumed, u64 threshold, u64 quota)
@@ -175,7 +355,6 @@ upf_pfcp_session_usage_report(upf_session_t *sx, f64 now)
   pfcp_session_report_request_t req;
   struct rules *active;
   upf_urr_t *urr;
-  sx_msg_t *msg;
 
   active = sx_get_rules(sx, SX_ACTIVE);
 
@@ -212,13 +391,9 @@ upf_pfcp_session_usage_report(upf_session_t *sx, f64 now)
 	}
     }
 
-  msg = build_sx_msg(sx, PFCP_SESSION_REPORT_REQUEST, &req.grp);
-  clib_warning("Msg: %p\n", msg);
-  if (msg)
-    {
-      upf_pfcp_send_data(msg);
-      sx_msg_free(msg);
-    }
+  upf_pfcp_server_send_request(sx, PFCP_SESSION_REPORT_REQUEST, &req.grp);
+
+  pfcp_free_msg(PFCP_SESSION_REPORT_REQUEST, &req.grp);
 }
 
 void upf_pfcp_session_stop_urr_time(urr_time_t *t)
@@ -290,7 +465,6 @@ upf_pfcp_session_urr_timer(upf_session_t *sx, u16 urr_id, u8 timer_id, f64 now)
   struct rules *active;
   u8 send_report = 0;
   upf_urr_t *urr;
-  sx_msg_t *msg;
 
   active = sx_get_rules(sx, SX_ACTIVE);
 
@@ -371,14 +545,7 @@ upf_pfcp_session_urr_timer(upf_session_t *sx, u16 urr_id, u8 timer_id, f64 now)
     }
 
   if (send_report)
-    {
-      msg = build_sx_msg(sx, PFCP_SESSION_REPORT_REQUEST, &req.grp);
-      if (msg)
-	{
-	  upf_pfcp_send_data(msg);
-	  sx_msg_free(msg);
-	}
-    }
+    upf_pfcp_server_send_request(sx, PFCP_SESSION_REPORT_REQUEST, &req.grp);
 
   pfcp_free_msg(PFCP_SESSION_REPORT_REQUEST, &req.grp);
 }
@@ -430,8 +597,10 @@ sx_process (vlib_main_t * vm,
 	      {
 		sx_msg_t * msg = (sx_msg_t *)event_data[i];
 
-		upf_pfcp_handle_msg(msg);
-		sx_msg_free(msg);
+		upf_pfcp_server_rx_msg(msg);
+
+		vec_free(msg->data);
+		clib_mem_free(msg);
 	      }
 	    break;
 	  }
@@ -440,10 +609,14 @@ sx_process (vlib_main_t * vm,
 	  {
 	    for (int i = 0; i < vec_len (event_data); i++)
 	      {
-		sx_msg_t * msg = (sx_msg_t *)event_data[i];
+		sx_msg_t * msg;
+
+		pool_get_aligned (sxsm->msg_pool, msg, CLIB_CACHE_LINE_BYTES);
+		memcpy(msg, (sx_msg_t *)event_data[i], sizeof(*msg));
+		clib_mem_free((sx_msg_t *)event_data[i]);
 
 		upf_pfcp_send_data(msg);
-		sx_msg_free(msg);
+		sx_msg_free(sxsm, msg);
 	      }
 	    break;
 	  }
@@ -506,8 +679,8 @@ void upf_pfcp_handle_input (vlib_main_t * vm, vlib_buffer_t *b, int is_ip4)
   u8 * data;
 
   /* signal Sx process to handle data */
-  msg = clib_mem_alloc_no_fail(sizeof(sx_msg_t));
-  memset(msg, 0, sizeof(sx_msg_t));
+  msg = clib_mem_alloc_no_fail(sizeof(*msg));
+  memset(msg, 0, sizeof(*msg));
   msg->fib_index = vnet_buffer (b)->ip.fib_index;
 
   /* udp_local hands us a pointer to the udp data */
@@ -542,16 +715,6 @@ void upf_pfcp_handle_input (vlib_main_t * vm, vlib_buffer_t *b, int is_ip4)
 		msg->data);
 
   vlib_process_signal_event_mt(vm, sx_api_process_node.index, EVENT_RX, (uword)msg);
-}
-
-void
-upf_pfcp_server_notify(sx_msg_t * msg)
-{
-  sx_server_main_t *sx = &sx_server_main;
-  vlib_main_t *vm = sx->vlib_main;
-
-  gtp_debug ("sending NOTIFY event %p", msg);
-  vlib_process_signal_event_mt(vm, sx_api_process_node.index, EVENT_NOTIFY, (uword)msg);
 }
 
 void

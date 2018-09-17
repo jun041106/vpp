@@ -24,6 +24,12 @@
 
 typedef struct
 {
+  struct {
+    u32 prev;
+    u32 next;
+    f64 expire;
+  } q;
+
   u32 fib_index;
 
   struct {
@@ -36,18 +42,13 @@ typedef struct
     u16 port;
   } lcl;
 
+  u32 seq_no;
+
   union {
     u8 * data;
     pfcp_header_t * hdr;
   };
 } sx_msg_t;
-
-always_inline void sx_msg_free (sx_msg_t * m)
-{
-  if (m)
-    vec_free(m->data);
-  clib_mem_free(m);
-}
 
 typedef struct
 {
@@ -63,6 +64,9 @@ typedef struct
   f64 now;
 
   TWT(tw_timer_wheel) urr_timer;
+  sx_msg_t * msg_pool;
+  u32 request_q_head;
+  u32 response_q_head;
 
   vlib_main_t *vlib_main;
 } sx_server_main_t;
@@ -80,9 +84,11 @@ void upf_pfcp_session_start_stop_urr_time(u32 si, u8 urr_id, u8 type, f64 now,
 void
 upf_pfcp_session_start_stop_urr_time_abs(u32 si, u8 urr_id, u8 type, f64 now, urr_time_t *t);
 
-sx_msg_t * build_sx_msg(upf_session_t * sx, u8 type, struct pfcp_group *grp);
-void upf_pfcp_send_data (sx_msg_t * msg);
-void upf_pfcp_server_notify (sx_msg_t * msg);
+int upf_pfcp_send_request(upf_session_t * sx, u8 type, struct pfcp_group * grp);
+
+sx_msg_t * upf_pfcp_make_response(sx_msg_t * req, size_t len);
+int upf_pfcp_send_response(sx_msg_t * req, u64 cp_seid, u8 type, struct pfcp_group * grp);
+
 void upf_pfcp_server_session_usage_report(upf_session_t *sx);
 
 void upf_pfcp_handle_input (vlib_main_t * vm, vlib_buffer_t *b, int is_ip4);

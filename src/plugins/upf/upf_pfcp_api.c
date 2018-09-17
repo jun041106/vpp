@@ -76,58 +76,8 @@ static void init_response_node_id(struct pfcp_response *r)
 
 /*************************************************************************/
 
-static sx_msg_t * make_response(sx_msg_t * req, size_t len)
-{
-  sx_msg_t * resp;
-
-  resp = clib_mem_alloc_no_fail(sizeof(sx_msg_t));
-  memset(resp, 0, sizeof(sx_msg_t));
-
-  resp->fib_index = req->fib_index;
-  resp->lcl = req->lcl;
-  resp->rmt = req->rmt;
-  vec_alloc(resp->data, len);
-
-  return resp;
-}
-
-/*************************************************************************/
-
 int upf_pfcp_handle_msg(sx_msg_t * msg)
 {
-  int len = vec_len(msg->data);
-
-  if (len < 4)
-    return -1;
-
-  gtp_debug ("%U", format_pfcp_msg_hdr, msg->hdr);
-
-  if (msg->hdr->version != 1)
-    {
-      sx_msg_t * resp = NULL;
-
-      gtp_debug ("PFCP: msg version invalid: %d.", msg->hdr->version);
-
-      resp = make_response(msg, sizeof(pfcp_header_t));
-
-      resp->hdr->version = 1;
-      resp->hdr->type = PFCP_VERSION_NOT_SUPPORTED_RESPONSE;
-      resp->hdr->length = clib_host_to_net_u16(offsetof(pfcp_header_t, msg_hdr.ies) - 4);
-      _vec_len(resp->data) = offsetof(pfcp_header_t, msg_hdr.ies);
-
-      upf_pfcp_send_data(resp);
-      return 0;
-  }
-
-  if (len != (clib_net_to_host_u16(msg->hdr->length) + 4) ||
-      (!msg->hdr->s_flag && len < offsetof(pfcp_header_t, msg_hdr.ies)) ||
-      (msg->hdr->s_flag && len < offsetof(pfcp_header_t, session_hdr.ies)))
-    {
-      gtp_debug ("PFCP: msg length invalid, data %d, msg %d.",
-		    len, clib_net_to_host_u16(msg->hdr->length));
-      return -1;
-    }
-
   switch (msg->hdr->type)
     {
     case PFCP_HEARTBEAT_REQUEST:
@@ -369,61 +319,6 @@ format_ipfilter(u8 * s, va_list * args)
 
 /*************************************************************************/
 
-static int send_session_request(upf_session_t * sx, u8 type, struct pfcp_group *grp)
-{
-  sx_msg_t * msg;
-
-  msg = build_sx_msg(sx, type, grp);
-  if (msg)
-    {
-      upf_pfcp_server_notify (msg);
-      pfcp_free_msg(type, grp);
-    }
-
-  return 0;
-}
-
-static int send_response(sx_msg_t * req, u64 cp_seid, u8 type, struct pfcp_group *grp)
-{
-  sx_msg_t * resp;
-  int r = 0;
-
-  resp = make_response(req, 2048);
-
-  resp->hdr->version = req->hdr->version;
-  resp->hdr->s_flag = req->hdr->s_flag;
-  resp->hdr->type = type;
-
-  if (req->hdr->s_flag)
-    {
-      resp->hdr->s_flag = 1;
-      resp->hdr->session_hdr.seid = clib_host_to_net_u64(cp_seid);
-
-      memcpy(resp->hdr->session_hdr.sequence, req->hdr->session_hdr.sequence,
-	     sizeof(resp->hdr->session_hdr.sequence));
-      _vec_len(resp->data) = offsetof(pfcp_header_t, session_hdr.ies);
-    }
-  else
-    {
-      memcpy(resp->hdr->msg_hdr.sequence, req->hdr->msg_hdr.sequence,
-	     sizeof(resp->hdr->session_hdr.sequence));
-      _vec_len(resp->data) = offsetof(pfcp_header_t, msg_hdr.ies);
-    }
-
-  r = pfcp_encode_msg(type, grp, &resp->data);
-  if (r != 0)
-    goto out_free;
-
-  /* vector resp might have changed */
-  resp->hdr->length = clib_host_to_net_u16(_vec_len(resp->data) - 4);
-
-  upf_pfcp_send_data(resp);
-
- out_free:
-  pfcp_free_msg(type, grp);
-  return 0;
-}
-
 /* message helpers */
 
 static void
@@ -481,7 +376,7 @@ handle_heartbeat_request(sx_msg_t * req, pfcp_heartbeat_request_t *msg)
   gtp_debug ("PFCP: start_time: %p, %d, %x.",
 		&sx, sx->start_time, sx->start_time);
 
-  send_response(req, 0, PFCP_HEARTBEAT_RESPONSE, &resp.grp);
+  upf_pfcp_send_response(req, 0, PFCP_HEARTBEAT_RESPONSE, &resp.grp);
 
   return 0;
 }
@@ -549,7 +444,7 @@ handle_association_setup_request(sx_msg_t * req, pfcp_association_setup_request_
   if (r == 0)
     resp.response.cause = PFCP_CAUSE_REQUEST_ACCEPTED;
 
-  send_response(req, 0, PFCP_ASSOCIATION_SETUP_RESPONSE, &resp.grp);
+  upf_pfcp_send_response(req, 0, PFCP_ASSOCIATION_SETUP_RESPONSE, &resp.grp);
   return r;
 }
 
@@ -1669,7 +1564,7 @@ handle_session_establishment_request(sx_msg_t * req, pfcp_session_establishment_
   if (!assoc)
     {
       resp.response.cause = PFCP_CAUSE_NO_ESTABLISHED_SX_ASSOCIATION;
-      send_response(req, msg->f_seid.seid, PFCP_SESSION_ESTABLISHMENT_RESPONSE, &resp.grp);
+      upf_pfcp_send_response(req, msg->f_seid.seid, PFCP_SESSION_ESTABLISHMENT_RESPONSE, &resp.grp);
 
       return -1;
     }
@@ -1729,7 +1624,7 @@ handle_session_establishment_request(sx_msg_t * req, pfcp_session_establishment_
   if (r == 0)
     resp.response.cause = PFCP_CAUSE_REQUEST_ACCEPTED;
 
-  send_response(req, sess->cp_seid, PFCP_SESSION_ESTABLISHMENT_RESPONSE, &resp.grp);
+  upf_pfcp_send_response(req, sess->cp_seid, PFCP_SESSION_ESTABLISHMENT_RESPONSE, &resp.grp);
 
   if (r != 0)
     {
@@ -1884,7 +1779,7 @@ handle_session_modification_request(sx_msg_t * req, pfcp_session_modification_re
   if (r == 0)
     resp.response.cause = PFCP_CAUSE_REQUEST_ACCEPTED;
 
-  send_response(req, cp_seid, PFCP_SESSION_MODIFICATION_RESPONSE, &resp.grp);
+  upf_pfcp_send_response(req, cp_seid, PFCP_SESSION_MODIFICATION_RESPONSE, &resp.grp);
 
  return r;
 }
@@ -1949,7 +1844,7 @@ handle_session_deletion_request(sx_msg_t * req, pfcp_session_deletion_request_t 
       resp.response.cause = PFCP_CAUSE_REQUEST_ACCEPTED;
     }
 
-  send_response(req, cp_seid, PFCP_SESSION_DELETION_RESPONSE, &resp.grp);
+  upf_pfcp_send_response(req, cp_seid, PFCP_SESSION_DELETION_RESPONSE, &resp.grp);
 
   return r;
 }
@@ -2082,7 +1977,7 @@ void upf_pfcp_error_report(upf_session_t * sx, gtp_error_ind_t * error)
 
   vec_add1(req.error_indication_report.f_teid, f_teid);
 
-  send_session_request(sx, PFCP_SESSION_REPORT_REQUEST, &req.grp);
+  upf_pfcp_send_request(sx, PFCP_SESSION_REPORT_REQUEST, &req.grp);
 }
 
 /*
