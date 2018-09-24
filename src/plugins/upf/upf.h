@@ -18,15 +18,27 @@
 #ifndef __included_upf_h__
 #define __included_upf_h__
 
-#include <vnet/vnet.h>
-#include <vnet/ip/ip.h>
-#include <vnet/ethernet/ethernet.h>
-#include <vnet/udp/udp.h>
+#undef CLIB_DEBUG
+#define CLIB_DEBUG 0
 
-#include <vppinfra/hash.h>
+#include <vppinfra/lock.h>
 #include <vppinfra/error.h>
+#include <vppinfra/hash.h>
 #include <vppinfra/bihash_8_8.h>
 #include <vppinfra/bihash_24_8.h>
+
+#include <vnet/vnet.h>
+#include <vnet/ip/ip.h>
+#include <vnet/l2/l2_input.h>
+#include <vnet/l2/l2_output.h>
+#include <vnet/l2/l2_bd.h>
+#include <vnet/ethernet/ethernet.h>
+#include <vnet/ip/ip4_packet.h>
+#include <vnet/ip/ip6_packet.h>
+#include <vnet/udp/udp.h>
+#include <vnet/dpo/dpo.h>
+#include <vnet/adj/adj_types.h>
+#include <vnet/fib/fib_table.h>
 
 #include "pfcp.h"
 
@@ -381,6 +393,9 @@ typedef struct {
 } upf_acl_ctx_t;
 
 typedef struct {
+  /* Required for pool_get_aligned  */
+  CLIB_CACHE_LINE_ALIGN_MARK (cacheline0);
+
   int fib_index;
   ip46_address_t up_address;
   u64 cp_seid;
@@ -441,6 +456,9 @@ typedef enum
 } gtpu_input_error_t;
 
 typedef struct {
+  /* Required for pool_get_aligned  */
+  CLIB_CACHE_LINE_ALIGN_MARK (cacheline0);
+
   uword ref_cnt;
 
   fib_forward_chain_type_t forw_type;
@@ -484,6 +502,9 @@ typedef struct {
 } upf_nwi_t;
 
 typedef struct {
+  /* Required for pool_get_aligned  */
+  CLIB_CACHE_LINE_ALIGN_MARK (cacheline0);
+
   pfcp_node_id_t node_id;
   pfcp_recovery_time_stamp_t recovery_time_stamp;
 
