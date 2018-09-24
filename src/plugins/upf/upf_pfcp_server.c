@@ -403,14 +403,13 @@ void upf_pfcp_session_stop_urr_time(urr_time_t *t)
   if (t->handle != ~0)
     {
       // stop timer ....
-      TW (tw_timer_stop) (&sx->urr_timer, t->handle);
+      TW (tw_timer_stop) (&sx->timer, t->handle);
       t->handle = ~0;
     }
 }
 
 void
-upf_pfcp_session_start_stop_urr_time(u32 si, u8 urr_id, u8 type, f64 now,
-				     urr_time_t *t, u8 start_it)
+upf_pfcp_session_start_stop_urr_time(u32 si, f64 now, urr_time_t *t, u8 start_it)
 {
   sx_server_main_t *sx = &sx_server_main;
 
@@ -419,22 +418,26 @@ upf_pfcp_session_start_stop_urr_time(u32 si, u8 urr_id, u8 type, f64 now,
 
   if (t->period != 0 && start_it)
     {
-      u32 id = SX_URR_TW_ID(si, urr_id, type);
       i64 interval;
 
       // start timer.....
 
       interval = t->period * 100 - ceil((now - t->base) * 100.0) + 1;
       interval = clib_max(interval, 1);		 /* make sure interval is at least 1 */
-      t->handle = TW (tw_timer_start) (&sx->urr_timer, id, 0, interval);
+      t->handle = TW (tw_timer_start) (&sx->timer, si, 0, interval);
 
-      gtp_debug ("starting timer %u, %u, %u, now is %.3f, base is %.3f, expire in %lu ticks\n",
-		 type, urr_id, si, now, t->base, interval);
+      gtp_debug ("starting URR timer %u, now is %.3f, base is %.3f, expire in %lu ticks,"
+		 " alternate %.4f, %.4f, clib_now %.4f, current tick: %u",
+		 si, now, t->base, interval,
+		 ((t->base + (f64)interval) - now) * 100,
+		 ((t->base + interval) - now) * 100,
+		 vlib_time_now (sx->vlib_main),
+		 sx->timer.current_tick);
     }
 }
 
 void
-upf_pfcp_session_start_stop_urr_time_abs(u32 si, u8 urr_id, u8 type, f64 now, urr_time_t *t)
+upf_pfcp_session_start_stop_urr_time_abs(u32 si, f64 now, urr_time_t *t)
 {
   sx_server_main_t *sx = &sx_server_main;
 
@@ -443,22 +446,22 @@ upf_pfcp_session_start_stop_urr_time_abs(u32 si, u8 urr_id, u8 type, f64 now, ur
 
   if (t->base != 0 && t->base > now)
     {
-      u32 id = SX_URR_TW_ID(si, urr_id, type);
       u64 ticks;
 
       // start timer.....
       ticks = ceil((t->base - now) * 100.0);
-      t->handle = TW (tw_timer_start) (&sx->urr_timer, id, 0, ticks);
+      t->handle = TW (tw_timer_start) (&sx->timer, si, 0, ticks);
 
-      gtp_debug ("starting abs timer %u, %u, %u, now is %.3f, base is %.3f, expire in %lu ticks\n",
-		 type, urr_id, si, now, t->base, ticks);
+      gtp_debug ("starting URR absolute timer %u, now is %.3f, base is %.3f, expire in %lu ticks\n",
+		 si, now, t->base, ticks);
     }
 }
 
 static void
-upf_pfcp_session_urr_timer(upf_session_t *sx, u16 urr_id, u8 timer_id, f64 now)
+upf_pfcp_session_urr_timer(upf_session_t *sx, f64 now, f64 cnow)
 {
-  gtp_debug ("upf_pfcp_session_urr_timer (%p, %u, %u, %.3f);", sx, urr_id, timer_id, now);
+  gtp_debug ("upf_pfcp_session_urr_timer (%p, %u, %.3f, %.4f",
+	     sx, now, cnow);
 
   pfcp_session_report_request_t req;
   upf_main_t *gtm = &upf_main;
@@ -493,7 +496,7 @@ upf_pfcp_session_urr_timer(upf_session_t *sx, u16 urr_id, u8 timer_id, f64 now)
 
 	  /* rearm Measurement Period */
 	  upf_pfcp_session_start_stop_urr_time
-	    (si, urr->id, SX_URR_PERIODIC_TIMER, now, &urr->measurement_period, 1);
+	    (si, now, &urr->measurement_period, 1);
 
 	}
       if (urr_check(urr->time_threshold, now))
@@ -558,7 +561,7 @@ sx_process (vlib_main_t * vm,
   upf_main_t *gtm = &upf_main;
   u32 * expired = NULL;
 
-  sxsm->urr_timer.last_run_time = vlib_time_now (sxsm->vlib_main);
+  sxsm->timer.last_run_time = vlib_time_now (sxsm->vlib_main);
   sxsm->now = unix_time_now ();
 
   while (1)
@@ -568,7 +571,7 @@ sx_process (vlib_main_t * vm,
       f64 timeout;
       f64 now;
 
-      ticks_until_expiration = TW (tw_timer_first_expires_in_ticks)(&sxsm->urr_timer);
+      ticks_until_expiration = TW (tw_timer_first_expires_in_ticks)(&sxsm->timer);
 
       /* Nothing on the fast wheel, sleep 10ms */
       if (ticks_until_expiration == TW_SLOTS_PER_RING)
@@ -639,23 +642,31 @@ sx_process (vlib_main_t * vm,
 	  break;
 	}
 
-      expired = TW (tw_timer_expire_timers_vec) (&sxsm->urr_timer, now, expired);
+      /*
+	gtp_debug ("advancing wheel, now is %lu", now);
+	gtp_debug ("tw_timer_expire_timers_vec (%p, %lu, %p);", &sx->timer, now, expired);
+      */
 
-      u32 *p = NULL;
-      vec_foreach (p, expired)
-      {
-	const u32 si = SX_URR_TW_SESSION(*p);
-	const u16 urr_id = SX_URR_TW_URR(*p);
-	const u8 timer_id = SX_URR_TW_TIMER(*p);
+      expired = TW (tw_timer_expire_timers_vec) (&sxsm->timer, now, expired);
+      //gtp_debug ("Expired %d elements", vec_len (expired));
 
-	if (!pool_is_free_index (gtm->sessions, si))
-	  {
-	    upf_session_t *sx;
+      for (int i = 0; i < vec_len (expired); i++)
+	{
+	  u8 tid = expired[i] >> 24;
 
-	    sx = pool_elt_at_index (gtm->sessions, si);
-	    upf_pfcp_session_urr_timer(sx, urr_id, timer_id, sxsm->now);
-	  }
-      }
+	  if ((tid & 0x80) == 0)
+	    {
+	      const u32 si = expired[i] & 0x7FFFFFFF;
+	      upf_session_t *sx;
+
+	      if (pool_is_free_index (gtm->sessions, si))
+		continue;
+
+	      gtp_debug("wheel current tick: %u", sxsm->timer.current_tick);
+	      sx = pool_elt_at_index (gtm->sessions, si);
+	      upf_pfcp_session_urr_timer(sx, sxsm->now, now);
+	    }
+	}
 
       if (expired)
 	{
@@ -741,7 +752,7 @@ sx_server_main_init (vlib_main_t * vm)
   sx->vlib_main = vm;
   sx->start_time = time(NULL);
 
-  TW (tw_timer_wheel_init) (&sx->urr_timer, NULL, 10e-3 /* 10ms timer interval */ , ~0);
+  TW (tw_timer_wheel_init) (&sx->timer, NULL, 10e-3 /* 10ms timer interval */ , ~0);
 
   udp_register_dst_port (vm, UDP_DST_PORT_SX,
 			 sx4_input_node.index, /* is_ip4 */ 1);
