@@ -131,6 +131,9 @@ if(DPDK_INCLUDE_DIR AND DPDK_LIB)
     upf_pfcp_api.h
     upf_http_redirect_server.h
 
+    LINK_FLAGS
+    ${DPDK_LINK_FLAGS}
+
     API_TEST_SOURCES
     upf_test.c
   )
