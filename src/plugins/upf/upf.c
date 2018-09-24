@@ -126,7 +126,7 @@ int vnet_upf_nwi_add_del(u8 * name, u8 add)
       if (p)
 	return VNET_API_ERROR_VALUE_EXIST;
 
-      pool_get_aligned (gtm->nwis, nwi, CLIB_CACHE_LINE_BYTES);
+      pool_get (gtm->nwis, nwi);
       memset (nwi, 0, sizeof (*nwi));
 
       nwi->name = vec_dup(name);
@@ -348,7 +348,7 @@ int vnet_upf_nwi_set_addr(u8 * name, ip46_address_t *ip, u32 teid, u32 mask, u8 
       if (p)
 	return VNET_API_ERROR_VALUE_EXIST;
 
-      pool_get_aligned (nwi->ip_res, ip_res, CLIB_CACHE_LINE_BYTES);
+      pool_get (nwi->ip_res, ip_res);
       memset (ip_res, 0, sizeof (*ip_res));
 
       ip_res->ip = *ip;

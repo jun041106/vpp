@@ -24,6 +24,9 @@
 
 typedef struct
 {
+  /* Required for pool_get_aligned  */
+  CLIB_CACHE_LINE_ALIGN_MARK (cacheline0);
+
   struct {
     u32 prev;
     u32 next;
