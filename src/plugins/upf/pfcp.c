@@ -3143,26 +3143,18 @@ static u8 * format_additional_usage_reports_information(u8 * s, va_list * args)
 #define decode_traffic_endpoint_id decode_u8_ie
 #define encode_traffic_endpoint_id encode_u8_ie
 
-static u8 *
-format_mac (u8 * s, va_list * args)
-{
-  u8 *a = va_arg (*args, u8 *);
-  return format (s, "%02x:%02x:%02x:%02x:%02x:%02x",
-		 a[0], a[1], a[2], a[3], a[4], a[5]);
-}
-
-static u8 * format_mac_address(u8 * s, va_list * args)
+static u8 * format_pfcp_mac_address(u8 * s, va_list * args)
 {
   pfcp_mac_address_t *v = va_arg (*args, pfcp_mac_address_t *);
 
   if (v->flags & F_SOURCE_MAC)
-    s = format(s, "SRC:%U,", format_mac, v->src_mac);
+    s = format(s, "SRC:%U,", format_mac_address, v->src_mac);
   if (v->flags & F_DESTINATION_MAC)
-    s = format(s, "DST:%U,", format_mac, v->dst_mac);
+    s = format(s, "DST:%U,", format_mac_address, v->dst_mac);
   if (v->flags & F_UPPER_SOURCE_MAC)
-    s = format(s, "USRC:%U,", format_mac, v->upper_src_mac);
+    s = format(s, "USRC:%U,", format_mac_address, v->upper_src_mac);
   if (v->flags & F_UPPER_DESTINATION_MAC)
-    s = format(s, "UDST:%U,", format_mac, v->upper_dst_mac);
+    s = format(s, "UDST:%U,", format_mac_address, v->upper_dst_mac);
 
   if (v->flags)
     _vec_len(s)--;
@@ -3170,7 +3162,7 @@ static u8 * format_mac_address(u8 * s, va_list * args)
   return s;
 }
 
-static int decode_mac_address(u8 *data, u16 length, void *p)
+static int decode_pfcp_mac_address(u8 *data, u16 length, void *p)
 {
   pfcp_mac_address_t *v = p;
 
@@ -3223,7 +3215,7 @@ static int decode_mac_address(u8 *data, u16 length, void *p)
   return 0;
 }
 
-static int encode_mac_address(void *p, u8 **vec)
+static int encode_pfcp_mac_address(void *p, u8 **vec)
 {
   pfcp_mac_address_t *v = p;
 
@@ -3477,7 +3469,7 @@ static u8 * format_mac_addresses_vec(u8 * s, va_list * args)
   s = format(s, "[");
   vec_foreach(mac, *v)
     {
-      s = format(s, "%U,", format_mac, mac);
+      s = format(s, "%U,", format_mac_address, mac);
     }
   if (vec_len(*v) != 0)
     _vec_len(s)--;
@@ -4990,7 +4982,12 @@ static struct pfcp_ie_def group_specs[] =
       .size = ARRAY_LEN(pfcp_ethernet_packet_filter_group),
       .group = pfcp_ethernet_packet_filter_group,
     },
-    SIMPLE_IE(PFCP_IE_MAC_ADDRESS, mac_address),
+    [PFCP_IE_MAC_ADDRESS] = {
+      .length = sizeof(pfcp_mac_address_t),
+      .format = format_pfcp_mac_address,
+      .decode = decode_pfcp_mac_address,
+      .encode = encode_pfcp_mac_address,
+    },
     SIMPLE_IE(PFCP_IE_C_TAG, c_tag),
     SIMPLE_IE(PFCP_IE_S_TAG, s_tag),
     SIMPLE_IE(PFCP_IE_ETHERTYPE, ethertype),
