@@ -134,6 +134,7 @@ if(DPDK_INCLUDE_DIR AND DPDK_LIB)
     pfcp.h
     upf_pfcp.h
     upf_pfcp_api.h
+    upf_pfcp_server.h
     upf_http_redirect_server.h
 
     LINK_LIBRARIES

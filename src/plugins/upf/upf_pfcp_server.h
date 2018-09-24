@@ -66,7 +66,7 @@ typedef struct
   ip46_address_t address;
   f64 now;
 
-  TWT(tw_timer_wheel) urr_timer;
+  TWT(tw_timer_wheel) timer;
   sx_msg_t * msg_pool;
   u32 request_q_head;
   u32 response_q_head;
@@ -82,10 +82,8 @@ extern vlib_node_registration_t sx6_input_node;
 #define UDP_DST_PORT_SX 8805
 
 void upf_pfcp_session_stop_urr_time(urr_time_t *t);
-void upf_pfcp_session_start_stop_urr_time(u32 si, u8 urr_id, u8 type, f64 now,
-					  urr_time_t *t, u8 start_it);
-void
-upf_pfcp_session_start_stop_urr_time_abs(u32 si, u8 urr_id, u8 type, f64 now, urr_time_t *t);
+void upf_pfcp_session_start_stop_urr_time(u32 si, f64 now, urr_time_t *t, u8 start_it);
+void upf_pfcp_session_start_stop_urr_time_abs(u32 si, f64 now, urr_time_t *t);
 
 int upf_pfcp_send_request(upf_session_t * sx, u8 type, struct pfcp_group * grp);
 

@@ -340,11 +340,6 @@ typedef struct {
   u32 handle;
 } urr_time_t;
 
-#define SX_URR_TW_ID(s, u, i)  (((i) << 30) | ((u) << 22) | (s))
-#define SX_URR_TW_SESSION(i)   ((i) & 0x3fffff)
-#define SX_URR_TW_URR(i)       (((i) >> 22) & 0xff)
-#define SX_URR_TW_TIMER(i)     ((i) >> 30)
-
 /* Usage Reporting Rules */
 typedef struct {
   u16 id;
@@ -376,10 +371,6 @@ typedef struct {
   urr_time_t time_quota;		/* relative duration in seconds */
   urr_time_t quota_holding_time;	/* relative duration in seconds */
   urr_time_t monitoring_time;		/* absolute UTC ts since 1900-01-01 00:00:00 */
-#define SX_URR_THRESHOLD_TIMER		1
-#define SX_URR_QUOTA_TIMER		2
-#define SX_URR_MONITORING_TIMER		3
-#define SX_URR_PERIODIC_TIMER		4
 
   struct {
     f64 start_time;

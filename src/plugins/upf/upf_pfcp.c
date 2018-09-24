@@ -1906,14 +1906,14 @@ int sx_update_apply(upf_session_t *sx)
       if (urr->update_flags & SX_URR_UPDATE_MEASUREMENT_PERIOD)
 	{
 	  upf_pfcp_session_start_stop_urr_time
-	    (si, urr->id, SX_URR_PERIODIC_TIMER, now, &urr->measurement_period,
+	    (si, now, &urr->measurement_period,
 	     !!(urr->triggers & REPORTING_TRIGGER_PERIODIC_REPORTING));
 	}
 
       if (urr->update_flags & SX_URR_UPDATE_MONITORING_TIME)
 	{
 	  upf_pfcp_session_start_stop_urr_time_abs
-	    (si, urr->id, SX_URR_MONITORING_TIMER, now, &urr->monitoring_time);
+	    (si, now, &urr->monitoring_time);
 	}
 
       if ((urr->methods & SX_URR_TIME))
@@ -1921,7 +1921,7 @@ int sx_update_apply(upf_session_t *sx)
 	  if (urr->update_flags & SX_URR_UPDATE_TIME_THRESHOLD)
 	    {
 	      upf_pfcp_session_start_stop_urr_time
-		(si, urr->id, SX_URR_THRESHOLD_TIMER, now, &urr->time_threshold,
+		(si, now, &urr->time_threshold,
 		 !!(urr->triggers & REPORTING_TRIGGER_TIME_THRESHOLD));
 	    }
 	  if (urr->update_flags & SX_URR_UPDATE_TIME_QUOTA)
@@ -1929,7 +1929,7 @@ int sx_update_apply(upf_session_t *sx)
 	      urr->time_quota.base =
 		(urr->time_threshold.base != 0) ? urr->time_threshold.base : now;
 	      upf_pfcp_session_start_stop_urr_time
-		(si, urr->id, SX_URR_QUOTA_TIMER, now, &urr->time_quota,
+		(si, now, &urr->time_quota,
 		 !!(urr->triggers & REPORTING_TRIGGER_TIME_QUOTA));
 	    }
 	}
