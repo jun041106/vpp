@@ -89,6 +89,11 @@ endif()
 ##############################################################################
 
 if(DPDK_INCLUDE_DIR AND DPDK_LIB)
+  message(STATUS "Looking for liburcu")
+  find_package(PkgConfig REQUIRED)
+  pkg_check_modules(URCU REQUIRED liburcu-qsbr)
+
+  include_directories (${URCU_INCLUDE_DIRS})
   include_directories (${DPDK_INCLUDE_DIR})
 
   message(STATUS "Found DPDK ${DPDK_VERSION} in ${DPDK_INCLUDE_DIR}")
@@ -131,8 +136,12 @@ if(DPDK_INCLUDE_DIR AND DPDK_LIB)
     upf_pfcp_api.h
     upf_http_redirect_server.h
 
+    LINK_LIBRARIES
+    ${URCU_LIBRARIES}
+
     LINK_FLAGS
     ${DPDK_LINK_FLAGS}
+    ${URCU_LDFLAGS}
 
     API_TEST_SOURCES
     upf_test.c
