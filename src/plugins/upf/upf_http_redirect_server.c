@@ -83,7 +83,6 @@ static const char *html_redirect_template =
 static void
 http_redir_send_data (stream_session_t * s, u8 * data)
 {
-  session_fifo_event_t evt;
   u32 offset, bytes_to_send;
   f64 delay = 10e-3;
   http_redirect_server_main_t *hsm = &http_redirect_server_main;
@@ -121,14 +120,8 @@ http_redir_send_data (stream_session_t * s, u8 * data)
 	  bytes_to_send -= actual_transfer;
 
 	  if (svm_fifo_set_event (s->server_tx_fifo))
-	    {
-	      /* Fabricate TX event, send to vpp */
-	      evt.fifo = s->server_tx_fifo;
-	      evt.event_type = FIFO_EVENT_APP_TX;
-
-	      svm_queue_add (hsm->vpp_queue[s->thread_index],
-			     (u8 *) & evt, 0 /* do wait for mutex */ );
-	    }
+	    session_send_io_evt_to_thread (s->server_tx_fifo,
+					   FIFO_EVENT_APP_TX);
 	  delay = 10e-3;
 	}
     }
@@ -348,13 +341,12 @@ static int
 http_redirect_server_listen (u32 fib_index, int is_ip4)
 {
   http_redirect_server_main_t *hsm = &http_redirect_server_main;
+  session_endpoint_extended_t sep = SESSION_ENDPOINT_EXT_NULL;
   session_handle_t handle;
-  session_endpoint_t sep;
   stream_session_t *tl;
   application_t *app;
   int rv;
 
-  memset (&sep, 0, sizeof (sep));
   sep.is_ip4 = is_ip4;
   sep.transport_proto = TRANSPORT_PROTO_TCP;
   sep.fib_index = fib_index;

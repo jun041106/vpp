@@ -24,7 +24,7 @@
 typedef struct
 {
   u8 **rx_buf;
-  svm_queue_t **vpp_queue;
+  svm_msg_q_t **vpp_queue;
   u64 byte_index;
 
   /* Sever's event queue */
