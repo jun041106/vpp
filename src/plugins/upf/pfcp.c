@@ -40,8 +40,8 @@
 
 #include "pfcp.h"
 
-//#undef CLIB_DEBUG
-//#define CLIB_DEBUG 0
+#undef CLIB_DEBUG
+#define CLIB_DEBUG 0
 
 #if CLIB_DEBUG > 0
 #define pfcp_debug clib_warning

@@ -33,6 +33,11 @@
 #include <upf/upf_pfcp.h>
 #include <upf/upf_http_redirect_server.h>
 
+#include <upf/flowtable.h>
+#include <upf/flowtable_impl.h>
+
+#include <upf/dpi.h>
+
 #if CLIB_DEBUG > 0
 #define gtp_debug clib_warning
 #else
@@ -103,14 +108,19 @@ upf_classify (vlib_main_t * vm, vlib_node_runtime_t * node,
   struct rte_acl_ctx *acl;
   uint32_t results[1]; /* make classify by 4 categories. */
   const u8 *data[4];
+  flow_entry_t *flow = NULL;
 
   next_index = node->cached_next_index;
   stats_sw_if_index = node->runtime_data[0];
   stats_n_packets = stats_n_bytes = 0;
 
+  u32 current_time = (u32) ((u64) vm->cpu_time_last_node_dispatch /
+                             vm->clib_time.clocks_per_second);
+
   while (n_left_from > 0)
     {
       upf_pdr_t * pdr = NULL;
+      upf_pdr_t * dpi_pdr = NULL;
       upf_far_t * far = NULL;
       u32 n_left_to_next;
       vlib_buffer_t * b;
@@ -142,17 +152,55 @@ upf_classify (vlib_main_t * vm, vlib_node_runtime_t * node,
 
 	  pl = vlib_buffer_get_current(b) + vnet_buffer (b)->gtpu.data_offset;
 
-	  acl = is_ip4 ? active->sdf[direction].ip4 : active->sdf[direction].ip6;
+	  flowtable_get_flow(pl, &sess->fmt, &flow, is_ip4, direction, current_time);
+	
+	  gtp_debug("client direction: %u, packet direction: %u",
+		    flow->client_direction, direction);
+
+	  /* Check if client PDR is cached in this flow */
+	  if (flow->client_direction == direction)
+	    {
+	      if (flow->client_pdr_id != ~0)
+		{
+		  pdr = sx_get_pdr_by_id(active, flow->client_pdr_id);
+		}
+	    }
+	  else
+	  /* Check if server PDR is cached in this flow */
+	    {
+	      if (flow->server_pdr_id != ~0)
+		{
+		  pdr = sx_get_pdr_by_id(active, flow->server_pdr_id);
+		}
+	    }
+
+	  if (pdr == NULL)
+	    {
+	      if ((flow->client_direction != direction) && flow->app_index != ~0)
+	      {
+		pdr = upf_get_dpi_pdr_by_name(active, direction, flow->app_index);
+		flow->server_pdr_id = pdr->id;
+		gtp_debug("server PDR: %u, app_index: %u",
+			  flow->server_pdr_id, flow->app_index);
+	      }
+	    }
+
+	  if (pdr == NULL)
+	    {
+	      acl = is_ip4 ? active->sdf[direction].ip4 : active->sdf[direction].ip6;
+	      dpi_pdr = upf_get_highest_dpi_pdr(active, direction);
+
 	  if (acl == NULL)
 	    {
 	      gtpu_intf_tunnel_key_t key;
 	      uword *p;
 
+	      if (dpi_pdr == NULL)
+	        {
 	      key.src_intf = vnet_buffer (b)->gtpu.src_intf;
 	      key.teid = vnet_buffer (b)->gtpu.teid;
 
 	      p = hash_get (active->wildcard_teid, key.as_u64);
-
 
 	      if (PREDICT_TRUE (p != NULL))
 		{
@@ -160,9 +208,13 @@ upf_classify (vlib_main_t * vm, vlib_node_runtime_t * node,
 		  if (PREDICT_TRUE (pdr != NULL))
 		    {
 		      vnet_buffer (b)->gtpu.pdr_idx = pdr - active->pdr;
-		      far = sx_get_far_by_id(active, pdr->far_id);
+		        }
 		    }
 		}
+              else
+                {
+                  pdr = dpi_pdr;
+                }
 	    }
 	  else
 	    {
@@ -194,8 +246,6 @@ upf_classify (vlib_main_t * vm, vlib_node_runtime_t * node,
 
 		      /* TODO: this should be optimized */
 		      pdr = active->pdr + results[0] - 1;
-		      far = sx_get_far_by_id(active, pdr->far_id);
-		    }
 		}
 	      else
 		{
@@ -216,15 +266,42 @@ upf_classify (vlib_main_t * vm, vlib_node_runtime_t * node,
 
 		      /* TODO: this should be optimized */
 		      pdr = active->pdr + results[0] - 1;
-		      far = sx_get_far_by_id(active, pdr->far_id);
 		    }
 		}
 
 	      *teid = save;
-	    }
+
+		      if (pdr != NULL)
+		        {
+		          if (dpi_pdr != NULL)
+		            {
+		              pdr = (pdr->precedence < dpi_pdr->precedence) ? pdr : dpi_pdr;
+		            }
+		        }
+		      else
+		        {
+		          pdr = dpi_pdr;
+		        }
+		    }
+		}
+		}
 
 	  if (PREDICT_TRUE (pdr != 0))
-	    {
+		{
+		  far = sx_get_far_by_id(active, pdr->far_id);
+
+		  if ((flow->client_direction == direction) &&
+		      (flow->client_pdr_id == ~0))
+		    {
+		      upf_update_flow_app_index(flow, pdr, pl, is_ip4);
+		      if (flow->app_index != ~0)
+			{
+			  flow->client_pdr_id = pdr->id;
+			  gtp_debug("client PDR: %u, app_index: %u",
+				    flow->client_pdr_id, flow->app_index);
+			}
+		    }
+
 	      /* Outer Header Removal */
 	      switch (pdr->outer_header_removal)
 		{

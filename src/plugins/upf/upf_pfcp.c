@@ -39,6 +39,7 @@
 
 #include "pfcp.h"
 #include "upf.h"
+#include "dpi.h"
 #include "upf_pfcp.h"
 #include "upf_pfcp_api.h"
 
@@ -883,7 +884,11 @@ static void sx_free_rules(upf_session_t *sx, int rule)
   upf_urr_t *urr;
 
   vec_foreach (pdr, rules->pdr)
+  {
     vec_free(pdr->urr_ids);
+    vec_free(pdr->app_name);
+  }
+
   vec_free(rules->pdr);
   vec_foreach (far, rules->far)
     {
@@ -2291,6 +2296,15 @@ format_sx_session(u8 * s, va_list * args)
     vec_foreach_index (j, pdr->urr_ids)
       s = format(s, "%s%u", j != 0 ? ":" : "", vec_elt(pdr->urr_ids, j));
     s = format(s, "] @ %p\n", pdr->urr_ids);
+
+		s = format(s, "  L7 DPI app name: %v\n"
+	             "  L7 DPI app id: %u\n"
+	             "  path DPI DB Id: %u\n"
+	             "  host DPI DB Id: %u\n",
+	             pdr->app_name,
+	             pdr->app_index,
+	             pdr->dpi_path_db_id,
+	             pdr->dpi_host_db_id);
   }
 
   vec_foreach (far, rules->far) {

@@ -89,11 +89,16 @@ endif()
 ##############################################################################
 
 if(DPDK_INCLUDE_DIR AND DPDK_LIB)
-  message(STATUS "Looking for liburcu")
   find_package(PkgConfig REQUIRED)
+
+  message(STATUS "Looking for liburcu")
   pkg_check_modules(URCU REQUIRED liburcu-qsbr)
 
+  message(STATUS "Looking for hyperscan")
+  pkg_check_modules(HS REQUIRED libhs)
+
   include_directories (${URCU_INCLUDE_DIRS})
+  include_directories (${HS_INCLUDE_DIRS})
   include_directories (${DPDK_INCLUDE_DIR})
 
   message(STATUS "Found DPDK ${DPDK_VERSION} in ${DPDK_INCLUDE_DIR}")
@@ -123,6 +128,9 @@ if(DPDK_INCLUDE_DIR AND DPDK_LIB)
     upf_pfcp_input.c
     upf_pfcp_server.c
     upf_http_redirect_server.c
+    dpi.c
+    upf_timer.c
+    flowtable_impl.c
 
     API_FILES
     upf.api
@@ -136,13 +144,20 @@ if(DPDK_INCLUDE_DIR AND DPDK_LIB)
     upf_pfcp_api.h
     upf_pfcp_server.h
     upf_http_redirect_server.h
+    dpi.h
+    flowdata.h
+    flowtable.h
+    flowtable_tcp.h
+    flowtable_impl.h
 
     LINK_LIBRARIES
     ${URCU_LIBRARIES}
+    ${HS_LIBRARIES}
 
     LINK_FLAGS
     ${DPDK_LINK_FLAGS}
     ${URCU_LDFLAGS}
+    ${HS_LDFLAGS}
 
     API_TEST_SOURCES
     upf_test.c

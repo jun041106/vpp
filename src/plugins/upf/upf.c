@@ -31,7 +31,9 @@
 #include <upf/pfcp.h>
 #include <upf/upf_pfcp_server.h>
 
-/* Action function shared between message handler and debug CLI */
+#include "flowtable.h"
+#include <upf/flowtable_impl.h>
+#include <upf/dpi.h>
 
 int upf_enable_disable (upf_main_t * sm, u32 sw_if_index,
 			  int enable_disable)
@@ -874,7 +876,8 @@ upf_show_session_command_fn (vlib_main_t * vm,
   u64 cp_seid, up_seid;
   ip46_address_t cp_ip;
   u8 has_cp_f_seid = 0, has_up_seid = 0;
-  upf_session_t *sess;
+  upf_session_t *sess = NULL;
+  u8 has_flows = 0;
 
   if (unformat_user (main_input, unformat_line_input, line_input))
     {
@@ -890,6 +893,10 @@ upf_show_session_command_fn (vlib_main_t * vm,
 	    has_up_seid = 1;
 	  else if (unformat (line_input, "up seid 0x%lx", &up_seid))
 	    has_up_seid = 1;
+		else if (unformat (line_input, "%lu flows", &up_seid))
+	    has_flows = 1;
+		else if (unformat (line_input, "0x%lx flows", &up_seid))
+	    has_flows = 1;
 	  else {
 	    error = unformat_parse_error (line_input);
 	    unformat_free (line_input);
@@ -898,6 +905,19 @@ upf_show_session_command_fn (vlib_main_t * vm,
 	}
 
       unformat_free (line_input);
+    }
+
+  if (has_flows)
+    {
+      if (!(sess = sx_lookup(up_seid)))
+        {
+          error = clib_error_return (0, "Sessions 0x%lx not found", up_seid);
+          goto done;
+        }
+
+      BV (clib_bihash_foreach_key_value_pair) (&sess->fmt.flows_ht,
+                                               foreach_upf_flows, &sess->fmt);
+      goto done;
     }
 
   if (has_cp_f_seid)
@@ -1075,6 +1095,11 @@ static clib_error_t * upf_init (vlib_main_t * vm)
 			 gtpu6_input_node.index, /* is_ip4 */ 0);
 
   sm->fib_node_type = fib_node_register_new_type (&upf_vft);
+
+  sm->upf_app_by_name = hash_create_vec ( /* initial length */ 32,
+                                      sizeof (u8), sizeof (uword));
+
+  flowtable_init(vm);
 
   return sx_server_main_init(vm);
 }

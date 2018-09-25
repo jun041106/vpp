@@ -39,6 +39,7 @@
 #include "upf_pfcp.h"
 #include "upf_pfcp_server.h"
 #include "upf_pfcp_api.h"
+#include "dpi.h"
 
 #if CLIB_DEBUG > 0
 #define gtp_debug clib_warning
@@ -746,6 +747,9 @@ static int handle_create_pdr(upf_session_t *sess, pfcp_create_pdr_t *create_pdr,
 	}
 
       create->id = pdr->pdr_id;
+      create->app_index = ~0;
+      create->dpi_path_db_id = ~0;
+      create->dpi_host_db_id = ~0;
       create->precedence = pdr->precedence;
 
       create->pdi.nwi = nwi - gtm->nwis;
@@ -792,6 +796,28 @@ static int handle_create_pdr(upf_session_t *sess, pfcp_create_pdr_t *create_pdr,
 	      break;
 	    }
 	}
+
+	if (ISSET_BIT(pdr->pdi.grp.fields, PDI_APPLICATION_ID))
+		{
+			uword *p = NULL;
+			upf_dpi_app_t *app = NULL;
+			create->pdi.fields |= F_PDI_APPLICATION_ID;
+
+			create->app_name = vec_dup(pdr->pdi.application_id);
+
+			p = hash_get_mem (gtm->upf_app_by_name, create->app_name);
+			if (p)
+			  {
+			    app = pool_elt_at_index (gtm->upf_apps, p[0]);
+			    create->app_index = app->id;
+			  }
+
+			upf_dpi_get_db_id(create->app_name, &create->dpi_path_db_id,
+					  &create->dpi_host_db_id);
+			gtp_debug("app_id: %s, DPI DB id %u",
+				  reate->app_name, create->dpi_path_db_id);
+		}
+
       create->outer_header_removal = OPT(pdr, CREATE_PDR_OUTER_HEADER_REMOVAL,
 					 outer_header_removal, ~0);
       create->far_id = OPT(pdr, CREATE_PDR_FAR_ID, far_id, ~0);
@@ -903,6 +929,29 @@ static int handle_update_pdr(upf_session_t *sess, pfcp_update_pdr_t *update_pdr,
 	      break;
 	    }
 	}
+
+		if (ISSET_BIT(pdr->pdi.grp.fields, PDI_APPLICATION_ID))
+			{
+				uword *p = NULL;
+				upf_dpi_app_t *app = NULL;
+				update->pdi.fields |= F_PDI_APPLICATION_ID;
+
+				vec_free(update->app_name);
+				update->app_name = vec_dup(pdr->pdi.application_id);
+
+				p = hash_get_mem (gtm->upf_app_by_name, update->app_name);
+				if (p)
+				  {
+				    app = pool_elt_at_index (gtm->upf_apps, p[0]);
+				    update->app_index = app->id;
+				  }
+				
+				upf_dpi_get_db_id(update->app_name, &update->dpi_path_db_id,
+													&update->dpi_host_db_id);
+				gtp_debug("app_id: %s, DPI DB id %u",
+									update->app_name, update->dpi_path_db_id);
+			}
+
       update->outer_header_removal = OPT(pdr, UPDATE_PDR_OUTER_HEADER_REMOVAL,
 					 outer_header_removal, ~0);
       update->far_id = OPT(pdr, UPDATE_PDR_FAR_ID, far_id, ~0);
@@ -941,14 +990,22 @@ static int handle_remove_pdr(upf_session_t *sess, pfcp_remove_pdr_t *remove_pdr,
   int r = 0;
 
   vec_foreach(pdr, remove_pdr)
-    {
-      if ((r = sx_delete_pdr(sess, pdr->pdr_id)) != 0)
-	{
-	  fformat(stderr, "Failed to add PDR %d\n", pdr->pdr_id);
-	  failed_rule_id->id = pdr->pdr_id;
-	  break;
-	}
-    }
+  {
+    upf_pdr_t *delete;
+
+    delete = sx_get_pdr(sess, SX_PENDING, pdr->pdr_id);
+    if (delete)
+      {
+        vec_free(delete->app_name);
+      }
+
+    if ((r = sx_delete_pdr(sess, pdr->pdr_id)) != 0)
+      {
+        fformat(stderr, "Failed to add PDR %d\n", pdr->pdr_id);
+        failed_rule_id->id = pdr->pdr_id;
+        break;
+      }
+  }
 
   if (r != 0)
     {
