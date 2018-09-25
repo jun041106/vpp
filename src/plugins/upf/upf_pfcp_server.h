@@ -22,16 +22,14 @@
 #include "pfcp.h"
 #include <vppinfra/tw_timer_1t_3w_1024sl_ov.h>
 
+#define PFCP_HB_INTERVAL 10
+#define PFCP_SERVER_HB_TIMER 0
+#define PFCP_SERVER_T1       1
+
 typedef struct
 {
   /* Required for pool_get_aligned  */
   CLIB_CACHE_LINE_ALIGN_MARK (cacheline0);
-
-  struct {
-    u32 prev;
-    u32 next;
-    f64 expire;
-  } q;
 
   u32 fib_index;
 
@@ -45,7 +43,13 @@ typedef struct
     u16 port;
   } lcl;
 
+  u32 pfcp_endpoint;
+  u32 node;
   u32 seq_no;
+
+  u32 timer;
+  u32 n1;
+  u32 t1;
 
   union {
     u8 * data;
@@ -68,8 +72,7 @@ typedef struct
 
   TWT(tw_timer_wheel) timer;
   sx_msg_t * msg_pool;
-  u32 request_q_head;
-  u32 response_q_head;
+  uword * request_q;
 
   vlib_main_t *vlib_main;
 } sx_server_main_t;
@@ -85,6 +88,9 @@ void upf_pfcp_session_stop_urr_time(urr_time_t *t);
 void upf_pfcp_session_start_stop_urr_time(u32 si, f64 now, urr_time_t *t, u8 start_it);
 void upf_pfcp_session_start_stop_urr_time_abs(u32 si, f64 now, urr_time_t *t);
 
+u32 upf_pfcp_server_start_timer(u8 type, u32 id, u32 seconds);
+void upf_pfcp_server_stop_timer(u32 handle);
+
 int upf_pfcp_send_request(upf_session_t * sx, u8 type, struct pfcp_group * grp);
 
 sx_msg_t * upf_pfcp_make_response(sx_msg_t * req, size_t len);
@@ -95,6 +101,22 @@ void upf_pfcp_server_session_usage_report(upf_session_t *sx);
 void upf_pfcp_handle_input (vlib_main_t * vm, vlib_buffer_t *b, int is_ip4);
 
 clib_error_t * sx_server_main_init (vlib_main_t * vm);
+
+static inline void init_sx_msg(sx_msg_t * m)
+{
+  memset(m, 0, sizeof(*m));
+  m->pfcp_endpoint = ~0;
+  m->node = ~0;
+}
+
+static inline void sx_msg_free (sx_server_main_t *sxsm, sx_msg_t * m)
+{
+  if (!m)
+    return;
+
+  vec_free(m->data);
+  pool_put (sxsm->msg_pool, m);
+}
 
 #endif /* _UPF_SX_SERVER_H */
 
