@@ -41,6 +41,9 @@
 #include <vnet/fib/fib_table.h>
 
 #include "pfcp.h"
+#include "flowtable_impl.h"
+#include "flowtable.h"
+
 
 #define BUFFER_HAS_GTP_HDR  (1<<0)
 #define BUFFER_HAS_UDP_HDR  (1<<1)
@@ -268,6 +271,10 @@ typedef struct {
   u8 outer_header_removal;
   u16 far_id;
   u16 *urr_ids;
+  u8 *app_name;
+  u32 app_index;
+  u32 dpi_path_db_id;
+  u32 dpi_host_db_id;
 } upf_pdr_t;
 
 /* Forward Action Rules - Forwarding Parameters */
@@ -435,6 +442,9 @@ typedef struct {
   u32 hw_if_index;
 
   f64 unix_time_start;
+
+  /* flow table*/
+  flowtable_per_session_t fmt;
 } upf_session_t;
 
 
@@ -511,6 +521,33 @@ typedef struct {
   u32 heartbeat_handle;
 } upf_node_assoc_t;
 
+typedef u8 * regex_t;
+
+typedef struct {
+  u32 id;
+  regex_t host;
+  regex_t path;
+} upf_dpi_rule_t;
+
+typedef struct {
+  u32 id;
+  u8 * name;
+  /* Rules hash */
+  uword* rules_by_id;
+  /* Rules vector */
+  upf_dpi_rule_t *rules;
+  /* DPI DB id */
+  u32 path_db_index;
+  u32 host_db_index;
+} upf_dpi_app_t;
+
+typedef struct {
+  regex_t host;
+  regex_t path;
+  u8 *src_ip;
+  u8 *dst_ip;
+} upf_rule_args_t;
+
 #define UPF_MAPPING_BUCKETS      1024
 #define UPF_MAPPING_MEMORY_SIZE  64 << 20
 
@@ -567,6 +604,11 @@ typedef struct {
   vlib_main_t * vlib_main;
   vnet_main_t * vnet_main;
   ethernet_main_t * ethernet_main;
+
+  /* DPI apps hash */
+  uword* upf_app_by_name;
+  /* DPI apps vector */
+  upf_dpi_app_t *upf_apps;
 } upf_main_t;
 
 extern const fib_node_vft_t upf_vft;
