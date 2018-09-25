@@ -21,7 +21,8 @@
 #define MAX_LEN 128
 
 upf_node_assoc_t *sx_get_association(pfcp_node_id_t *node_id);
-upf_node_assoc_t *sx_new_association(pfcp_node_id_t *node_id);
+upf_node_assoc_t *sx_new_association(u32 fib_index, ip46_address_t *lcl_addr,
+				     ip46_address_t *rmt_addr, pfcp_node_id_t *node_id);
 void sx_release_association(upf_node_assoc_t *n);
 
 upf_session_t *sx_create_session(upf_node_assoc_t *assoc, int sx_fib_index,
@@ -72,6 +73,7 @@ void upf_pfcp_error_report(upf_session_t * sx, gtp_error_ind_t * error);
 /* format functions */
 u8 * format_sx_node_association(u8 * s, va_list * args);
 u8 * format_sx_session(u8 * s, va_list * args);
+u8 * format_pfcp_endpoint(u8 * s, va_list * args);
 
 /**
  * Compare integer ids.

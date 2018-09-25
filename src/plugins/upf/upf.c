@@ -113,6 +113,169 @@ VLIB_CLI_COMMAND (upf_enable_disable_command, static) =
 };
 /* *INDENT-ON* */
 
+int vnet_upf_pfcp_endpoint_add_del(ip46_address_t *ip, u32 fib_index, u8 add)
+{
+  upf_main_t * gtm = &upf_main;
+  ip46_address_fib_t key;
+  upf_pfcp_endpoint_t *ep;
+  uword *p;
+
+  key.addr = *ip;
+  key.fib_index = fib_index;
+
+  p = hash_get_mem (gtm->pfcp_endpoint_index, &key);
+
+  if (add)
+    {
+      if (p)
+	return VNET_API_ERROR_VALUE_EXIST;
+
+      pool_get (gtm->pfcp_endpoints, ep);
+      memset (ep, 0, sizeof (*ep));
+
+      ep->key = key;
+
+      hash_set_mem_alloc (&gtm->pfcp_endpoint_index, &ep->key, ep - gtm->pfcp_endpoints);
+   }
+  else
+    {
+      if (!p)
+	return VNET_API_ERROR_NO_SUCH_ENTRY;
+
+      ep = pool_elt_at_index (gtm->pfcp_endpoints, p[0]);
+      hash_unset_mem_free (&gtm->pfcp_endpoint_index, &ep->key);
+      pool_put (gtm->pfcp_endpoints, ep);
+     }
+
+  return 0;
+}
+clib_error_t *
+upf_pfcp_endpoint_ip_add_del_command_fn (vlib_main_t * vm,
+				      unformat_input_t * main_input,
+				      vlib_cli_command_t * cmd)
+{
+  unformat_input_t _line_input, *line_input = &_line_input;
+  clib_error_t * error = NULL;
+  u32 fib_index = 0;
+  ip46_address_t ip;
+  u8 addr_set = 0;
+  u32 vrf = ~0;
+  u8 add = 1;
+  int rv;
+
+  if (!unformat_user (main_input, unformat_line_input, line_input))
+    return 0;
+
+  while (unformat_check_input (line_input) != UNFORMAT_END_OF_INPUT)
+    {
+      if (unformat (line_input, "del"))
+	add = 0;
+      else if (unformat (line_input, "add"))
+	add = 1;
+      else if (unformat (line_input, "%U", unformat_ip46_address, &ip, IP46_TYPE_ANY))
+	addr_set = 1;
+      else if (unformat (line_input, "vrf %u", &vrf))
+	;
+      else {
+	error = unformat_parse_error (line_input);
+	goto done;
+      }
+    }
+
+  if (!addr_set)
+    {
+      error = clib_error_return (0, "endpoint IP be specified");
+      goto done;
+    }
+
+  if (vrf != ~0)
+    {
+      fib_index = fib_table_find (fib_ip_proto (!ip46_address_is_ip4(&ip)), vrf);
+      if (fib_index == ~0)
+	{
+	  error = clib_error_return (0, "nonexistent vrf %d", vrf);
+	  goto done;
+	}
+    }
+
+  rv = vnet_upf_pfcp_endpoint_add_del(&ip, fib_index, add);
+
+  switch (rv)
+    {
+    case 0:
+      break;
+
+    case VNET_API_ERROR_NO_SUCH_ENTRY:
+      error = clib_error_return (0, "network instance does not exist...");
+      break;
+
+    default:
+      error = clib_error_return
+	(0, "vnet_upf_pfcp_endpoint_add_del %d", rv);
+      break;
+    }
+
+ done:
+  unformat_free (line_input);
+  return error;
+}
+
+/* *INDENT-OFF* */
+VLIB_CLI_COMMAND (upf_pfcp_endpoint_ip_add_del_command, static) =
+{
+  .path = "upf pfcp endpoint ip",
+  .short_help =
+  "upf pfcp endpoint ip <address> [vrf <table-id>] [del]",
+  .function = upf_pfcp_endpoint_ip_add_del_command_fn,
+};
+/* *INDENT-ON* */
+
+static clib_error_t *
+upf_pfcp_show_endpoint_command_fn (vlib_main_t * vm,
+				   unformat_input_t * main_input,
+				   vlib_cli_command_t * cmd)
+{
+  unformat_input_t _line_input, *line_input = &_line_input;
+  upf_main_t * gtm = &upf_main;
+  clib_error_t * error = NULL;
+  upf_pfcp_endpoint_t *ep;
+
+  if (unformat_user (main_input, unformat_line_input, line_input))
+    {
+
+      clib_warning("Past unformat");
+      while (unformat_check_input (line_input) != UNFORMAT_END_OF_INPUT)
+	{
+	  error = unformat_parse_error (line_input);
+	  unformat_free (line_input);
+	  goto done;
+	}
+
+      unformat_free (line_input);
+    }
+
+  clib_warning("pool");
+
+  vlib_cli_output (vm, "Endpoints: %d\n", pool_elts (gtm->pfcp_endpoints));
+  pool_foreach (ep, gtm->pfcp_endpoints,
+	({
+	  vlib_cli_output (vm, "  %U\n", format_pfcp_endpoint, ep);
+	}));
+
+ done:
+  return error;
+}
+
+/* *INDENT-OFF* */
+VLIB_CLI_COMMAND (upf_pfcp_show_endpoint_command, static) =
+{
+  .path = "show upf pfcp endpoint",
+  .short_help =
+  "show upf pfcp endpoint",
+  .function = upf_pfcp_show_endpoint_command_fn,
+};
+/* *INDENT-ON* */
+
 int vnet_upf_nwi_add_del(u8 * name, u8 add)
 {
   upf_main_t * gtm = &upf_main;
@@ -882,6 +1045,8 @@ static clib_error_t * upf_init (vlib_main_t * vm)
 
   if ((error = vlib_call_init_function (vm, upf_http_redirect_server_main_init)))
     return error;
+
+  sm->pfcp_endpoint_index = hash_create_mem (0, sizeof (ip46_address_t), sizeof (uword));
 
   sm->nwi_index_by_name =
     hash_create_vec ( /* initial length */ 32, sizeof (u8), sizeof (uword));

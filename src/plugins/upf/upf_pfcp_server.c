@@ -48,7 +48,7 @@
 typedef enum
 {
   EVENT_RX = 1,
-  EVENT_NOTIFY,
+  EVENT_TX,
   EVENT_URR,
 } sx_process_event_t;
 
@@ -117,23 +117,16 @@ void upf_pfcp_send_data (sx_msg_t * msg)
   vlib_put_frame_to_node (vm, to_node_index, f);
 }
 
-always_inline void sx_msg_free (sx_server_main_t *sxsm, sx_msg_t * m)
-{
-  if (!m)
-    return;
-
-  vec_free(m->data);
-  pool_put (sxsm->msg_pool, m);
-}
-
-static int encode_sx_msg(upf_session_t * sx, u8 type, struct pfcp_group * grp, sx_msg_t * msg)
+static int encode_sx_session_msg(upf_session_t * sx, u8 type,
+				 struct pfcp_group * grp, sx_msg_t * msg)
 {
   sx_server_main_t *sxs = &sx_server_main;
   int r = 0;
 
-  memset (msg, 0, sizeof (*msg));
+  init_sx_msg(msg);
 
   msg->seq_no = clib_smp_atomic_add(&sxs->seq_no, 1) % 0x1000000;
+  msg->node = sx->assoc.node;
   msg->data = vec_new(u8, 2048);
 
   msg->hdr->version = 1;
@@ -178,8 +171,56 @@ static int encode_sx_msg(upf_session_t * sx, u8 type, struct pfcp_group * grp, s
   return 0;
 }
 
+static int
+encode_sx_node_msg(upf_node_assoc_t * n, u8 type, struct pfcp_group * grp, sx_msg_t * msg)
+{
+  sx_server_main_t *sxsm = &sx_server_main;
+  upf_main_t *gtm = &upf_main;
+  int r = 0;
+
+  init_sx_msg(msg);
+
+  msg->seq_no = clib_smp_atomic_add(&sxsm->seq_no, 1) % 0x1000000;
+  msg->node = n - gtm->nodes;
+  msg->data = vec_new(u8, 2048);
+
+  msg->hdr->version = 1;
+  msg->hdr->s_flag = 0;
+  msg->hdr->type = type;
+
+  msg->hdr->msg_hdr.sequence[0] = (msg->seq_no >> 16) & 0xff;
+  msg->hdr->msg_hdr.sequence[1] = (msg->seq_no >>  8) & 0xff;
+  msg->hdr->msg_hdr.sequence[2] = msg->seq_no & 0xff;
+
+  _vec_len(msg->data) = offsetof(pfcp_header_t, msg_hdr.ies);
+
+  r = pfcp_encode_msg(type, grp, &msg->data);
+  if (r != 0)
+    {
+      vec_free(msg->data);
+      return r;
+    }
+
+  msg->hdr->length = clib_host_to_net_u16(_vec_len(msg->data) - 4);
+
+  msg->fib_index = n->fib_index;
+  msg->lcl.address = n->lcl_addr;
+  msg->rmt.address = n->rmt_addr;
+  msg->lcl.port = clib_host_to_net_u16 (UDP_DST_PORT_SX);
+  msg->rmt.port = clib_host_to_net_u16 (UDP_DST_PORT_SX);
+  clib_warning("PFCP Msg no VRF %d from %U:%d to %U:%d\n",
+	       msg->fib_index,
+	       format_ip46_address, &msg->lcl.address, IP46_TYPE_ANY,
+	       clib_net_to_host_u16 (msg->lcl.port),
+	       format_ip46_address, &msg->rmt.address, IP46_TYPE_ANY,
+	       clib_net_to_host_u16 (msg->rmt.port));
+
+  return 0;
+}
+
 static int upf_pfcp_server_rx_msg(sx_msg_t * msg)
 {
+  sx_server_main_t *sxsm = &sx_server_main;
   int len = vec_len(msg->data);
   u8 * seq_no;
 
@@ -214,27 +255,94 @@ static int upf_pfcp_server_rx_msg(sx_msg_t * msg)
       return -1;
     }
 
+  msg->node = ~0;
+
   seq_no = (msg->hdr->s_flag) ?
     &msg->hdr->session_hdr.sequence[0] : &msg->hdr->msg_hdr.sequence[0];
   msg->seq_no = (seq_no[0] << 16) |  (seq_no[1] << 8) |  seq_no[2];
 
-  /* TODO: duplicate message detection, resent last reply */
+  switch (msg->hdr->type)
+    {
+    case PFCP_HEARTBEAT_REQUEST:
+    case PFCP_PFD_MANAGEMENT_REQUEST:
+    case PFCP_ASSOCIATION_SETUP_REQUEST:
+    case PFCP_ASSOCIATION_UPDATE_REQUEST:
+    case PFCP_ASSOCIATION_RELEASE_REQUEST:
+    case PFCP_NODE_REPORT_REQUEST:
+    case PFCP_SESSION_SET_DELETION_REQUEST:
+    case PFCP_SESSION_ESTABLISHMENT_REQUEST:
+    case PFCP_SESSION_MODIFICATION_REQUEST:
+    case PFCP_SESSION_DELETION_REQUEST:
+    case PFCP_SESSION_REPORT_REQUEST:
+      /* TODO: duplicate request detection, resent last reply */
+      upf_pfcp_handle_msg(msg);
+      break;
 
-  upf_pfcp_handle_msg(msg);
+    case PFCP_HEARTBEAT_RESPONSE:
+    case PFCP_PFD_MANAGEMENT_RESPONSE:
+    case PFCP_ASSOCIATION_SETUP_RESPONSE:
+    case PFCP_ASSOCIATION_UPDATE_RESPONSE:
+    case PFCP_ASSOCIATION_RELEASE_RESPONSE:
+    case PFCP_VERSION_NOT_SUPPORTED_RESPONSE:
+    case PFCP_NODE_REPORT_RESPONSE:
+    case PFCP_SESSION_SET_DELETION_RESPONSE:
+    case PFCP_SESSION_ESTABLISHMENT_RESPONSE:
+    case PFCP_SESSION_MODIFICATION_RESPONSE:
+    case PFCP_SESSION_DELETION_RESPONSE:
+    case PFCP_SESSION_REPORT_RESPONSE:
+      {
+	sx_msg_t * req;
+	uword *p;
+
+	p = hash_get (sxsm->request_q, msg->seq_no);
+	clib_warning("Msg Seq No: %u, %p, idx %u\n", msg->seq_no, p, p ? p[0] : ~0);
+	if (!p)
+	  break;
+
+	req = pool_elt_at_index(sxsm->msg_pool, p[0]);
+	hash_unset (sxsm->request_q, msg->seq_no);
+	upf_pfcp_server_stop_timer(req->timer);
+
+	msg->node = req->node;
+
+	sx_msg_free(sxsm, req);
+
+	upf_pfcp_handle_msg(msg);
+
+	break;
+      }
+
+    default:
+      break;
+    }
 
   return 0;
 }
 
-static sx_msg_t * build_sx_msg(upf_session_t * sx, u8 type, struct pfcp_group * grp)
+static sx_msg_t * build_sx_session_msg(upf_session_t * sx, u8 type, struct pfcp_group * grp)
 {
   sx_server_main_t *sxsm = &sx_server_main;
   sx_msg_t * msg;
   int r = 0;
 
   pool_get_aligned (sxsm->msg_pool, msg, CLIB_CACHE_LINE_BYTES);
-  memset (msg, 0, sizeof (*msg));
+  if ((r = encode_sx_session_msg(sx, type, grp, msg)) != 0)
+    {
+      pool_put (sxsm->msg_pool, msg);
+      return NULL;
+    }
 
-  if ((r = encode_sx_msg(sx, type, grp, msg)) != 0)
+  return msg;
+}
+
+static sx_msg_t * build_sx_node_msg(upf_node_assoc_t * n, u8 type, struct pfcp_group * grp)
+{
+  sx_server_main_t *sxsm = &sx_server_main;
+  sx_msg_t * msg;
+  int r = 0;
+
+  pool_get_aligned (sxsm->msg_pool, msg, CLIB_CACHE_LINE_BYTES);
+  if ((r = encode_sx_node_msg(n, type, grp, msg)) != 0)
     {
       pool_put (sxsm->msg_pool, msg);
       return NULL;
@@ -253,14 +361,14 @@ int upf_pfcp_send_request(upf_session_t * sx, u8 type, struct pfcp_group *grp)
   msg = clib_mem_alloc_no_fail(sizeof(*msg));
   if (msg)
     {
-      if ((r = encode_sx_msg(sx, type, grp, msg)) != 0)
+      if ((r = encode_sx_session_msg(sx, type, grp, msg)) != 0)
 	{
 	  clib_mem_free(msg);
 	  goto out_free;
 	}
 
       gtp_debug ("sending NOTIFY event %p", msg);
-      vlib_process_signal_event_mt(vm, sx_api_process_node.index, EVENT_NOTIFY, (uword)msg);
+      vlib_process_signal_event_mt(vm, sx_api_process_node.index, EVENT_TX, (uword)msg);
     }
 
  out_free:
@@ -268,16 +376,83 @@ int upf_pfcp_send_request(upf_session_t * sx, u8 type, struct pfcp_group *grp)
   return r;
 }
 
-void upf_pfcp_server_send_request(upf_session_t * sx, u8 type, struct pfcp_group *grp)
+static void
+enqueue_request(sx_msg_t * msg, u32 n1, u32 t1)
 {
   sx_server_main_t *sxsm = &sx_server_main;
+  u32 id = msg - sxsm->msg_pool;
+
+  clib_warning("Msg Seq No: %u, idx %u\n", msg->seq_no, id);
+  msg->n1 = n1;
+  msg->t1 = t1;
+
+  hash_set (sxsm->request_q, msg->seq_no, id);
+  msg->timer = upf_pfcp_server_start_timer(PFCP_SERVER_T1, id, msg->t1);
+}
+
+static void
+request_t1_expired(u32 id)
+{
+  sx_server_main_t *sxsm = &sx_server_main;
+  sx_msg_t * msg = pool_elt_at_index(sxsm->msg_pool, id);
+  upf_main_t *gtm = &upf_main;
+
+  clib_warning("Msg Seq No: %u, %p, idx %u, n1 %u\n", msg->seq_no, msg, id, msg->n1);
+
+  if (--msg->n1 != 0)
+    {
+      clib_warning("resend...\n");
+      msg->timer = upf_pfcp_server_start_timer(PFCP_SERVER_T1, id, msg->t1);
+      upf_pfcp_send_data(msg);
+    }
+  else
+    {
+      u8 type = msg->hdr->type;
+      u32 node = msg->node;
+
+      clib_warning("abort...\n");
+      // TODO: handle communication breakdown....
+
+      hash_unset (sxsm->request_q, msg->seq_no);
+      sx_msg_free(sxsm, msg);
+
+      if (type == PFCP_HEARTBEAT_REQUEST && !pool_is_free_index (gtm->nodes, node))
+	{
+	  upf_node_assoc_t *n = pool_elt_at_index (gtm->nodes, msg->node);
+
+	  sx_release_association(n);
+	}
+    }
+}
+
+static void
+upf_pfcp_server_send_request(sx_msg_t * msg)
+{
+  enqueue_request(msg, 3, 10);
+  upf_pfcp_send_data(msg);
+}
+
+static void
+upf_pfcp_server_send_session_request(upf_session_t * sx, u8 type, struct pfcp_group *grp)
+{
   sx_msg_t * msg;
 
-  if ((msg = build_sx_msg(sx, type, grp)))
+  if ((msg = build_sx_session_msg(sx, type, grp)))
     {
       clib_warning("Msg: %p\n", msg);
-      upf_pfcp_send_data(msg);
-      sx_msg_free(sxsm, msg);
+      upf_pfcp_server_send_request(msg);
+    }
+}
+
+static void
+upf_pfcp_server_send_node_request(upf_node_assoc_t * n, u8 type, struct pfcp_group *grp)
+{
+  sx_msg_t * msg;
+
+  if ((msg = build_sx_node_msg(n, type, grp)))
+    {
+      clib_warning("Node Msg: %p\n", msg);
+      upf_pfcp_server_send_request(msg);
     }
 }
 
@@ -396,7 +571,7 @@ upf_pfcp_session_usage_report(upf_session_t *sx, f64 now)
 	}
     }
 
-  upf_pfcp_server_send_request(sx, PFCP_SESSION_REPORT_REQUEST, &req.grp);
+  upf_pfcp_server_send_session_request(sx, PFCP_SESSION_REPORT_REQUEST, &req.grp);
 
   pfcp_free_msg(PFCP_SESSION_REPORT_REQUEST, &req.grp);
 }
@@ -569,9 +744,44 @@ upf_pfcp_session_urr_timer(upf_session_t *sx, f64 now, f64 cnow)
     }
 
   if (send_report)
-    upf_pfcp_server_send_request(sx, PFCP_SESSION_REPORT_REQUEST, &req.grp);
+    upf_pfcp_server_send_session_request(sx, PFCP_SESSION_REPORT_REQUEST, &req.grp);
 
   pfcp_free_msg(PFCP_SESSION_REPORT_REQUEST, &req.grp);
+}
+
+void upf_pfcp_server_stop_timer(u32 handle)
+{
+  sx_server_main_t *sxsm = &sx_server_main;
+
+  TW (tw_timer_stop) (&sxsm->timer, handle);
+}
+
+u32 upf_pfcp_server_start_timer(u8 type, u32 id, u32 seconds)
+{
+  sx_server_main_t *sxsm = &sx_server_main;
+  i64 interval = seconds * sxsm->timer.ticks_per_second;
+
+  ASSERT(type < 8);
+  ASSERT((id & 0xff000000) == 0);
+
+  return TW (tw_timer_start) (&sxsm->timer, ((0x80 | type) << 24) | id, 0, interval);
+}
+
+void upf_server_send_heartbeat(u32 node_idx)
+{
+  sx_server_main_t *sxsm = &sx_server_main;
+  pfcp_heartbeat_request_t req;
+  upf_main_t *gtm = &upf_main;
+  upf_node_assoc_t *n;
+
+  n = pool_elt_at_index (gtm->nodes, node_idx);
+
+  memset(&req, 0, sizeof(req));
+  SET_BIT(req.grp.fields, HEARTBEAT_REQUEST_RECOVERY_TIME_STAMP);
+  req.recovery_time_stamp = sxsm->start_time;
+
+  upf_pfcp_server_send_node_request(n, PFCP_HEARTBEAT_REQUEST, &req.grp);
+
 }
 
 static uword
@@ -630,18 +840,23 @@ sx_process (vlib_main_t * vm,
 	    break;
 	  }
 
-	case EVENT_NOTIFY:
+	case EVENT_TX:
 	  {
 	    for (int i = 0; i < vec_len (event_data); i++)
 	      {
-		sx_msg_t * msg;
+		sx_msg_t * tx = (sx_msg_t *)event_data[i];
 
-		pool_get_aligned (sxsm->msg_pool, msg, CLIB_CACHE_LINE_BYTES);
-		memcpy(msg, (sx_msg_t *)event_data[i], sizeof(*msg));
-		clib_mem_free((sx_msg_t *)event_data[i]);
+		if (!pool_is_free_index (gtm->nodes, tx->node))
+		  {
+		    sx_msg_t * msg;
 
-		upf_pfcp_send_data(msg);
-		sx_msg_free(sxsm, msg);
+		    pool_get_aligned (sxsm->msg_pool, msg, CLIB_CACHE_LINE_BYTES);
+		    *msg = *tx;
+
+		    upf_pfcp_server_send_request(msg);
+		  }
+
+		clib_mem_free(tx);
 	      }
 	    break;
 	  }
@@ -675,19 +890,35 @@ sx_process (vlib_main_t * vm,
 
       for (int i = 0; i < vec_len (expired); i++)
 	{
-	  u8 tid = expired[i] >> 24;
-
-	  if ((tid & 0x80) == 0)
+	  switch (expired[i] >> 24)
 	    {
-	      const u32 si = expired[i] & 0x7FFFFFFF;
-	      upf_session_t *sx;
+	    case 0 ... 0x7f:
+	      {
+		const u32 si = expired[i] & 0x7FFFFFFF;
+		upf_session_t *sx;
 
-	      if (pool_is_free_index (gtm->sessions, si))
-		continue;
+		if (pool_is_free_index (gtm->sessions, si))
+		  continue;
 
-	      gtp_debug("wheel current tick: %u", sxsm->timer.current_tick);
-	      sx = pool_elt_at_index (gtm->sessions, si);
-	      upf_pfcp_session_urr_timer(sx, sxsm->now, now);
+		gtp_debug("wheel current tick: %u", sxsm->timer.current_tick);
+		sx = pool_elt_at_index (gtm->sessions, si);
+		upf_pfcp_session_urr_timer(sx, sxsm->now, now);
+	      }
+	      break;
+
+	    case 0x80 | PFCP_SERVER_HB_TIMER:
+	      clib_warning("PFCP Server Heartbeat Timeout: %u", expired[i] & 0x00FFFFFF);
+	      upf_server_send_heartbeat(expired[i] & 0x00FFFFFF);
+	      break;
+
+	    case 0x80 | PFCP_SERVER_T1:
+	      clib_warning("PFCP Server T1 Timeout: %u", expired[i] & 0x00FFFFFF);
+	      request_t1_expired(expired[i] & 0x00FFFFFF);
+	      break;
+
+	    default:
+	      clib_warning("timeout for unknown id: %u", expired[i] >> 24);
+	      break;
 	    }
 	}
 
@@ -707,11 +938,14 @@ sx_process (vlib_main_t * vm,
 
 void upf_pfcp_handle_input (vlib_main_t * vm, vlib_buffer_t *b, int is_ip4)
 {
+  upf_main_t * gtm = &upf_main;
+  ip46_address_fib_t key;
   udp_header_t *udp;
   ip4_header_t *ip4;
   ip6_header_t *ip6;
   sx_msg_t * msg;
   u8 * data;
+  uword *p;
 
   /* signal Sx process to handle data */
   msg = clib_mem_alloc_no_fail(sizeof(*msg));
@@ -738,6 +972,17 @@ void upf_pfcp_handle_input (vlib_main_t * vm, vlib_buffer_t *b, int is_ip4)
 
   msg->lcl.port = udp->dst_port;
   msg->rmt.port = udp->src_port;
+
+  key.addr = msg->lcl.address;
+  key.fib_index = msg->fib_index;
+
+  p = hash_get_mem (gtm->pfcp_endpoint_index, &key);
+  if (!p)
+    {
+      clib_mem_free (msg);
+      return;
+    }
+  msg->pfcp_endpoint = p[0];
 
   msg->data = vec_new(u8, vlib_buffer_length_in_chain (vm, b));
   vlib_buffer_contents (vm, vlib_get_buffer_index (vm, b), msg->data);

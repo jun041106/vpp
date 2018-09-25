@@ -389,7 +389,9 @@ upf_node_assoc_t *sx_get_association(pfcp_node_id_t *node_id)
   return pool_elt_at_index (gtm->nodes, p[0]);
 }
 
-upf_node_assoc_t *sx_new_association(pfcp_node_id_t *node_id)
+upf_node_assoc_t *
+sx_new_association(u32 fib_index, ip46_address_t *lcl_addr,
+		   ip46_address_t *rmt_addr, pfcp_node_id_t *node_id)
 {
   upf_main_t *gtm = &upf_main;
   upf_node_assoc_t *n;
@@ -398,6 +400,9 @@ upf_node_assoc_t *sx_new_association(pfcp_node_id_t *node_id)
   memset (n, 0, sizeof (*n));
   n->sessions = ~0;
   n->node_id = *node_id;
+  n->fib_index = fib_index;
+  n->lcl_addr = *lcl_addr;
+  n->rmt_addr = *rmt_addr;
 
   switch (node_id->type)
     {
@@ -417,9 +422,13 @@ upf_node_assoc_t *sx_new_association(pfcp_node_id_t *node_id)
 
 void sx_release_association(upf_node_assoc_t *n)
 {
+  sx_server_main_t *sxsm = &sx_server_main;
   upf_main_t *gtm = &upf_main;
   u32 node_id = n - gtm->nodes;
   u32 idx = n->sessions;
+  u32 * msgs = NULL;
+  sx_msg_t * msg;
+  u32 * m;
 
   switch (n->node_id.type)
     {
@@ -451,7 +460,18 @@ void sx_release_association(upf_node_assoc_t *n)
 
   ASSERT(n->sessions == ~0);
 
-  pool_put(gtm->nodes, n);
+  pool_foreach (msg, sxsm->msg_pool,
+    ({
+      if (msg->node == node_id)
+	vec_add1(msgs, msg - sxsm->msg_pool);
+    }));
+  vec_foreach (m, msgs)
+    {
+      msg = pool_elt_at_index(sxsm->msg_pool, *m);
+      hash_unset (sxsm->request_q, msg->seq_no);
+      upf_pfcp_server_stop_timer(msg->timer);
+      sx_msg_free(sxsm, msg);
+    }
 }
 
 static void node_assoc_attach_session(upf_node_assoc_t *n, upf_session_t *sx)
@@ -2406,6 +2426,18 @@ format_sx_node_association(u8 * s, va_list * args)
     s = format(s, "\n  %u Session(s)\n", i);
   else
     s = format(s, "%u\n", i);
+
+  return s;
+}
+
+u8 *
+format_pfcp_endpoint(u8 * s, va_list * args)
+{
+  upf_pfcp_endpoint_t *ep = va_arg (*args, upf_pfcp_endpoint_t *);
+
+  s = format(s, "%U [@%u]",
+	     format_ip46_address, &ep->key.addr, IP46_TYPE_ANY,
+	     ep->key.fib_index);
 
   return s;
 }

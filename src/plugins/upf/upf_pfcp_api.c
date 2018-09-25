@@ -384,7 +384,37 @@ handle_heartbeat_request(sx_msg_t * req, pfcp_heartbeat_request_t *msg)
 static int
 handle_heartbeat_response(sx_msg_t * req, pfcp_heartbeat_response_t *msg)
 {
-  return -1;
+  upf_main_t *gtm = &upf_main;
+  upf_node_assoc_t *n;
+
+  if (req->node == ~0 || pool_is_free_index (gtm->nodes, req->node))
+    return -1;
+
+  n = pool_elt_at_index (gtm->nodes, req->node);
+
+  if (msg->recovery_time_stamp > n->recovery_time_stamp)
+    sx_release_association(n);
+  else if (msg->recovery_time_stamp < n->recovery_time_stamp)
+    {
+      /* 3GPP TS 23.007, Sect. 19A:
+       *
+       * If the value of a Recovery Time Stamp previously stored for a peer is larger
+       * than the Recovery Time Stamp value received in the Heartbeat Response message
+       * or the PFCP message, this indicates a possible race condition (newer message
+       * arriving before the older one). The received Sx node related message and the
+       * received new Recovery Time Stamp value shall be discarded and an error may
+       * be logged.
+       */
+      return -1;
+    }
+  else
+    {
+      clib_warning("restarting HB timer\n");
+      n->heartbeat_handle = upf_pfcp_server_start_timer
+	(PFCP_SERVER_HB_TIMER, n - gtm->nodes, PFCP_HB_INTERVAL);
+    }
+
+  return 0;
 }
 
 static int
@@ -404,6 +434,7 @@ handle_association_setup_request(sx_msg_t * req, pfcp_association_setup_request_
 {
   sx_server_main_t *sx = &sx_server_main;
   pfcp_association_setup_response_t resp;
+  upf_main_t *gtm = &upf_main;
   upf_node_assoc_t *n;
   int r = 0;
 
@@ -419,17 +450,31 @@ handle_association_setup_request(sx_msg_t * req, pfcp_association_setup_request_
   n = sx_get_association(&msg->request.node_id);
   if (n)
     {
-      if (n->recovery_time_stamp != msg->recovery_time_stamp)
+      if (msg->recovery_time_stamp > n->recovery_time_stamp)
 	sx_release_association(n);
-      else
+      else if (msg->recovery_time_stamp == n->recovery_time_stamp)
 	{
 	  r = -1;
-	  // TODO: maybe handle Node-Id reuse with shutdown of old Assoc?
+	  /* TODO: handle late resend ???? */
 	  goto out_send_resp;
+	}
+      else if (msg->recovery_time_stamp < n->recovery_time_stamp)
+	{
+	  /* 3GPP TS 23.007, Sect. 19A:
+	   *
+	   * If the value of a Recovery Time Stamp previously stored for a peer is larger
+	   * than the Recovery Time Stamp value received in the Heartbeat Response message
+	   * or the PFCP message, this indicates a possible race condition (newer message
+	   * arriving before the older one). The received Sx node related message and the
+	   * received new Recovery Time Stamp value shall be discarded and an error may
+	   * be logged.
+	   */
+	  return -1;
 	}
     }
 
-  n = sx_new_association(&msg->request.node_id);
+  n = sx_new_association(req->fib_index, &req->lcl.address, &req->rmt.address,
+			 &msg->request.node_id);
   n->recovery_time_stamp = msg->recovery_time_stamp;
 
   SET_BIT(resp.grp.fields, ASSOCIATION_SETUP_RESPONSE_UP_FUNCTION_FEATURES);
@@ -442,9 +487,15 @@ handle_association_setup_request(sx_msg_t * req, pfcp_association_setup_request_
 
  out_send_resp:
   if (r == 0)
-    resp.response.cause = PFCP_CAUSE_REQUEST_ACCEPTED;
+    {
+      n->heartbeat_handle = upf_pfcp_server_start_timer
+	(PFCP_SERVER_HB_TIMER, n - gtm->nodes, PFCP_HB_INTERVAL);
+
+      resp.response.cause = PFCP_CAUSE_REQUEST_ACCEPTED;
+    }
 
   upf_pfcp_send_response(req, 0, PFCP_ASSOCIATION_SETUP_RESPONSE, &resp.grp);
+
   return r;
 }
 

@@ -479,6 +479,10 @@ typedef struct {
 } upf_peer_t;
 
 typedef struct {
+  ip46_address_fib_t key;
+} upf_pfcp_endpoint_t;
+
+typedef struct {
   ip46_address_t ip;
   u32 teid;
   u32 mask;
@@ -499,13 +503,21 @@ typedef struct {
   pfcp_node_id_t node_id;
   pfcp_recovery_time_stamp_t recovery_time_stamp;
 
+  u32 fib_index;
+  ip46_address_t rmt_addr;
+  ip46_address_t lcl_addr;
+
   u32 sessions;
+  u32 heartbeat_handle;
 } upf_node_assoc_t;
 
 #define UPF_MAPPING_BUCKETS      1024
 #define UPF_MAPPING_MEMORY_SIZE  64 << 20
 
 typedef struct {
+  upf_pfcp_endpoint_t *pfcp_endpoints;
+  uword *pfcp_endpoint_index;
+
   /* vector of network instances */
   upf_nwi_t *nwis;
   uword *nwi_index_by_name;
