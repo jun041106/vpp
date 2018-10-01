@@ -101,6 +101,9 @@ typedef struct {
 } __attribute__ ((packed)) timeout_msg_t;
 
 typedef struct flow_entry {
+  /* Required for pool_get_aligned  */
+  CLIB_CACHE_LINE_ALIGN_MARK (cacheline0);
+
     /* flow signature */
     flow_signature_t sig;
     u16 tcp_state;
