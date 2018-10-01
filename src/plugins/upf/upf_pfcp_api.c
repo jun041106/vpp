@@ -257,7 +257,11 @@ format_ipfilter_address_port(u8 * s,va_list * args)
       s = format(s, "assigned");
     }
   else
-    s = format(s, "%U", format_ip46_address, &ip->address);
+    {
+      s = format(s, "%U", format_ip46_address, &ip->address, IP46_TYPE_ANY);
+      if (ip->mask != (ip46_address_is_ip4(&ip->address) ? 32 : 128))
+	s = format(s, "/%u", ip->mask);
+    }
 
   if (port->min != 0 || port->max != (u16)~0)
     {
