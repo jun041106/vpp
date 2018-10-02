@@ -545,8 +545,8 @@ typedef struct {
 typedef struct {
   regex_t host;
   regex_t path;
-  u8 *src_ip;
-  u8 *dst_ip;
+  ip46_address_t src_ip;
+  ip46_address_t dst_ip;
 } upf_rule_args_t;
 
 #define UPF_MAPPING_BUCKETS      1024
