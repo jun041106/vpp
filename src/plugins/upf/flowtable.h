@@ -142,7 +142,7 @@ typedef struct flow_entry {
 
 /* Timers (in seconds) */
 #define TIMER_DEFAULT_LIFETIME (60)
-#define TIMER_MAX_LIFETIME (300)
+#define TIMER_MAX_LIFETIME (3000)
 
 /* Default max number of flows to expire during one run.
  * 256 is the max number of packets in a vector, so this is a minimum
@@ -210,6 +210,10 @@ typedef struct {
 
     /* API dynamically registered base ID. */
     u16 msg_id_base;
+
+    /* Timers  */
+    u16 timer_default_lifetime;
+    u16 timer_max_lifetime;
 } flowtable_main_t;
 
 #endif  /* __flowtable_h__ */

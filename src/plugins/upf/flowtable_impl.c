@@ -40,7 +40,7 @@ flowtable_init_session(flowtable_main_t *fm, flowtable_per_session_t * fmt)
 
     /* init timer wheel */
     fmt->time_index = ~0;
-    for (i = 0; i < TIMER_MAX_LIFETIME; i++)
+    for (i = 0; i < fm->timer_max_lifetime; i++)
     {
         dlist_elt_t * timer_slot;
         pool_get(fmt->timers, timer_slot);
@@ -96,85 +96,42 @@ flowtable_init(vlib_main_t * vm)
   fm->first_msg_index = ~0;
   fm->last_msg_index = 0;
 
+  /* init timers */
+  fm->timer_default_lifetime = TIMER_DEFAULT_LIFETIME;
+  fm->timer_max_lifetime = TIMER_MAX_LIFETIME;
+
   return error;
 }
 
-#if 0
-int
-flowtable_update(u8 is_ip4, u8 ip_src[16], u8 ip_dst[16], u8 ip_upper_proto,
-    u16 port_src, u16 port_dst, u16 lifetime, u8 offloaded, u8 infos[16])
+clib_error_t *
+flowtable_default_timelife_update(u16 value)
 {
-    flow_signature_t sig;
-    flow_entry_t * flow;
-    BVT(clib_bihash_kv) kv;
-    flowtable_main_t * fm = &flowtable_main;
-    uword session_index;
+  clib_error_t * error = 0;
+  flowtable_main_t * fm = &flowtable_main;
 
-    if (is_ip4)
-    {
-        sig.len = sizeof(struct ip4_sig);
-        clib_memcpy(&sig.s.ip4.src, ip_src, 4);
-        clib_memcpy(&sig.s.ip4.dst, ip_dst, 4);
-        sig.s.ip4.proto = ip_upper_proto;
-        sig.s.ip4.port_src = port_src;
-        sig.s.ip4.port_dst = port_dst;
-    } else {
-        sig.len = sizeof(struct ip6_sig);
-        clib_memcpy(&sig.s.ip6.src, ip_src, 16);
-        clib_memcpy(&sig.s.ip6.dst, ip_dst, 16);
-        sig.s.ip6.proto = ip_upper_proto;
-        sig.s.ip6.port_src = port_src;
-        sig.s.ip6.port_dst = port_dst;
-    }
+  if (value > fm->timer_max_lifetime)
+    return clib_error_return (0, "value is too big");
 
-    flow = NULL;
-    kv.key = hash_signature(&sig);
+  fm->timer_default_lifetime = value;
 
-    /* TODO: recover handoff dispatch fun to get the correct node index */
-    for (session_index = 0; session_index < ARRAY_LEN(fm->per_session); session_index++)
-    {
-        flowtable_per_session_t * fmt = &fm->per_session[session_index];
-        if (fmt == NULL)
-            continue;
-
-        if (PREDICT_FALSE(BV(clib_bihash_search) (&fmt->flows_ht, &kv, &kv)))
-        {
-            continue;
-        } else {
-            dlist_elt_t * ht_line;
-            u32 index;
-            u32 ht_line_head_index;
-
-            flow = NULL;
-            ht_line_head_index = (u32) kv.value;
-            if (dlist_is_empty(fmt->ht_lines, ht_line_head_index))
-                continue;
-
-            ht_line = pool_elt_at_index(fmt->ht_lines, ht_line_head_index);
-            index = ht_line->next;
-            while (index != ht_line_head_index)
-            {
-                dlist_elt_t * e = pool_elt_at_index(fmt->ht_lines, index);
-                flow = pool_elt_at_index(fm->flows, e->value);
-                if (PREDICT_TRUE(memcmp(&flow->sig, &sig, sig.len) == 0))
-                    break;
-
-                index = e->next;
-            }
-        }
-    }
-
-    if (PREDICT_FALSE(flow == NULL))
-        return -1;  /* flow not found */
-
-    if (lifetime != (u16) ~0)
-    {
-        ASSERT(lifetime < TIMER_MAX_LIFETIME);
-        flow->lifetime = lifetime;
-    }
-    flow->infos.data.offloaded = offloaded;
-    clib_memcpy(flow->infos.data.opaque, infos, sizeof(flow->infos.data.opaque));
-
-    return 0;
+  return error;
 }
-#endif
+
+u16
+flowtable_default_timelife_get(void)
+{
+  flowtable_main_t * fm = &flowtable_main;
+
+  return fm->timer_default_lifetime;
+}
+
+clib_error_t *
+flowtable_max_timelife_update(u16 value)
+{
+  clib_error_t * error = 0;
+  flowtable_main_t * fm = &flowtable_main;
+
+  fm->timer_max_lifetime = value;
+
+  return error;
+}

@@ -37,11 +37,6 @@ typedef struct {
 clib_error_t *
 flowtable_init(vlib_main_t * vm);
 
-#if 0
-int flowtable_update(u8 is_ip4, u8 ip_src[16], u8 ip_dst[16], u8 ip_upper_proto,
-    u16 port_src, u16 port_dst, u16 lifetime, u8 offloaded, u8 infos[16]);
-#endif
-
 always_inline u64
 hash_signature(flow_signature_t const * sig)
 {
@@ -320,10 +315,11 @@ flowtable_timer_expire(flowtable_main_t * fm, flowtable_per_session_t * fmt,
 always_inline void
 timer_wheel_insert_flow(flowtable_per_session_t * fmt, flow_entry_t * f)
 {
-    u32 timer_slot_head_index;
+  u32 timer_slot_head_index;
+  flowtable_main_t * fm = &flowtable_main;
 
-    timer_slot_head_index = (fmt->time_index + f->lifetime) % TIMER_MAX_LIFETIME;
-    clib_dlist_addtail(fmt->timers, timer_slot_head_index, f->timer_index);
+  timer_slot_head_index = (fmt->time_index + f->lifetime) % fm->timer_max_lifetime;
+  clib_dlist_addtail(fmt->timers, timer_slot_head_index, f->timer_index);
 }
 
 always_inline void
@@ -341,14 +337,14 @@ recycle_flow(flowtable_main_t * fm, flowtable_per_session_t * fmt, u32 now)
 {
     u32 next;
 
-    next = (now + 1) % TIMER_MAX_LIFETIME;
+    next = (now + 1) % fm->timer_max_lifetime;
     while (PREDICT_FALSE(next != now))
     {
         flow_entry_t * f;
         u32 * slot_index = vec_elt_at_index(fmt->timer_wheel, next);
 
         if (PREDICT_FALSE(dlist_is_empty(fmt->timers, *slot_index))) {
-            next = (next + 1) % TIMER_MAX_LIFETIME;
+            next = (next + 1) % fm->timer_max_lifetime;
             continue;
         }
         dlist_elt_t * head = pool_elt_at_index(fmt->timers, *slot_index);
@@ -434,8 +430,8 @@ flowtable_entry_lookup_create(flowtable_main_t * fm,
     f->sig.len = sig->len;
     clib_memcpy(&f->sig, sig, sig->len);
     f->sig_hash = kv->key;
-    f->lifetime = TIMER_DEFAULT_LIFETIME;
-    f->expire = now + TIMER_DEFAULT_LIFETIME;
+    f->lifetime = fm->timer_default_lifetime;
+    f->expire = now + fm->timer_default_lifetime;
 
     /* init UPF fields */
     f->app_index = ~0;
@@ -465,7 +461,8 @@ flowtable_entry_lookup_create(flowtable_main_t * fm,
 static inline void
 timer_wheel_index_update(flowtable_per_session_t * fmt, u32 now)
 {
-    u32 new_index = now % TIMER_MAX_LIFETIME;
+    flowtable_main_t * fm = &flowtable_main;
+    u32 new_index = now % fm->timer_max_lifetime;
 
     if (PREDICT_FALSE(fmt->time_index == ~0))
     {
@@ -612,5 +609,14 @@ flowtable_timer_update(flowtable_per_session_t * fmt, u32 current_time)
 
   flowtable_timer_expire(fm, fmt, current_time);
 }
+
+clib_error_t *
+flowtable_default_timelife_update(u16 value);
+
+clib_error_t *
+flowtable_max_timelife_update(u16 value);
+
+u16
+flowtable_default_timelife_get(void);
 
 #endif  /* __flowtable_impl_h__ */
