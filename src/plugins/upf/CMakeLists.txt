@@ -128,7 +128,7 @@ if(DPDK_INCLUDE_DIR AND DPDK_LIB)
     upf_pfcp_input.c
     upf_pfcp_server.c
     upf_http_redirect_server.c
-    dpi.c
+    upf_adf.c
     upf_timer.c
     flowtable_impl.c
 
@@ -144,7 +144,7 @@ if(DPDK_INCLUDE_DIR AND DPDK_LIB)
     upf_pfcp_api.h
     upf_pfcp_server.h
     upf_http_redirect_server.h
-    dpi.h
+    upf_adf.h
     flowdata.h
     flowtable.h
     flowtable_tcp.h

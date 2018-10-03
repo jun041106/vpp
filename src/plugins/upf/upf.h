@@ -271,10 +271,9 @@ typedef struct {
   u8 outer_header_removal;
   u16 far_id;
   u16 *urr_ids;
-  u8 *app_name;
   u32 app_index;
-  u32 dpi_path_db_id;
-  u32 dpi_host_db_id;
+  u32 adf_path_db_id;
+  u32 adf_host_db_id;
 } upf_pdr_t;
 
 /* Forward Action Rules - Forwarding Parameters */
@@ -528,7 +527,7 @@ typedef struct {
   u32 id;
   regex_t host;
   regex_t path;
-} upf_dpi_rule_t;
+} upf_adr_t;
 
 typedef struct {
   u32 id;
@@ -536,11 +535,11 @@ typedef struct {
   /* Rules hash */
   uword* rules_by_id;
   /* Rules vector */
-  upf_dpi_rule_t *rules;
-  /* DPI DB id */
+  upf_adr_t *rules;
+  /* adf DB id */
   u32 path_db_index;
   u32 host_db_index;
-} upf_dpi_app_t;
+} upf_adf_app_t;
 
 typedef struct {
   regex_t host;
@@ -606,10 +605,10 @@ typedef struct {
   vnet_main_t * vnet_main;
   ethernet_main_t * ethernet_main;
 
-  /* DPI apps hash */
+  /* adf apps hash */
   uword* upf_app_by_name;
-  /* DPI apps vector */
-  upf_dpi_app_t *upf_apps;
+  /* adf apps vector */
+  upf_adf_app_t *upf_apps;
 } upf_main_t;
 
 extern const fib_node_vft_t upf_vft;
