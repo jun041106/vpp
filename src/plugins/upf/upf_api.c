@@ -28,7 +28,7 @@
 #include <vlibmemory/api.h>
 
 #include <upf/upf.h>
-#include <upf/dpi.h>
+#include <upf/upf_adf.h>
 
 /* define message IDs */
 #include <upf/upf_msg_enum.h>

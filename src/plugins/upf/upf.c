@@ -33,7 +33,7 @@
 
 #include "flowtable.h"
 #include <upf/flowtable_impl.h>
-#include <upf/dpi.h>
+#include <upf/upf_adf.h>
 
 int upf_enable_disable (upf_main_t * sm, u32 sw_if_index,
 			  int enable_disable)

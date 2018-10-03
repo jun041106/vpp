@@ -435,9 +435,9 @@ flowtable_entry_lookup_create(flowtable_main_t * fm,
 
     /* init UPF fields */
     f->app_index = ~0;
-    f->client_direction = ~0;
-    f->client_pdr_id = ~0;
-    f->server_pdr_id = ~0;
+    f->initiator_direction = ~0;
+    f->initiator_pdr_id = ~0;
+    f->responder_pdr_id = ~0;
 
     /* update stats */
     f->stats[direction].pkts++;
@@ -590,7 +590,7 @@ flowtable_get_flow(u8 * packet, flowtable_per_session_t * fmt,
 
   if (created == 1)
     {
-      (*flow)->client_direction = direction;
+      (*flow)->initiator_direction = direction;
     }
 
   /* timer management */

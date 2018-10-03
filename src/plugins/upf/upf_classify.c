@@ -36,7 +36,7 @@
 #include <upf/flowtable.h>
 #include <upf/flowtable_impl.h>
 
-#include <upf/dpi.h>
+#include <upf/upf_adf.h>
 
 #if CLIB_DEBUG > 0
 #define gtp_debug clib_warning
@@ -120,7 +120,7 @@ upf_classify (vlib_main_t * vm, vlib_node_runtime_t * node,
   while (n_left_from > 0)
     {
       upf_pdr_t * pdr = NULL;
-      upf_pdr_t * dpi_pdr = NULL;
+      upf_pdr_t * adf_pdr = NULL;
       upf_far_t * far = NULL;
       u32 n_left_to_next;
       vlib_buffer_t * b;
@@ -154,48 +154,51 @@ upf_classify (vlib_main_t * vm, vlib_node_runtime_t * node,
 
 	  flowtable_get_flow(pl, &sess->fmt, &flow, is_ip4, direction, current_time);
 	
-	  gtp_debug("client direction: %u, packet direction: %u",
-		    flow->client_direction, direction);
+	  gtp_debug("initiator direction: %u, packet direction: %u",
+		    flow->initiator_direction, direction);
 
-	  /* Check if client PDR is cached in this flow */
-	  if (flow->client_direction == direction)
+	  /* Check if initiator PDR is cached in this flow */
+	  if (flow->initiator_direction == direction)
 	    {
-	      if (flow->client_pdr_id != ~0)
+	      if (flow->initiator_pdr_id != ~0)
 		{
-		  pdr = sx_get_pdr_by_id(active, flow->client_pdr_id);
+		  pdr = sx_get_pdr_by_id(active, flow->initiator_pdr_id);
 		}
 	    }
 	  else
-	  /* Check if server PDR is cached in this flow */
+	  /* Check if responder PDR is cached in this flow */
 	    {
-	      if (flow->server_pdr_id != ~0)
+	      if (flow->responder_pdr_id != ~0)
 		{
-		  pdr = sx_get_pdr_by_id(active, flow->server_pdr_id);
+		  pdr = sx_get_pdr_by_id(active, flow->responder_pdr_id);
 		}
 	    }
 
 	  if (pdr == NULL)
 	    {
-	      if ((flow->client_direction != direction) && flow->app_index != ~0)
+	      if ((flow->initiator_direction != direction) && flow->app_index != ~0)
 	      {
-		pdr = upf_get_dpi_pdr_by_name(active, direction, flow->app_index);
-		flow->server_pdr_id = pdr->id;
-		gtp_debug("server PDR: %u, app_index: %u",
-			  flow->server_pdr_id, flow->app_index);
+		pdr = upf_get_adf_pdr_by_name(active, direction, flow->app_index);
+		if (pdr)
+		  {
+		    flow->responder_pdr_id = pdr->id;
+		    gtp_debug("responder PDR: %u, app_index: %u",
+			      flow->responder_pdr_id, flow->app_index);
+		  }
 	      }
 	    }
 
 	  if (pdr == NULL)
 	    {
 	      acl = is_ip4 ? active->sdf[direction].ip4 : active->sdf[direction].ip6;
-	      dpi_pdr = upf_get_highest_dpi_pdr(active, direction);
+	      adf_pdr = upf_get_highest_adf_pdr(active, direction);
 
 	  if (acl == NULL)
 	    {
 	      gtpu_intf_tunnel_key_t key;
 	      uword *p;
 
-	      if (dpi_pdr == NULL)
+	      if (adf_pdr == NULL)
 	        {
 	      key.src_intf = vnet_buffer (b)->gtpu.src_intf;
 	      key.teid = vnet_buffer (b)->gtpu.teid;
@@ -213,7 +216,7 @@ upf_classify (vlib_main_t * vm, vlib_node_runtime_t * node,
 		}
               else
                 {
-                  pdr = dpi_pdr;
+                  pdr = adf_pdr;
                 }
 	    }
 	  else
@@ -273,14 +276,14 @@ upf_classify (vlib_main_t * vm, vlib_node_runtime_t * node,
 
 		      if (pdr != NULL)
 		        {
-		          if (dpi_pdr != NULL)
+		          if (adf_pdr != NULL)
 		            {
-		              pdr = (pdr->precedence < dpi_pdr->precedence) ? pdr : dpi_pdr;
+		              pdr = (pdr->precedence < adf_pdr->precedence) ? pdr : adf_pdr;
 		            }
 		        }
 		      else
 		        {
-		          pdr = dpi_pdr;
+		          pdr = adf_pdr;
 		        }
 		    }
 		}
@@ -290,15 +293,15 @@ upf_classify (vlib_main_t * vm, vlib_node_runtime_t * node,
 		{
 		  far = sx_get_far_by_id(active, pdr->far_id);
 
-		  if ((flow->client_direction == direction) &&
-		      (flow->client_pdr_id == ~0))
+		  if ((flow->initiator_direction == direction) &&
+		      (flow->initiator_pdr_id == ~0))
 		    {
 		      upf_update_flow_app_index(flow, pdr, pl, is_ip4);
 		      if (flow->app_index != ~0)
 			{
-			  flow->client_pdr_id = pdr->id;
-			  gtp_debug("client PDR: %u, app_index: %u",
-				    flow->client_pdr_id, flow->app_index);
+			  flow->initiator_pdr_id = pdr->id;
+			  gtp_debug("initiator PDR: %u, app_index: %u",
+				    flow->initiator_pdr_id, flow->app_index);
 			}
 		    }
 
