@@ -21,14 +21,14 @@
 #include <stddef.h>
 #include <upf/upf.h>
 
-typedef struct {
-  /* App index */
-  u32 index;
-  /* Regex expression */
-  regex_t rule;
-} upf_adf_args_t;
+#if CLIB_DEBUG > 0
+#define adf_debug clib_warning
+#else
+#define adf_debug(...)				\
+  do { } while (0)
+#endif
 
-int upf_adf_add_multi_regex(upf_adf_args_t * args, u32 * db_index);
+int upf_adf_add_multi_regex(upf_adf_app_t * app, u32 * db_index);
 int upf_adf_lookup(u32 db_index, u8 * str, uint16_t length, u32 * app_index);
 int upf_adf_remove(u32 db_index);
 int upf_adf_get_db_contents(u32 db_index, regex_t ** expressions, u32 ** ids);
@@ -37,13 +37,12 @@ int upf_rule_add_del (upf_main_t * sm, u8 * name, u32 id,
                       int add, upf_rule_args_t * args);
 void foreach_upf_flows (BVT (clib_bihash_kv) * kvp, void * arg);
 
-int upf_adf_get_db_id(u32 app_index, u32 * path_db_index, u32 * host_db_index);
+int upf_adf_get_db_id(u32 app_index, u32 * db_index);
 
 #define MIN(x,y) (((x)<(y))?(x):(y))
 
 always_inline int
-upf_adf_parse_ip4_packet(ip4_header_t * ip4, u32 path_db_id,
-                         u32 host_db_id, u32 * app_index)
+upf_adf_parse_ip4_packet(ip4_header_t * ip4, u32 db_id, u32 * app_index)
 {
   int tcp_payload_len = 0;
   tcp_header_t *tcp = NULL;
@@ -53,14 +52,10 @@ upf_adf_parse_ip4_packet(ip4_header_t * ip4, u32 path_db_id,
   u8 *host_end = NULL;
   u16 uri_length = 0;
   u16 host_length = 0;
+  u8 *url = NULL;
   int res = 0;
-  u32 path_app_index = ~0;
-  u32 host_app_index = ~0;
 
-  if (path_db_id == ~0)
-    return -1;
-
-  if (host_db_id == ~0)
+  if (db_id == ~0)
     return -1;
 
   if (ip4->protocol != IP_PROTOCOL_TCP)
@@ -84,7 +79,6 @@ upf_adf_parse_ip4_packet(ip4_header_t * ip4, u32 path_db_id,
     }
 
   http += sizeof("GET");
-  tcp_payload_len -= sizeof("GET");
 
   version = (u8*)strchr((const char*)http, ' ');
   if (version == NULL)
@@ -92,16 +86,11 @@ upf_adf_parse_ip4_packet(ip4_header_t * ip4, u32 path_db_id,
 
   uri_length = version - http;
 
-  res = upf_adf_lookup(path_db_id, http,
-                       MIN(uri_length, tcp_payload_len),
-                       &path_app_index);
-
-  if ((res < 0) || (path_app_index == ~0))
-    return -1;
-
-  host = (u8*)strstr((const char*)http, "Host");
+  host = (u8*)strstr((const char*)http, "Host:");
   if (host == NULL)
     return -1;
+
+  host += sizeof("Host:");
 
   host_end = (u8*)strchr((const char*)host, '\r');
   if (host_end == NULL)
@@ -109,19 +98,17 @@ upf_adf_parse_ip4_packet(ip4_header_t * ip4, u32 path_db_id,
 
   host_length = host_end - host;
 
-  res = upf_adf_lookup(host_db_id, host,
-                       MIN(host_length, tcp_payload_len),
-                       &host_app_index);
+  vec_add(url, "http://", sizeof("http://"));
+  vec_add(url, host, host_length);
+  vec_add(url, http, uri_length);
 
-  if ((res < 0) || (host_app_index == ~0))
-    return -1;
+  adf_debug("URL: %v", url);
 
-  if (path_app_index != host_app_index)
-    return -1;
+  res = upf_adf_lookup(db_id, url, vec_len(url), app_index);
 
-  *app_index = host_app_index;
+  vec_free(url);
 
-  return 0;
+  return res;
 }
 
 always_inline upf_pdr_t *
@@ -171,8 +158,7 @@ upf_update_flow_app_index (flow_entry_t * flow, upf_pdr_t * pdr,
       if (pdr->app_index != ~0)
         {
           upf_adf_parse_ip4_packet((ip4_header_t *)pl,
-                                   pdr->adf_path_db_id,
-                                   pdr->adf_host_db_id,
+                                   pdr->adf_db_id,
                                    &flow->app_index);
         }
     }
