@@ -42,10 +42,8 @@ int upf_adf_get_db_id(u32 app_index, u32 * db_index);
 #define MIN(x,y) (((x)<(y))?(x):(y))
 
 always_inline int
-upf_adf_parse_ip4_packet(ip4_header_t * ip4, u32 db_id, u32 * app_index)
+upf_adf_parse_tcp_payload(tcp_header_t * tcp, u32 db_id, u32 * app_index)
 {
-  int tcp_payload_len = 0;
-  tcp_header_t *tcp = NULL;
   u8 *http = NULL;
   u8 *version = NULL;
   u8 *host = NULL;
@@ -54,20 +52,6 @@ upf_adf_parse_ip4_packet(ip4_header_t * ip4, u32 db_id, u32 * app_index)
   u16 host_length = 0;
   u8 *url = NULL;
   int res = 0;
-
-  if (db_id == ~0)
-    return -1;
-
-  if (ip4->protocol != IP_PROTOCOL_TCP)
-    return -1;
-
-  tcp = (tcp_header_t *) ip4_next_header(ip4);
-
-  tcp_payload_len = clib_net_to_host_u16(ip4->length) -
-                    sizeof(ip4_header_t) - tcp_header_bytes(tcp);
-
-  if (tcp_payload_len < 8)
-    return -1;
 
   http = (u8*)tcp + tcp_header_bytes(tcp);
 
@@ -109,6 +93,52 @@ upf_adf_parse_ip4_packet(ip4_header_t * ip4, u32 db_id, u32 * app_index)
   vec_free(url);
 
   return res;
+}
+
+always_inline int
+upf_adf_parse_ip4_packet(ip4_header_t * ip4, u32 db_id, u32 * app_index)
+{
+  int tcp_payload_len = 0;
+  tcp_header_t *tcp = NULL;
+
+  if (db_id == ~0)
+    return -1;
+
+  if (ip4->protocol != IP_PROTOCOL_TCP)
+    return -1;
+
+  tcp = (tcp_header_t *) ip4_next_header(ip4);
+
+  tcp_payload_len = clib_net_to_host_u16(ip4->length) -
+                    sizeof(ip4_header_t) - tcp_header_bytes(tcp);
+
+  if (tcp_payload_len < 8)
+    return -1;
+
+  return upf_adf_parse_tcp_payload(tcp, db_id, app_index);
+}
+
+always_inline int
+upf_adf_parse_ip6_packet(ip6_header_t * ip6, u32 db_id, u32 * app_index)
+{
+  int tcp_payload_len = 0;
+  tcp_header_t *tcp = NULL;
+
+  if (db_id == ~0)
+    return -1;
+
+  if (ip6->protocol != IP_PROTOCOL_TCP)
+    return -1;
+
+  tcp = (tcp_header_t *) ip6_next_header(ip6);
+
+  tcp_payload_len = clib_net_to_host_u16(ip6->payload_length) -
+                    tcp_header_bytes(tcp);
+
+  if (tcp_payload_len < 8)
+    return -1;
+
+  return upf_adf_parse_tcp_payload(tcp, db_id, app_index);
 }
 
 always_inline upf_pdr_t *
@@ -153,14 +183,21 @@ upf_update_flow_app_index (flow_entry_t * flow, upf_pdr_t * pdr,
   if (flow->app_index != ~0)
     return;
 
+  if (pdr->app_index == ~0)
+    return;
+
   if (is_ip4)
     {
-      if (pdr->app_index != ~0)
-        {
-          upf_adf_parse_ip4_packet((ip4_header_t *)pl,
-                                   pdr->adf_db_id,
-                                   &flow->app_index);
-        }
+      upf_adf_parse_ip4_packet((ip4_header_t *)pl,
+                               pdr->adf_db_id,
+                               &flow->app_index);
+
+    }
+  else
+    {
+      upf_adf_parse_ip6_packet((ip6_header_t *)pl,
+                               pdr->adf_db_id,
+                               &flow->app_index);
     }
 }
 

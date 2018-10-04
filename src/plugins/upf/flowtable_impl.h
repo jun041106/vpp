@@ -255,8 +255,8 @@ queue_expiration_message(flowtable_main_t * fm, u32 ctx_id, flow_stats_t * stats
     msg->ctx_id = ctx_id;
     msg->clt_pkts = stats[0].pkts;
     msg->srv_pkts = stats[1].pkts;
-    msg->clt_Bytes = stats[0].Bytes;
-    msg->srv_Bytes = stats[1].Bytes;
+    msg->clt_bytes = stats[0].bytes;
+    msg->srv_bytes = stats[1].bytes;
 
     if (PREDICT_FALSE(fm->first_msg_index == ~0))
         fm->first_msg_index = fm->last_msg_index;

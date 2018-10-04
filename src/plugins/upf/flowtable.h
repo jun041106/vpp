@@ -88,7 +88,7 @@ typedef struct flow_signature {
 
 typedef struct {
     u32 pkts;
-    u64 Bytes;
+    u64 bytes;
 } flow_stats_t;
 
 typedef struct {
@@ -96,8 +96,8 @@ typedef struct {
     u32 ctx_id;
     u32 clt_pkts;
     u32 srv_pkts;
-    u64 clt_Bytes;
-    u64 srv_Bytes;
+    u64 clt_bytes;
+    u64 srv_bytes;
 } __attribute__ ((packed)) timeout_msg_t;
 
 typedef struct flow_entry {
