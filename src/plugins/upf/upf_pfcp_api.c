@@ -748,8 +748,7 @@ static int handle_create_pdr(upf_session_t *sess, pfcp_create_pdr_t *create_pdr,
 
       create->id = pdr->pdr_id;
       create->app_index = ~0;
-      create->adf_path_db_id = ~0;
-      create->adf_host_db_id = ~0;
+      create->adf_db_id = ~0;
       create->precedence = pdr->precedence;
 
       create->pdi.nwi = nwi - gtm->nwis;
@@ -808,10 +807,9 @@ static int handle_create_pdr(upf_session_t *sess, pfcp_create_pdr_t *create_pdr,
 			  {
 			    app = pool_elt_at_index (gtm->upf_apps, p[0]);
 			    create->app_index = app->id;
-			    upf_adf_get_db_id(app->id, &create->adf_path_db_id,
-					      &create->adf_host_db_id);
-			    gtp_debug("app_id: %s, adf DB id %u",
-				      app->name, create->adf_path_db_id);
+			    upf_adf_get_db_id(app->id, &create->adf_db_id);
+			    gtp_debug("app: %v, ADF DB id %u",
+				      app->name, create->adf_db_id);
 			  }
 		}
 
@@ -938,10 +936,9 @@ static int handle_update_pdr(upf_session_t *sess, pfcp_update_pdr_t *update_pdr,
 				  {
 				    app = pool_elt_at_index (gtm->upf_apps, p[0]);
 				    update->app_index = app->id;
-				    upf_adf_get_db_id(app->id, &update->adf_path_db_id,
-						      &update->adf_host_db_id);
-				    gtp_debug("app_id: %s, adf DB id %u",
-					      app->name, update->adf_path_db_id);
+				    upf_adf_get_db_id(app->id, &update->adf_db_id);
+				    gtp_debug("app: %v, ADF DB id %u",
+					      app->name, update->adf_db_id);
 				  }
 			}
 

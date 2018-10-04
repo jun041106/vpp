@@ -29,13 +29,6 @@
 #include "upf/upf_adf.h"
 #include <upf/upf_pfcp.h>
 
-#if CLIB_DEBUG > 0
-#define adf_debug clib_warning
-#else
-#define adf_debug(...)				\
-  do { } while (0)
-#endif
-
 typedef struct {
   regex_t *expressions;
   u32 *ids;
@@ -54,6 +47,13 @@ static upf_adf_entry_t *upf_adf_db = NULL;
 static void
 upf_adf_cleanup_db_entry(upf_adf_entry_t *entry)
 {
+  regex_t *regex = NULL;
+
+  vec_foreach (regex, entry->expressions)
+    {
+      vec_free(*regex);
+    }
+
   hs_free_database(entry->database);
   hs_free_scratch(entry->scratch);
   vec_free(entry->expressions);
@@ -79,18 +79,14 @@ upf_adf_get_db_contents(u32 db_index, regex_t ** expressions, u32 ** ids)
 }
 
 int
-upf_adf_add_multi_regex(upf_adf_args_t * args, u32 * db_index)
+upf_adf_add_multi_regex(upf_adf_app_t * app, u32 * db_index)
 {
   upf_adf_entry_t *entry = NULL;
   hs_compile_error_t *compile_err = NULL;
-  upf_adf_args_t *arg = NULL;
   int error = 0;
-
-  if (!args)
-    return -1;
-
-  if (vec_len(args) == 0)
-    return -1;
+  u32 index = 0;
+  u32 rule_index = 0;
+  upf_adr_t *rule = NULL;
 
   if (*db_index != ~0)
     {
@@ -110,18 +106,35 @@ upf_adf_add_multi_regex(upf_adf_args_t * args, u32 * db_index)
       *db_index = entry - upf_adf_db;
     }
 
-  vec_foreach (arg, args)
-    {
-      vec_add1(entry->ids, arg->index);
-      vec_add1(entry->expressions, arg->rule);
-      vec_add1(entry->flags, HS_FLAG_DOTALL);
-    }
+  /* *INDENT-OFF* */
+  hash_foreach(rule_index, index, app->rules_by_id,
+  ({
+     regex_t regex = NULL;
+     rule = pool_elt_at_index(app->rules, index);
+
+     vec_add1(entry->ids, app->id);
+
+     vec_add(regex, ".*\\Q", 4);
+     vec_add(regex, rule->host, vec_len(rule->host));
+     vec_add(regex, "\\E.*\\Q", 6);
+     vec_add(regex, rule->path, vec_len(rule->path));
+     vec_add(regex, "\\E.*", 4);
+     vec_add1(regex, 0);
+
+     adf_debug("app id: %u, regex: %s", app->id, regex);
+
+     vec_add1(entry->expressions, regex);
+
+     vec_add1(entry->flags, HS_FLAG_SINGLEMATCH);
+  }));
+  /* *INDENT-ON* */
 
   if (hs_compile_multi((const char **)entry->expressions, entry->flags, entry->ids,
                        vec_len(entry->expressions),
                        HS_MODE_BLOCK, NULL, &entry->database,
                        &compile_err) != HS_SUCCESS)
     {
+      adf_debug("Error: %s", compile_err->message);
       error = -1;
       goto done;
     }
@@ -198,68 +211,23 @@ upf_adf_remove(u32 db_index)
   return 0;
 }
 
-static void
-upf_add_rules(u32 app_index, upf_adf_app_t *app, upf_adf_args_t ** args, u8 path)
-{
-  u32 index = 0;
-  u32 rule_index = 0;
-  upf_adr_t *rule = NULL;
-  upf_adf_args_t arg;
-
-  /* *INDENT-OFF* */
-  hash_foreach(rule_index, index, app->rules_by_id,
-  ({
-     rule = pool_elt_at_index(app->rules, index);
-
-     if (rule->path)
-       {
-         arg.index = app_index;
-         if (path)
-           {
-             arg.rule = rule->path;
-           }
-         else
-           {
-             arg.rule = rule->host;
-           }
-         vec_add1(*args, arg);
-       }
-  }));
-  /* *INDENT-ON* */
-}
-
-static inline void
-upf_add_path_rules(u32 app_index, upf_adf_app_t *app, upf_adf_args_t ** args)
-{
-  return upf_add_rules(app_index, app, args, 1);
-}
-
-static inline void
-upf_add_host_rules(u32 app_index, upf_adf_app_t *app, upf_adf_args_t ** args)
-{
-  return upf_add_rules(app_index, app, args, 0);
-}
-
 int
-upf_adf_get_db_id(u32 app_index, u32 * path_db_index, u32 * host_db_index)
+upf_adf_get_db_id(u32 app_index, u32 * db_index)
 {
   upf_main_t * sm = &upf_main;
   upf_adf_app_t *app = NULL;
 
   app = pool_elt_at_index(sm->upf_apps, app_index);
 
-  *path_db_index = app->path_db_index; 
-  *host_db_index = app->host_db_index; 
+  *db_index = app->db_index; 
 
   return 0;
 }
 
 static int
-upf_adf_create_update_db(u8 * app_name, u32 * path_db_index, 
-                         u32 * host_db_index)
+upf_adf_create_update_db(u8 * app_name, u32 * db_index)
 {
   uword *p = NULL;
-  upf_adf_args_t *args = NULL;
   upf_main_t * sm = &upf_main;
   upf_adf_app_t *app = NULL;
   int res = 0;
@@ -271,23 +239,7 @@ upf_adf_create_update_db(u8 * app_name, u32 * path_db_index,
 
   app = pool_elt_at_index(sm->upf_apps, p[0]);
 
-  upf_add_path_rules(p[0], app, &args);
-
-  if (!args)
-    return -1;
-
-  res = upf_adf_add_multi_regex(args, path_db_index);
-
-  vec_free(args);
-
-  upf_add_host_rules(p[0], app, &args);
-
-  if (!args)
-    return -1;
-
-  res = upf_adf_add_multi_regex(args, host_db_index);
-
-  vec_free(args);
+  res = upf_adf_add_multi_regex(app, db_index);
 
   return res;
 }
@@ -312,8 +264,7 @@ upf_adf_all_pdr_update(u32 app_index)
 
          if (pdr->app_index == app_index)
          {
-           upf_adf_get_db_id(app_index, &pdr->adf_path_db_id,
-                             &pdr->adf_host_db_id);
+           upf_adf_get_db_id(app_index, &pdr->adf_db_id);
          }
        }
   }));
@@ -388,16 +339,15 @@ upf_adf_app_add_command_fn (vlib_main_t * vm,
 
   if (add_flag == 0)
     {
-      res = upf_adf_get_db_id(app->id, &pdr->adf_path_db_id, &pdr->adf_host_db_id);
+      res = upf_adf_get_db_id(app->id, &pdr->adf_db_id);
     }
   else if (add_flag == 1)
     {
-      res = upf_adf_get_db_id(app->id, &pdr->adf_path_db_id, &pdr->adf_host_db_id);
+      res = upf_adf_get_db_id(app->id, &pdr->adf_db_id);
     }
 
   if (res == 0)
-    vlib_cli_output (vm, "path DB id: %u, host DB id: %u",
-                     pdr->adf_path_db_id, pdr->adf_host_db_id);
+    vlib_cli_output (vm, "ADF DB id: %u", pdr->adf_db_id);
   else
     vlib_cli_output (vm, "Could not build adf DB");
 
@@ -486,8 +436,7 @@ upf_adf_show_db_command_fn (vlib_main_t * vm,
   unformat_input_t _line_input, *line_input = &_line_input;
   clib_error_t *error = NULL;
   u8 *name = NULL;
-  u32 path_id = 0;
-  u32 host_id = 0;
+  u32 db_id = 0;
   int res = 0;
   regex_t *regex = NULL;
   regex_t *expressions = NULL;
@@ -524,14 +473,14 @@ upf_adf_show_db_command_fn (vlib_main_t * vm,
 
   app = pool_elt_at_index (sm->upf_apps, p[0]);
 
-  res = upf_adf_get_db_id(app->id, &path_id, &host_id);
-  if (res < 0 || path_id == ~0)
+  res = upf_adf_get_db_id(app->id, &db_id);
+  if (res < 0 || db_id == ~0)
     {
       error = clib_error_return (0, "DB does not exist...");
       goto done;
     }
 
-  res = upf_adf_get_db_contents(path_id, &expressions, &ids);
+  res = upf_adf_get_db_contents(db_id, &expressions, &ids);
   if (res == 0)
     {
       for (i = 0; i < vec_len(expressions); i++)
@@ -617,8 +566,7 @@ vnet_upf_app_add_del(u8 * name, u8 add)
 
       app->name = vec_dup(name);
       app->rules_by_id = hash_create_mem (0, sizeof (u32), sizeof (uword));
-      app->path_db_index = ~0;
-      app->host_db_index = ~0;
+      app->db_index = ~0;
       app->id = app - sm->upf_apps;
 
       hash_set_mem (sm->upf_app_by_name, app->name, app->id);
@@ -640,8 +588,7 @@ vnet_upf_app_add_del(u8 * name, u8 add)
       }));
       /* *INDENT-ON* */
 
-      upf_adf_remove(app->path_db_index);
-      upf_adf_remove(app->host_db_index);
+      upf_adf_remove(app->db_index);
       vec_free (app->name);
       hash_free(app->rules_by_id);
       pool_free(app->rules);
@@ -817,8 +764,7 @@ vnet_upf_rule_add_del(u8 * app_name, u32 rule_index, u8 add,
       pool_put (app->rules, rule);
     }
 
-  res = upf_adf_create_update_db(app_name, &app->path_db_index,
-                                 &app->host_db_index);
+  res = upf_adf_create_update_db(app_name, &app->db_index);
   if (res < 0)
     return res;
 
