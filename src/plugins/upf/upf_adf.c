@@ -244,33 +244,6 @@ upf_adf_create_update_db(u8 * app_name, u32 * db_index)
   return res;
 }
 
-static void
-upf_adf_all_pdr_update(u32 app_index)
-{
-  upf_main_t *gtm = &upf_main;
-  upf_session_t *sess = NULL;
-  struct rules *rules = NULL;
-  upf_pdr_t *pdr = NULL;
-
-  /* *INDENT-OFF* */
-  pool_foreach (sess, gtm->sessions,
-  ({
-     rules = sx_get_rules(sess, SX_ACTIVE);
-
-     vec_foreach (pdr, rules->pdr)
-       {
-         if (pdr->app_index == ~0)
-           continue;
-
-         if (pdr->app_index == app_index)
-         {
-           upf_adf_get_db_id(app_index, &pdr->adf_db_id);
-         }
-       }
-  }));
-  /* *INDENT-ON* */
-}
-
 static clib_error_t *
 upf_adf_app_add_command_fn (vlib_main_t * vm,
                             unformat_input_t * input,
@@ -767,8 +740,6 @@ vnet_upf_rule_add_del(u8 * app_name, u32 rule_index, u8 add,
   res = upf_adf_create_update_db(app_name, &app->db_index);
   if (res < 0)
     return res;
-
-  upf_adf_all_pdr_update(app->id);
 
   return 0;
 }
