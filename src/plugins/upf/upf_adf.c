@@ -35,6 +35,7 @@ typedef struct {
   u32 *flags;
   hs_database_t *database;
   hs_scratch_t *scratch;
+  u32 ref_cnt;
 } upf_adf_entry_t;
 
 typedef struct {
@@ -61,6 +62,58 @@ upf_adf_cleanup_db_entry(upf_adf_entry_t *entry)
   vec_free(entry->ids);
 
   memset(entry, 0, sizeof(upf_adf_entry_t));
+}
+
+int
+upf_adf_db_ref_cnt_dec(u32 db_index)
+{
+  upf_adf_entry_t *entry = NULL;
+
+  if (db_index == ~0)
+    return -1;
+
+  entry = pool_elt_at_index (upf_adf_db, db_index);
+  if (!entry)
+    return -1;
+
+  entry->ref_cnt--;
+
+  return 0;
+}
+
+static int
+upf_adf_db_ref_cnt_inc(u32 db_index)
+{
+  upf_adf_entry_t *entry = NULL;
+
+  if (db_index == ~0)
+    return -1;
+
+  entry = pool_elt_at_index (upf_adf_db, db_index);
+  if (!entry)
+    return -1;
+
+  entry->ref_cnt++;
+
+  return 0;
+}
+
+static int
+upf_adf_db_ref_cnt_check_zero(u32 db_index)
+{
+  upf_adf_entry_t *entry = NULL;
+
+  if (db_index == ~0)
+    return 1;
+
+  entry = pool_elt_at_index (upf_adf_db, db_index);
+  if (!entry)
+    return -1;
+
+  if (entry->ref_cnt == 0)
+    return 1;
+
+  return 0;
 }
 
 int
@@ -219,7 +272,9 @@ upf_adf_get_db_id(u32 app_index, u32 * db_index)
 
   app = pool_elt_at_index(sm->upf_apps, app_index);
 
-  *db_index = app->db_index; 
+  *db_index = app->db_index;
+
+  upf_adf_db_ref_cnt_inc(*db_index);
 
   return 0;
 }
@@ -709,6 +764,9 @@ vnet_upf_rule_add_del(u8 * app_name, u32 rule_index, u8 add,
 
   app = pool_elt_at_index (sm->upf_apps, p[0]);
 
+  if (upf_adf_db_ref_cnt_check_zero(app->db_index) != 1)
+    return VNET_API_ERROR_INSTANCE_IN_USE;
+
   p = hash_get_mem (app->rules_by_id, &rule_index);
 
   if (add)
@@ -827,6 +885,10 @@ upf_application_rule_add_del_command_fn (vlib_main_t * vm,
 
     case VNET_API_ERROR_NO_SUCH_ENTRY:
       error = clib_error_return (0, "application or rule does not exist...");
+      break;
+
+    case VNET_API_ERROR_INSTANCE_IN_USE:
+      error = clib_error_return (0, "application is in use...");
       break;
 
     default:

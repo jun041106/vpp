@@ -990,9 +990,16 @@ static int handle_remove_pdr(upf_session_t *sess, pfcp_remove_pdr_t *remove_pdr,
   struct pfcp_response *response = (struct pfcp_response *)(grp + 1);
   pfcp_remove_pdr_t *pdr;
   int r = 0;
+  upf_pdr_t *delete = NULL;
 
   vec_foreach(pdr, remove_pdr)
   {
+    delete = sx_get_pdr(sess, SX_PENDING, pdr->pdr_id);
+    if (delete)
+      {
+        upf_adf_db_ref_cnt_dec(delete->adf_db_id);
+      }
+
     if ((r = sx_delete_pdr(sess, pdr->pdr_id)) != 0)
       {
         fformat(stderr, "Failed to add PDR %d\n", pdr->pdr_id);

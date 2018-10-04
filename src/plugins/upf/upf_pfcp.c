@@ -880,6 +880,7 @@ static void sx_free_rules(upf_session_t *sx, int rule)
 
   vec_foreach (pdr, rules->pdr)
   {
+    upf_adf_db_ref_cnt_dec(pdr->adf_db_id);
     vec_free(pdr->urr_ids);
   }
 
