@@ -803,14 +803,20 @@ static int handle_create_pdr(upf_session_t *sess, pfcp_create_pdr_t *create_pdr,
 			create->pdi.fields |= F_PDI_APPLICATION_ID;
 
 			p = hash_get_mem (gtm->upf_app_by_name, pdr->pdi.application_id);
-			if (p)
+			if (!p)
 			  {
-			    app = pool_elt_at_index (gtm->upf_apps, p[0]);
-			    create->app_index = app->id;
-			    upf_adf_get_db_id(app->id, &create->adf_db_id);
-			    gtp_debug("app: %v, ADF DB id %u",
-				      app->name, create->adf_db_id);
+			    failed_rule_id->id = pdr->pdr_id;
+			    r = -1;
+			    fformat(stderr, "PDR: %d, application id %v has not been configured\n",
+				    pdr->pdr_id, pdr->pdi.application_id);
+			    break;
 			  }
+
+			app = pool_elt_at_index (gtm->upf_apps, p[0]);
+			create->app_index = app->id;
+			upf_adf_get_db_id(app->id, &create->adf_db_id);
+			gtp_debug("app: %v, ADF DB id %u",
+				  app->name, create->adf_db_id);
 		}
 
       create->outer_header_removal = OPT(pdr, CREATE_PDR_OUTER_HEADER_REMOVAL,
@@ -932,14 +938,20 @@ static int handle_update_pdr(upf_session_t *sess, pfcp_update_pdr_t *update_pdr,
 				update->pdi.fields |= F_PDI_APPLICATION_ID;
 
 				p = hash_get_mem (gtm->upf_app_by_name, pdr->pdi.application_id);
-				if (p)
+				if (!p)
 				  {
-				    app = pool_elt_at_index (gtm->upf_apps, p[0]);
-				    update->app_index = app->id;
-				    upf_adf_get_db_id(app->id, &update->adf_db_id);
-				    gtp_debug("app: %v, ADF DB id %u",
-					      app->name, update->adf_db_id);
+				    failed_rule_id->id = pdr->pdr_id;
+				    r = -1;
+				    fformat(stderr, "PDR: %d, application id %v has not been configured\n",
+					    pdr->pdr_id, pdr->pdi.application_id);
+				    break;
 				  }
+
+				app = pool_elt_at_index (gtm->upf_apps, p[0]);
+				update->app_index = app->id;
+				upf_adf_get_db_id(app->id, &update->adf_db_id);
+				gtp_debug("app: %v, ADF DB id %u",
+					  app->name, update->adf_db_id);
 			}
 
       update->outer_header_removal = OPT(pdr, UPDATE_PDR_OUTER_HEADER_REMOVAL,
