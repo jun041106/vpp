@@ -40,6 +40,8 @@ void foreach_upf_flows (BVT (clib_bihash_kv) * kvp, void * arg);
 int upf_adf_get_db_id(u32 app_index, u32 * db_index);
 int upf_adf_db_ref_cnt_dec(u32 db_index);
 
+int upf_flow_timeout_update (u16 timeout);
+
 #define MIN(x,y) (((x)<(y))?(x):(y))
 
 always_inline int
