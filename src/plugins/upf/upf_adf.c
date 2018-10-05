@@ -607,6 +607,9 @@ vnet_upf_app_add_del(u8 * name, u8 add)
       hash_unset_mem (sm->upf_app_by_name, name);
       app = pool_elt_at_index (sm->upf_apps, p[0]);
 
+      if (upf_adf_db_ref_cnt_check_zero(app->db_index) != 1)
+        return VNET_API_ERROR_INSTANCE_IN_USE;
+
       /* *INDENT-OFF* */
       hash_foreach(rule_index, index, app->rules_by_id,
       ({
@@ -725,6 +728,10 @@ upf_delete_app_command_fn (vlib_main_t * vm,
 
     case VNET_API_ERROR_NO_SUCH_ENTRY:
       error = clib_error_return (0, "application does not exist...");
+      break;
+
+    case VNET_API_ERROR_INSTANCE_IN_USE:
+      error = clib_error_return (0, "application is in use...");
       break;
 
     default:
