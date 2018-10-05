@@ -362,6 +362,52 @@ recycle_flow(flowtable_main_t * fm, flowtable_per_session_t * fmt, u32 now)
     clib_error("recycle_flow did not find any flow to recycle !");
 }
 
+static inline u16
+flowtable_timelife_calculate(flowtable_main_t * fm,
+                             flow_signature_t const * sig,
+                             int is_ip4)
+{
+  u8 proto = 0;
+  u16 timelife = fm->timer_default_lifetime;
+
+  if (is_ip4)
+    {
+      proto = sig->s.ip4.proto;
+      if (fm->timer_ip4_lifetime != 0)
+          timelife = fm->timer_ip4_lifetime;
+    }
+  else
+    {
+      proto = sig->s.ip6.proto;
+      if (fm->timer_ip6_lifetime != 0)
+        timelife = fm->timer_ip6_lifetime;
+    }
+
+  if (proto == IP_PROTOCOL_ICMP)
+    {
+      if (fm->timer_icmp_lifetime != 0)
+        {
+          timelife = fm->timer_icmp_lifetime;
+        }
+    }
+  else if (proto == IP_PROTOCOL_UDP)
+    {
+      if (fm->timer_udp_lifetime != 0)
+        {
+          timelife = fm->timer_udp_lifetime;
+        }
+    }
+  else if (proto == IP_PROTOCOL_TCP)
+    {
+      if (fm->timer_tcp_lifetime != 0)
+        {
+          timelife = fm->timer_tcp_lifetime;
+        }
+    }
+
+  return timelife;
+}
+
 /* TODO: replace with a more appropriate hashtable */
 static inline flow_entry_t *
 flowtable_entry_lookup_create(flowtable_main_t * fm,
@@ -370,6 +416,7 @@ flowtable_entry_lookup_create(flowtable_main_t * fm,
                               flow_signature_t const * sig,
                               u32 const now,
                               u8 direction,
+                              int is_ip4,
                               int * created)
 {
     flow_entry_t * f;
@@ -430,8 +477,9 @@ flowtable_entry_lookup_create(flowtable_main_t * fm,
     f->sig.len = sig->len;
     clib_memcpy(&f->sig, sig, sig->len);
     f->sig_hash = kv->key;
-    f->lifetime = fm->timer_default_lifetime;
-    f->expire = now + fm->timer_default_lifetime;
+
+    f->lifetime = flowtable_timelife_calculate(fm, sig, is_ip4);
+    f->expire = now + f->lifetime;
 
     /* init UPF fields */
     f->app_index = ~0;
@@ -581,6 +629,7 @@ flowtable_get_flow(u8 * packet, flowtable_per_session_t * fmt,
 
   *flow = flowtable_entry_lookup_create(fm, fmt, &kv, &sig,
                                         current_time, direction,
+                                        is_ip4,
                                         &created);
 
   if (!(*flow))
@@ -611,12 +660,12 @@ flowtable_timer_update(flowtable_per_session_t * fmt, u32 current_time)
 }
 
 clib_error_t *
-flowtable_default_timelife_update(u16 value);
+flowtable_timelife_update(flowtable_timeout_type_t type, u16 value);
 
 clib_error_t *
 flowtable_max_timelife_update(u16 value);
 
 u16
-flowtable_default_timelife_get(void);
+flowtable_timelife_get(flowtable_timeout_type_t type);
 
 #endif  /* __flowtable_impl_h__ */

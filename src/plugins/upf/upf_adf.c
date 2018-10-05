@@ -1119,24 +1119,24 @@ foreach_upf_flows (BVT (clib_bihash_kv) * kvp,
 }
 
 static clib_error_t *
-vnet_upf_flow_timeout_update(u16 timeout)
+vnet_upf_flow_timeout_update(flowtable_timeout_type_t type, u16 timeout)
 {
-  return flowtable_default_timelife_update(timeout);
+  return flowtable_timelife_update(type, timeout);
 }
 
-int upf_flow_timeout_update (u16 timeout)
+int upf_flow_timeout_update (flowtable_timeout_type_t type, u16 timeout)
 {
   int rv = 0;
 
-  vnet_upf_flow_timeout_update(timeout);
+  vnet_upf_flow_timeout_update(type, timeout);
 
   return rv;
 }
 
 static u16
-vnet_upf_get_flow_timeout(void)
+vnet_upf_get_flow_timeout(flowtable_timeout_type_t type)
 {
-  return flowtable_default_timelife_get();
+  return flowtable_timelife_get(type);
 }
 
 static clib_error_t *
@@ -1147,6 +1147,7 @@ upf_flow_timeout_command_fn (vlib_main_t * vm,
   unformat_input_t _line_input, *line_input = &_line_input;
   u16 timeout = 0;
   clib_error_t *error = NULL;
+  flowtable_timeout_type_t type = FT_TIMEOUT_TYPE_UNKNOWN;
 
   /* Get a line of input. */
   if (!unformat_user (input, unformat_line_input, line_input))
@@ -1155,7 +1156,35 @@ upf_flow_timeout_command_fn (vlib_main_t * vm,
   while (unformat_check_input (line_input) != UNFORMAT_END_OF_INPUT)
     {
       if (unformat (line_input, "default %u", &timeout))
-        break;
+        {
+          type = FT_TIMEOUT_TYPE_DEFAULT;
+          break;
+        }
+      if (unformat (line_input, "ip4 %u", &timeout))
+        {
+          type = FT_TIMEOUT_TYPE_IPV4;
+          break;
+        }
+      if (unformat (line_input, "ip6 %u", &timeout))
+        {
+          type = FT_TIMEOUT_TYPE_IPV6;
+          break;
+        }
+      if (unformat (line_input, "icmp %u", &timeout))
+        {
+          type = FT_TIMEOUT_TYPE_ICMP;
+          break;
+        }
+      if (unformat (line_input, "udp %u", &timeout))
+        {
+          type = FT_TIMEOUT_TYPE_UDP;
+          break;
+        }
+      if (unformat (line_input, "tcp %u", &timeout))
+        {
+          type = FT_TIMEOUT_TYPE_TCP;
+          break;
+        }
       else
         {
           error = unformat_parse_error (line_input);
@@ -1163,7 +1192,7 @@ upf_flow_timeout_command_fn (vlib_main_t * vm,
         }
     }
 
-  error = vnet_upf_flow_timeout_update(timeout);
+  error = vnet_upf_flow_timeout_update(type, timeout);
 
 done:
   unformat_free (line_input);
@@ -1175,7 +1204,7 @@ done:
 VLIB_CLI_COMMAND (upf_flow_timeout_command, static) =
 {
   .path = "upf flow timeout",
-  .short_help = "upf flow timeout default <seconds>",
+  .short_help = "upf flow timeout (default | ip4 | ip6 | icmp | udp | tcp) <seconds>",
   .function = upf_flow_timeout_command_fn,
 };
 /* *INDENT-ON* */
@@ -1188,6 +1217,7 @@ upf_show_flow_timeout_command_fn (vlib_main_t * vm,
   unformat_input_t _line_input, *line_input = &_line_input;
   u16 timeout = 0;
   clib_error_t *error = NULL;
+  flowtable_timeout_type_t type = FT_TIMEOUT_TYPE_UNKNOWN;
 
   /* Get a line of input. */
   if (!unformat_user (input, unformat_line_input, line_input))
@@ -1196,7 +1226,35 @@ upf_show_flow_timeout_command_fn (vlib_main_t * vm,
   while (unformat_check_input (line_input) != UNFORMAT_END_OF_INPUT)
     {
       if (unformat (line_input, "default"))
-        break;
+        {
+          type = FT_TIMEOUT_TYPE_DEFAULT;
+          break;
+        }
+      if (unformat (line_input, "ip4"))
+        {
+          type = FT_TIMEOUT_TYPE_IPV4;
+          break;
+        }
+      if (unformat (line_input, "ip6"))
+        {
+          type = FT_TIMEOUT_TYPE_IPV6;
+          break;
+        }
+      if (unformat (line_input, "icmp"))
+        {
+          type = FT_TIMEOUT_TYPE_ICMP;
+          break;
+        }
+      if (unformat (line_input, "udp"))
+        {
+          type = FT_TIMEOUT_TYPE_UDP;
+          break;
+        }
+      if (unformat (line_input, "tcp"))
+        {
+          type = FT_TIMEOUT_TYPE_TCP;
+          break;
+        }
       else
         {
           error = unformat_parse_error (line_input);
@@ -1204,7 +1262,7 @@ upf_show_flow_timeout_command_fn (vlib_main_t * vm,
         }
     }
 
-  timeout = vnet_upf_get_flow_timeout();
+  timeout = vnet_upf_get_flow_timeout(type);
   vlib_cli_output (vm, "%u", timeout);
 
 done:
@@ -1217,7 +1275,7 @@ done:
 VLIB_CLI_COMMAND (upf_show_flow_timeout_command, static) =
 {
   .path = "show upf flow timeout",
-  .short_help = "upf flow timeout default",
+  .short_help = "upf flow timeout (default | ip4 | ip6 | icmp | udp | tcp)",
   .function = upf_show_flow_timeout_command_fn,
 };
 /* *INDENT-ON* */
