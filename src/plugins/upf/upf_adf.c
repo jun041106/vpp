@@ -1117,6 +1117,15 @@ vnet_upf_flow_timeout_update(u16 timeout)
   return flowtable_default_timelife_update(timeout);
 }
 
+int upf_flow_timeout_update (u16 timeout)
+{
+  int rv = 0;
+
+  vnet_upf_flow_timeout_update(timeout);
+
+  return rv;
+}
+
 static u16
 vnet_upf_get_flow_timeout(void)
 {
