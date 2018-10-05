@@ -98,13 +98,18 @@ flowtable_init(vlib_main_t * vm)
 
   /* init timers */
   fm->timer_default_lifetime = TIMER_DEFAULT_LIFETIME;
+  fm->timer_ip4_lifetime = 0;
+  fm->timer_ip6_lifetime = 0;
+  fm->timer_icmp_lifetime = 0;
+  fm->timer_udp_lifetime = 0;
+  fm->timer_tcp_lifetime = 0;
   fm->timer_max_lifetime = TIMER_MAX_LIFETIME;
 
   return error;
 }
 
 clib_error_t *
-flowtable_default_timelife_update(u16 value)
+flowtable_timelife_update(flowtable_timeout_type_t type, u16 value)
 {
   clib_error_t * error = 0;
   flowtable_main_t * fm = &flowtable_main;
@@ -112,17 +117,57 @@ flowtable_default_timelife_update(u16 value)
   if (value > fm->timer_max_lifetime)
     return clib_error_return (0, "value is too big");
 
-  fm->timer_default_lifetime = value;
+  switch (type)
+    {
+      case FT_TIMEOUT_TYPE_DEFAULT:
+        fm->timer_default_lifetime = value;
+        break;
+      case FT_TIMEOUT_TYPE_IPV4:
+        fm->timer_ip4_lifetime = value;
+        break;
+      case FT_TIMEOUT_TYPE_IPV6:
+        fm->timer_ip6_lifetime = value;
+        break;
+      case FT_TIMEOUT_TYPE_ICMP:
+        fm->timer_icmp_lifetime = value;
+        break;
+      case FT_TIMEOUT_TYPE_UDP:
+        fm->timer_udp_lifetime = value;
+        break;
+      case FT_TIMEOUT_TYPE_TCP:
+        fm->timer_tcp_lifetime = value;
+        break;
+      default:
+        return clib_error_return (0, "unknown timer type");
+    }
 
   return error;
 }
 
 u16
-flowtable_default_timelife_get(void)
+flowtable_timelife_get(flowtable_timeout_type_t type)
 {
   flowtable_main_t * fm = &flowtable_main;
 
-  return fm->timer_default_lifetime;
+  switch (type)
+    {
+      case FT_TIMEOUT_TYPE_DEFAULT:
+        return fm->timer_default_lifetime;
+      case FT_TIMEOUT_TYPE_IPV4:
+        return fm->timer_ip4_lifetime;
+      case FT_TIMEOUT_TYPE_IPV6:
+        return fm->timer_ip6_lifetime;
+      case FT_TIMEOUT_TYPE_ICMP:
+        return fm->timer_icmp_lifetime;
+      case FT_TIMEOUT_TYPE_UDP:
+        return fm->timer_udp_lifetime;
+      case FT_TIMEOUT_TYPE_TCP:
+        return fm->timer_tcp_lifetime;
+      default:
+        return ~0;
+    }
+
+  return ~0;
 }
 
 clib_error_t *

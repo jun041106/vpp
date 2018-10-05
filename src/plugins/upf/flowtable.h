@@ -141,7 +141,7 @@ typedef struct flow_entry {
 } flow_entry_t;
 
 /* Timers (in seconds) */
-#define TIMER_DEFAULT_LIFETIME (60)
+#define TIMER_DEFAULT_LIFETIME (600)
 #define TIMER_MAX_LIFETIME (3000)
 
 /* Default max number of flows to expire during one run.
@@ -213,7 +213,22 @@ typedef struct {
 
     /* Timers  */
     u16 timer_default_lifetime;
+    u16 timer_ip4_lifetime;
+    u16 timer_ip6_lifetime;
+    u16 timer_icmp_lifetime;
+    u16 timer_udp_lifetime;
+    u16 timer_tcp_lifetime;
     u16 timer_max_lifetime;
 } flowtable_main_t;
+
+typedef enum {
+    FT_TIMEOUT_TYPE_UNKNOWN,
+    FT_TIMEOUT_TYPE_DEFAULT,
+    FT_TIMEOUT_TYPE_IPV4,
+    FT_TIMEOUT_TYPE_IPV6,
+    FT_TIMEOUT_TYPE_ICMP,
+    FT_TIMEOUT_TYPE_UDP,
+    FT_TIMEOUT_TYPE_TCP
+} flowtable_timeout_type_t;
 
 #endif  /* __flowtable_h__ */
