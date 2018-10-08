@@ -363,22 +363,17 @@ recycle_flow(flowtable_main_t * fm, flowtable_per_session_t * fmt, u32 now)
 }
 
 static inline u16
-flowtable_timelife_calculate(flowtable_main_t * fm,
-                             flow_signature_t const * sig,
-                             int is_ip4)
+flowtable_timelife_calculate(flowtable_main_t * fm, u8 proto, int is_ip4)
 {
-  u8 proto = 0;
   u16 timelife = fm->timer_default_lifetime;
 
   if (is_ip4)
     {
-      proto = sig->s.ip4.proto;
       if (fm->timer_ip4_lifetime != 0)
           timelife = fm->timer_ip4_lifetime;
     }
   else
     {
-      proto = sig->s.ip6.proto;
       if (fm->timer_ip6_lifetime != 0)
         timelife = fm->timer_ip6_lifetime;
     }
@@ -424,6 +419,7 @@ flowtable_entry_lookup_create(flowtable_main_t * fm,
     dlist_elt_t * timer_entry;
     dlist_elt_t * flow_entry;
     u32 ht_line_head_index;
+    u8 proto = 0;
 
     ht_line = NULL;
 
@@ -478,7 +474,9 @@ flowtable_entry_lookup_create(flowtable_main_t * fm,
     clib_memcpy(&f->sig, sig, sig->len);
     f->sig_hash = kv->key;
 
-    f->lifetime = flowtable_timelife_calculate(fm, sig, is_ip4);
+
+    proto = is_ip4 ? sig->s.ip4.proto : sig->s.ip6.proto;
+    f->lifetime = flowtable_timelife_calculate(fm, proto, is_ip4);
     f->expire = now + f->lifetime;
 
     /* init UPF fields */
@@ -560,8 +558,22 @@ timer_wheel_index_update(flowtable_per_session_t * fmt, u32 now)
     }
 }
 
+always_inline u16
+flow_tcp_get_lifetime(tcp_state_t state, int is_ip4)
+{
+  flowtable_main_t * fm = &flowtable_main;
+
+  if ((state == TCP_STATE_ESTABLISHED) ||
+      (state == TCP_STATE_START))
+    {
+      return flowtable_timelife_calculate(fm, IP_PROTOCOL_TCP, is_ip4);
+    }
+
+  return tcp_lifetime[state];
+}
+
 always_inline int
-flow_tcp_update_lifetime(flow_entry_t * f, tcp_header_t * hdr)
+flow_tcp_update_lifetime(flow_entry_t * f, int is_ip4, tcp_header_t * hdr)
 {
     tcp_state_t old_state, new_state;
 
@@ -573,7 +585,7 @@ flow_tcp_update_lifetime(flow_entry_t * f, tcp_header_t * hdr)
     if (old_state != new_state)
     {
         f->tcp_state = new_state;
-        f->lifetime = tcp_lifetime[new_state];
+        f->lifetime = flow_tcp_get_lifetime(new_state, is_ip4);
         return 1;
     }
 
@@ -588,7 +600,7 @@ flow_update_lifetime(flow_entry_t * f, u8 * packet, int is_ip4)
       if (f->sig.s.ip4.proto == IP_PROTOCOL_TCP)
         {
           ip4_header_t *ip4 = (ip4_header_t *)packet;
-          return flow_tcp_update_lifetime(f, ip4_next_header(ip4));
+          return flow_tcp_update_lifetime(f, is_ip4, ip4_next_header(ip4));
         }
     }
   else
@@ -596,7 +608,7 @@ flow_update_lifetime(flow_entry_t * f, u8 * packet, int is_ip4)
       if (f->sig.s.ip6.proto == IP_PROTOCOL_TCP)
         {
           ip6_header_t *ip6 = (ip6_header_t *)packet;
-          return flow_tcp_update_lifetime(f, ip6_next_header(ip6));
+          return flow_tcp_update_lifetime(f, is_ip4, ip6_next_header(ip6));
         }
     }
 

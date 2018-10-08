@@ -21,6 +21,13 @@
 #include "flowtable.h"
 #include "flowtable_impl.h"
 
+#if CLIB_DEBUG > 0
+#define timer_debug clib_warning
+#else
+#define timer_debug(...)				\
+  do { } while (0)
+#endif
+
 clib_error_t *
 upf_timers_init (vlib_main_t * vm)
 {
@@ -43,6 +50,8 @@ update_timers_service (vlib_main_t * vm,
 
       current_time = (u32) ((u64) vm->cpu_time_last_node_dispatch /
                             vm->clib_time.clocks_per_second);
+
+      timer_debug("current time: %u", current_time);
 
       /* *INDENT-OFF* */
       pool_foreach (sess, gtm->sessions,

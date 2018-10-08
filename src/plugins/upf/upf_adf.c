@@ -1100,7 +1100,7 @@ foreach_upf_flows (BVT (clib_bihash_kv) * kvp,
       vlib_cli_output (vm, "%llu: proto 0x%x, %U(%u) <-> %U(%u), "
                        "UL pkt %u, DL pkt %u, "
                        "initiator dir %u, initiator PDR %u, responder PDR %u, "
-                       "app %v",
+                       "app %v, lifetime %u",
                        flow->infos.data.flow_id,
                        flow->sig.s.ip4.proto,
                        format_ip4_address, &flow->sig.s.ip4.src,
@@ -1112,7 +1112,8 @@ foreach_upf_flows (BVT (clib_bihash_kv) * kvp,
                        flow->initiator_direction,
                        flow->initiator_pdr_id,
                        flow->responder_pdr_id,
-                       app_name);
+                       app_name,
+                       flow->lifetime);
 
       vec_free(app_name);
     }
