@@ -176,6 +176,49 @@ upf_get_highest_adf_pdr (struct rules * active, int direction)
   return pdr;
 }
 
+always_inline int
+upf_check_http_req (u8 * pl, int is_ip4)
+{
+  int tcp_payload_len = 0;
+  tcp_header_t *tcp = NULL;
+  u8 *http = NULL;
+
+  if (is_ip4)
+    {
+      ip4_header_t *ip4 = (ip4_header_t *)pl;
+      if (ip4->protocol != IP_PROTOCOL_TCP)
+        return 0;
+
+      tcp = (tcp_header_t *) ip4_next_header(ip4);
+      tcp_payload_len = clib_net_to_host_u16(ip4->length) -
+                        sizeof(ip4_header_t) - tcp_header_bytes(tcp);
+    }
+  else
+    {
+      ip6_header_t *ip6 = (ip6_header_t *)pl;
+      if (ip6->protocol != IP_PROTOCOL_TCP)
+        return 0;
+
+      tcp = (tcp_header_t *) ip6_next_header(ip6);
+      tcp_payload_len = clib_net_to_host_u16(ip6->payload_length) -
+                        tcp_header_bytes(tcp);
+    }
+
+  if (tcp_payload_len < 8)
+    return 0;
+
+  http = (u8*)tcp + tcp_header_bytes(tcp);
+
+  if ((http[0] != 'G') ||
+      (http[1] != 'E') ||
+      (http[2] != 'T'))
+    {
+      return 0;
+    }
+
+  return 1;
+}
+
 always_inline void
 upf_update_flow_app_index (flow_entry_t * flow, upf_pdr_t * pdr,
                            u8 * pl, int is_ip4)

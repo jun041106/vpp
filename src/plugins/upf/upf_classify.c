@@ -109,6 +109,7 @@ upf_classify (vlib_main_t * vm, vlib_node_runtime_t * node,
   uint32_t results[1]; /* make classify by 4 categories. */
   const u8 *data[4];
   flow_entry_t *flow = NULL;
+  int is_http_req = 0;
 
   next_index = node->cached_next_index;
   stats_sw_if_index = node->runtime_data[0];
@@ -153,6 +154,10 @@ upf_classify (vlib_main_t * vm, vlib_node_runtime_t * node,
 	  pl = vlib_buffer_get_current(b) + vnet_buffer (b)->gtpu.data_offset;
 
 	  flowtable_get_flow(pl, &sess->fmt, &flow, is_ip4, direction, current_time);
+	  if (flow->initiator_direction == direction)
+	    {
+	      is_http_req = upf_check_http_req(pl, is_ip4);
+	    }
 	
 	  gtp_debug("initiator direction: %u, packet direction: %u",
 		    flow->initiator_direction, direction);
@@ -174,6 +179,7 @@ upf_classify (vlib_main_t * vm, vlib_node_runtime_t * node,
 		}
 	    }
 
+	  /* Find responder PDR using app name */
 	  if (pdr == NULL)
 	    {
 	      if ((flow->initiator_direction != direction) && flow->app_index != ~0)
@@ -191,7 +197,10 @@ upf_classify (vlib_main_t * vm, vlib_node_runtime_t * node,
 	  if (pdr == NULL)
 	    {
 	      acl = is_ip4 ? active->sdf[direction].ip4 : active->sdf[direction].ip6;
-	      adf_pdr = upf_get_highest_adf_pdr(active, direction);
+	      if (is_http_req)
+		{
+		  adf_pdr = upf_get_highest_adf_pdr(active, direction);
+		}
 
 	  if (acl == NULL)
 	    {
@@ -294,7 +303,7 @@ upf_classify (vlib_main_t * vm, vlib_node_runtime_t * node,
 		  far = sx_get_far_by_id(active, pdr->far_id);
 
 		  if ((flow->initiator_direction == direction) &&
-		      (flow->initiator_pdr_id == ~0))
+		      (flow->initiator_pdr_id == ~0) && is_http_req)
 		    {
 		      upf_update_flow_app_index(flow, pdr, pl, is_ip4);
 		      if (flow->app_index != ~0)
