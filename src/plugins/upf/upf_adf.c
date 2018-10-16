@@ -31,7 +31,6 @@
 
 typedef struct {
   regex_t *expressions;
-  u32 *ids;
   u32 *flags;
   hs_database_t *database;
   hs_scratch_t *scratch;
@@ -40,7 +39,6 @@ typedef struct {
 
 typedef struct {
   int res;
-  u32 id;
 } upf_adf_cb_args_t;
 
 static upf_adf_entry_t *upf_adf_db = NULL;
@@ -59,7 +57,6 @@ upf_adf_cleanup_db_entry(upf_adf_entry_t *entry)
   hs_free_scratch(entry->scratch);
   vec_free(entry->expressions);
   vec_free(entry->flags);
-  vec_free(entry->ids);
 
   memset(entry, 0, sizeof(upf_adf_entry_t));
 }
@@ -119,7 +116,6 @@ upf_adf_db_ref_cnt_check_zero(u32 db_index)
 int
 upf_adf_add_multi_regex(upf_adf_app_t * app, u32 * db_index)
 {
-  upf_main_t *gtm = &upf_main;
   upf_adf_entry_t *entry = NULL;
   hs_compile_error_t *compile_err = NULL;
   int error = 0;
@@ -151,8 +147,6 @@ upf_adf_add_multi_regex(upf_adf_app_t * app, u32 * db_index)
      regex_t regex = NULL;
      rule = pool_elt_at_index(app->rules, index);
 
-     vec_add1(entry->ids, app - gtm->upf_apps);
-
      vec_add(regex, ".*\\Q", 4);
      vec_add(regex, rule->host, vec_len(rule->host));
      vec_add(regex, "\\E.*\\Q", 6);
@@ -163,12 +157,11 @@ upf_adf_add_multi_regex(upf_adf_app_t * app, u32 * db_index)
      adf_debug("app id: %u, regex: %s", app - gtm->upf_apps, regex);
 
      vec_add1(entry->expressions, regex);
-
      vec_add1(entry->flags, HS_FLAG_SINGLEMATCH);
   }));
   /* *INDENT-ON* */
 
-  if (hs_compile_multi((const char **)entry->expressions, entry->flags, entry->ids,
+  if (hs_compile_multi((const char **)entry->expressions, entry->flags, NULL,
 		       vec_len(entry->expressions),
 		       HS_MODE_BLOCK, NULL, &entry->database,
 		       &compile_err) != HS_SUCCESS)
@@ -192,8 +185,8 @@ done:
 
 static int
 upf_adf_event_handler(unsigned int id, unsigned long long from,
-				 unsigned long long to, unsigned int flags,
-				void *ctx)
+		      unsigned long long to, unsigned int flags,
+		      void *ctx)
 {
   (void) from;
   (void) to;
@@ -201,14 +194,13 @@ upf_adf_event_handler(unsigned int id, unsigned long long from,
 
   upf_adf_cb_args_t *args = (upf_adf_cb_args_t*)ctx;
 
-  args->id = id;
   args->res = 1;
 
   return 0;
 }
 
 int
-upf_adf_lookup(u32 db_index, u8 * str, uint16_t length, u32 * app_index)
+upf_adf_lookup(u32 db_index, u8 * str, uint16_t length)
 {
   upf_adf_entry_t *entry = NULL;
   int ret = 0;
@@ -228,8 +220,6 @@ upf_adf_lookup(u32 db_index, u8 * str, uint16_t length, u32 * app_index)
 
   if (args.res == 0)
     return -1;
-
-  *app_index = args.id;
 
   return 0;
 }
@@ -388,10 +378,8 @@ upf_adf_url_test_command_fn (vlib_main_t * vm,
   unformat_input_t _line_input, *line_input = &_line_input;
   u8 *url = NULL;
   clib_error_t *error = NULL;
-  u32 app_index = 0;
   u32 id = 0;
-  upf_adf_app_t *app = NULL;
-  upf_main_t * sm = &upf_main;
+  int r;
 
   /* Get a line of input. */
   if (!unformat_user (input, unformat_line_input, line_input))
@@ -411,19 +399,8 @@ upf_adf_url_test_command_fn (vlib_main_t * vm,
 	}
     }
 
-  upf_adf_lookup(id, url, vec_len(url), &app_index);
-  if (app_index != ~0)
-    {
-      app = pool_elt_at_index (sm->upf_apps, app_index);
-      if (app)
-	{
-	  vlib_cli_output (vm, "Matched app: %v", app->name);
-	}
-    }
-  else
-    {
-      vlib_cli_output (vm, "No match found");
-    }
+  r = upf_adf_lookup(id, url, vec_len(url));
+  vlib_cli_output (vm, "Matched Result: %u", r);
 
 done:
   vec_free (url);
@@ -452,7 +429,6 @@ upf_adf_show_db_command_fn (vlib_main_t * vm,
   u32 db_id = 0;
   int res = 0;
   regex_t *expressions = NULL;
-  upf_adf_app_t *app = NULL;
   upf_main_t * sm = &upf_main;
   uword *p = NULL;
   upf_adf_entry_t *e;
@@ -491,10 +467,7 @@ upf_adf_show_db_command_fn (vlib_main_t * vm,
     {
       for (int i = 0; i < vec_len(e->expressions); i++)
 	{
-	  if (e->ids[i] != ~0)
-	    app = pool_elt_at_index (sm->upf_apps, e->ids[i]);
-
-	  vlib_cli_output (vm, "regex: %v, app: %v", expressions[i], app ? app->name : (u8 *)"NULL");
+	  vlib_cli_output (vm, "regex: %v", expressions[i]);
 	}
     }
   else

@@ -29,7 +29,7 @@
   do { } while (0)
 #endif
 
-int upf_adf_lookup(u32 db_index, u8 * str, uint16_t length, u32 * app_index);
+int upf_adf_lookup(u32 db_index, u8 * str, uint16_t length);
 int upf_adf_remove(u32 db_index);
 int upf_app_add_del (upf_main_t * sm, u8 * name, int add);
 int upf_rule_add_del (upf_main_t * sm, u8 * name, u32 id,
@@ -44,7 +44,7 @@ int upf_flow_timeout_update (flowtable_timeout_type_t type, u16 timeout);
 #define MIN(x,y) (((x)<(y))?(x):(y))
 
 always_inline int
-upf_adf_parse_tcp_payload(tcp_header_t * tcp, u32 db_id, u32 * app_index)
+upf_adf_parse_tcp_payload(tcp_header_t * tcp, u32 db_id)
 {
   u8 *http = NULL;
   u8 *version = NULL;
@@ -90,7 +90,7 @@ upf_adf_parse_tcp_payload(tcp_header_t * tcp, u32 db_id, u32 * app_index)
 
   adf_debug("URL: %v", url);
 
-  res = upf_adf_lookup(db_id, url, vec_len(url), app_index);
+  res = upf_adf_lookup(db_id, url, vec_len(url));
 
   vec_free(url);
 
@@ -98,7 +98,7 @@ upf_adf_parse_tcp_payload(tcp_header_t * tcp, u32 db_id, u32 * app_index)
 }
 
 always_inline int
-upf_adf_parse_ip4_packet(ip4_header_t * ip4, u32 db_id, u32 * app_index)
+upf_adf_parse_ip4_packet(ip4_header_t * ip4, u32 db_id)
 {
   int tcp_payload_len = 0;
   tcp_header_t *tcp = NULL;
@@ -117,11 +117,11 @@ upf_adf_parse_ip4_packet(ip4_header_t * ip4, u32 db_id, u32 * app_index)
   if (tcp_payload_len < 8)
     return -1;
 
-  return upf_adf_parse_tcp_payload(tcp, db_id, app_index);
+  return upf_adf_parse_tcp_payload(tcp, db_id);
 }
 
 always_inline int
-upf_adf_parse_ip6_packet(ip6_header_t * ip6, u32 db_id, u32 * app_index)
+upf_adf_parse_ip6_packet(ip6_header_t * ip6, u32 db_id)
 {
   int tcp_payload_len = 0;
   tcp_header_t *tcp = NULL;
@@ -140,7 +140,7 @@ upf_adf_parse_ip6_packet(ip6_header_t * ip6, u32 db_id, u32 * app_index)
   if (tcp_payload_len < 8)
     return -1;
 
-  return upf_adf_parse_tcp_payload(tcp, db_id, app_index);
+  return upf_adf_parse_tcp_payload(tcp, db_id);
 }
 
 always_inline upf_pdr_t *
@@ -222,6 +222,8 @@ always_inline void
 upf_update_flow_app_index (flow_entry_t * flow, upf_pdr_t * pdr,
 			   u8 * pl, int is_ip4)
 {
+  int r;
+
   if (!flow)
     return;
 
@@ -231,19 +233,12 @@ upf_update_flow_app_index (flow_entry_t * flow, upf_pdr_t * pdr,
   if (pdr->app_index == ~0)
     return;
 
-  if (is_ip4)
-    {
-      upf_adf_parse_ip4_packet((ip4_header_t *)pl,
-			       pdr->adf_db_id,
-			       &flow->app_index);
+  r = (is_ip4) ?
+    upf_adf_parse_ip4_packet((ip4_header_t *)pl, pdr->adf_db_id) :
+    upf_adf_parse_ip6_packet((ip6_header_t *)pl, pdr->adf_db_id);
 
-    }
-  else
-    {
-      upf_adf_parse_ip6_packet((ip6_header_t *)pl,
-			       pdr->adf_db_id,
-			       &flow->app_index);
-    }
+  if (r == 0)
+    flow->app_index = pdr->app_index;
 }
 
 always_inline upf_pdr_t *
