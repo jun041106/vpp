@@ -105,8 +105,7 @@ upf_adf_db_ref_cnt_check_zero(u32 db_index)
   return 0;
 }
 
-int
-upf_adf_add_multi_regex(upf_adf_app_t * app, u32 * db_index)
+static int upf_adf_create_update_db(upf_adf_app_t * app)
 {
   upf_adf_entry_t *entry = NULL;
   hs_compile_error_t *compile_err = NULL;
@@ -115,10 +114,10 @@ upf_adf_add_multi_regex(upf_adf_app_t * app, u32 * db_index)
   u32 rule_index = 0;
   upf_adr_t *rule = NULL;
 
-  if (*db_index != ~0)
+  if (app->db_index != ~0)
     {
-      entry = pool_elt_at_index (upf_adf_db, *db_index);
-      upf_adf_cleanup_db_entry(entry);
+      entry = pool_elt_at_index (upf_adf_db, app->db_index);
+      upf_adf_cleanup_db_entry (entry);
     }
   else
     {
@@ -127,7 +126,7 @@ upf_adf_add_multi_regex(upf_adf_app_t * app, u32 * db_index)
 	return -1;
 
       memset(entry, 0, sizeof(*entry));
-      *db_index = entry - upf_adf_db;
+      app->db_index = entry - upf_adf_db;
     }
 
   /* *INDENT-OFF* */
@@ -231,25 +230,6 @@ u32 upf_adf_get_db_id(u32 app_index)
   upf_adf_db_ref_cnt_inc(app->db_index);
 
   return app->db_index;
-}
-
-static int
-upf_adf_create_update_db(u8 * app_name, u32 * db_index)
-{
-  uword *p = NULL;
-  upf_main_t * sm = &upf_main;
-  upf_adf_app_t *app = NULL;
-  int res = 0;
-
-  p = hash_get_mem (sm->upf_app_by_name, app_name);
-
-  if (!p)
-    return -1;
-
-  app = pool_elt_at_index(sm->upf_apps, p[0]);
-  res = upf_adf_add_multi_regex(app, db_index);
-
-  return res;
 }
 
 static clib_error_t *
@@ -698,8 +678,7 @@ vnet_upf_rule_add_del(u8 * app_name, u32 rule_index, u8 add,
       rule->host = vec_dup(args->host);
       rule->path = vec_dup(args->path);
 
-      hash_set_mem (app->rules_by_id,
-		    &rule_index, rule - app->rules);
+      hash_set_mem (app->rules_by_id, &rule_index, rule - app->rules);
     }
   else
     {
@@ -713,7 +692,7 @@ vnet_upf_rule_add_del(u8 * app_name, u32 rule_index, u8 add,
       pool_put (app->rules, rule);
     }
 
-  res = upf_adf_create_update_db(app_name, &app->db_index);
+  res = upf_adf_create_update_db(app);
   if (res < 0)
     return res;
 
