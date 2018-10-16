@@ -70,9 +70,6 @@ upf_adf_db_ref_cnt_dec(u32 db_index)
     return -1;
 
   entry = pool_elt_at_index (upf_adf_db, db_index);
-  if (!entry)
-    return -1;
-
   entry->ref_cnt--;
 
   return 0;
@@ -87,9 +84,6 @@ upf_adf_db_ref_cnt_inc(u32 db_index)
     return -1;
 
   entry = pool_elt_at_index (upf_adf_db, db_index);
-  if (!entry)
-    return -1;
-
   entry->ref_cnt++;
 
   return 0;
@@ -104,8 +98,6 @@ upf_adf_db_ref_cnt_check_zero(u32 db_index)
     return 1;
 
   entry = pool_elt_at_index (upf_adf_db, db_index);
-  if (!entry)
-    return -1;
 
   if (entry->ref_cnt == 0)
     return 1;
@@ -126,9 +118,6 @@ upf_adf_add_multi_regex(upf_adf_app_t * app, u32 * db_index)
   if (*db_index != ~0)
     {
       entry = pool_elt_at_index (upf_adf_db, *db_index);
-      if (!entry)
-	return -1;
-
       upf_adf_cleanup_db_entry(entry);
     }
   else
@@ -210,9 +199,6 @@ upf_adf_lookup(u32 db_index, u8 * str, uint16_t length)
     return -1;
 
   entry = pool_elt_at_index (upf_adf_db, db_index);
-  if (!entry)
-    return -1;
-
   ret = hs_scan(entry->database, (const char*)str, length, 0, entry->scratch,
 		upf_adf_event_handler, (void*)&args);
   if (ret != HS_SUCCESS)
@@ -230,11 +216,7 @@ upf_adf_remove(u32 db_index)
   upf_adf_entry_t *entry = NULL;
 
   entry = pool_elt_at_index (upf_adf_db, db_index);
-  if (!entry)
-    return -1;
-
   upf_adf_cleanup_db_entry(entry);
-
   pool_put (upf_adf_db, entry);
 
   return 0;
@@ -265,7 +247,6 @@ upf_adf_create_update_db(u8 * app_name, u32 * db_index)
     return -1;
 
   app = pool_elt_at_index(sm->upf_apps, p[0]);
-
   res = upf_adf_add_multi_regex(app, db_index);
 
   return res;
@@ -455,15 +436,10 @@ upf_adf_show_db_command_fn (vlib_main_t * vm,
     }
 
   e = pool_elt_at_index (upf_adf_db, app->db_index);
-  if (e)
+  for (int i = 0; i < vec_len(e->expressions); i++)
     {
-      for (int i = 0; i < vec_len(e->expressions); i++)
-	{
-	  vlib_cli_output (vm, "regex: %v", expressions[i]);
-	}
+      vlib_cli_output (vm, "regex: %v", expressions[i]);
     }
-  else
-    error = clib_error_return (0, "DB does not exist...");
 
 done:
   vec_free (name);
@@ -916,7 +892,6 @@ upf_show_app_command_fn (vlib_main_t * vm,
     }
 
   app = pool_elt_at_index (sm->upf_apps, p[0]);
-
   upf_show_rules(vm, app);
 
 done:
@@ -1005,7 +980,6 @@ foreach_upf_flows (BVT (clib_bihash_kv) * kvp,
   flowtable_per_session_t *fmt = arg;
   u32 ht_line_head_index = (u32) kvp->value;
   flowtable_main_t * fm = &flowtable_main;
-  upf_adf_app_t *app = NULL;
   u8 *app_name = NULL;
   upf_main_t * sm = &upf_main;
   vlib_main_t *vm = sm->vlib_main;
@@ -1024,11 +998,9 @@ foreach_upf_flows (BVT (clib_bihash_kv) * kvp,
 
       if (flow->app_index != ~0)
 	{
-	  app = pool_elt_at_index (sm->upf_apps, flow->app_index);
+	  upf_adf_app_t *app = pool_elt_at_index (sm->upf_apps, flow->app_index);
+	  app_name = format (0, "%v", app->name);
 	}
-
-      if (app)
-	app_name = format (0, "%v", app->name);
       else
 	app_name = format (0, "%s", "None");
 
