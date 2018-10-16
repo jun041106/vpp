@@ -36,7 +36,7 @@ int upf_rule_add_del (upf_main_t * sm, u8 * name, u32 id,
 		      int add, upf_rule_args_t * args);
 void foreach_upf_flows (BVT (clib_bihash_kv) * kvp, void * arg);
 
-int upf_adf_get_db_id(u32 app_index, u32 * db_index);
+u32 upf_adf_get_db_id(u32 app_index);
 int upf_adf_db_ref_cnt_dec(u32 db_index);
 
 int upf_flow_timeout_update (flowtable_timeout_type_t type, u16 timeout);

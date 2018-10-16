@@ -812,7 +812,8 @@ static int handle_create_pdr(upf_session_t *sess, pfcp_create_pdr_t *create_pdr,
 	      }
 
 	    ASSERT(!pool_is_free_index (gtm->upf_apps, p[0]));
-	    upf_adf_get_db_id(p[0], &create->adf_db_id);
+	    create->app_index = p[0];
+	    create->adf_db_id = upf_adf_get_db_id(p[0]);
 
 #if CLIB_DEBUG > 0
 	      {
@@ -953,7 +954,7 @@ static int handle_update_pdr(upf_session_t *sess, pfcp_update_pdr_t *update_pdr,
 	  ASSERT(!pool_is_free_index (gtm->upf_apps, p[0]));
 
 	  update->app_index = p[0];
-	  upf_adf_get_db_id(p[0], &update->adf_db_id);
+	  update->adf_db_id = upf_adf_get_db_id(p[0]);
 
 #if CLIB_DEBUG > 0
 	  {

@@ -240,19 +240,15 @@ upf_adf_remove(u32 db_index)
   return 0;
 }
 
-int
-upf_adf_get_db_id(u32 app_index, u32 * db_index)
+u32 upf_adf_get_db_id(u32 app_index)
 {
   upf_main_t * sm = &upf_main;
   upf_adf_app_t *app = NULL;
 
   app = pool_elt_at_index(sm->upf_apps, app_index);
+  upf_adf_db_ref_cnt_inc(app->db_index);
 
-  *db_index = app->db_index;
-
-  upf_adf_db_ref_cnt_inc(*db_index);
-
-  return 0;
+  return app->db_index;
 }
 
 static int
@@ -283,7 +279,6 @@ upf_adf_app_add_command_fn (vlib_main_t * vm,
   unformat_input_t _line_input, *line_input = &_line_input;
   u8 *name = NULL;
   clib_error_t *error = NULL;
-  int res = 0;
   u64 up_seid = 0;
   upf_session_t *sess = NULL;
   upf_pdr_t *pdr = NULL;
@@ -342,17 +337,15 @@ upf_adf_app_add_command_fn (vlib_main_t * vm,
 
   if (add_flag == 0)
     {
-      res = upf_adf_get_db_id(p[0], &pdr->adf_db_id);
+      /* FIXME: that can't be right... */
+      pdr->adf_db_id = upf_adf_get_db_id(p[0]);
     }
   else if (add_flag == 1)
     {
-      res = upf_adf_get_db_id(p[0], &pdr->adf_db_id);
+      pdr->adf_db_id = upf_adf_get_db_id(p[0]);
     }
 
-  if (res == 0)
-    vlib_cli_output (vm, "ADF DB id: %u", pdr->adf_db_id);
-  else
-    vlib_cli_output (vm, "Could not build adf DB");
+  vlib_cli_output (vm, "ADF DB id: %u", pdr->adf_db_id);
 
 done:
   vec_free (name);
@@ -426,12 +419,11 @@ upf_adf_show_db_command_fn (vlib_main_t * vm,
   unformat_input_t _line_input, *line_input = &_line_input;
   clib_error_t *error = NULL;
   u8 *name = NULL;
-  u32 db_id = 0;
-  int res = 0;
   regex_t *expressions = NULL;
   upf_main_t * sm = &upf_main;
   uword *p = NULL;
   upf_adf_entry_t *e;
+  upf_adf_app_t *app;
 
   /* Get a line of input. */
   if (!unformat_user (input, unformat_line_input, line_input))
@@ -455,14 +447,14 @@ upf_adf_show_db_command_fn (vlib_main_t * vm,
   if (!p)
       goto done;
 
-  res = upf_adf_get_db_id(p[0], &db_id);
-  if (res < 0 || db_id == ~0)
+  app = pool_elt_at_index(sm->upf_apps, p[0]);
+  if (app->db_index == ~0)
     {
       error = clib_error_return (0, "DB does not exist...");
       goto done;
     }
 
-  e = pool_elt_at_index (upf_adf_db, db_id);
+  e = pool_elt_at_index (upf_adf_db, app->db_index);
   if (e)
     {
       for (int i = 0; i < vec_len(e->expressions); i++)
