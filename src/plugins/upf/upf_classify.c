@@ -38,6 +38,9 @@
 
 #include <upf/upf_adf.h>
 
+#undef CLIB_DEBUG
+#define CLIB_DEBUG 1
+
 #if CLIB_DEBUG > 0
 #define gtp_debug clib_warning
 #else
@@ -120,14 +123,15 @@ upf_classify (vlib_main_t * vm, vlib_node_runtime_t * node,
 
   while (n_left_from > 0)
     {
+      flow_direction_t flow_direction;
       upf_pdr_t * pdr = NULL;
       upf_pdr_t * adf_pdr = NULL;
       upf_far_t * far = NULL;
       u32 n_left_to_next;
       vlib_buffer_t * b;
-      u8 direction;
       u8 * pl;
       u32 bi;
+      u8 direction;
 
       vlib_get_next_frame (vm, node, next_index,
 			   to_next, n_left_to_next);
@@ -153,43 +157,30 @@ upf_classify (vlib_main_t * vm, vlib_node_runtime_t * node,
 
 	  pl = vlib_buffer_get_current(b) + vnet_buffer (b)->gtpu.data_offset;
 
-	  flowtable_get_flow(pl, &sess->fmt, &flow, is_ip4, direction, current_time);
-	  if (flow->initiator_direction == direction)
-	    {
-	      is_http_req = upf_check_http_req(pl, is_ip4);
-	    }
+	  flow = flowtable_get_flow
+	    (pl, &sess->fmt, is_ip4, vnet_buffer (b)->gtpu.src_intf, current_time);
+	  assert (flow);
 	
-	  gtp_debug("initiator direction: %u, packet direction: %u",
-		    flow->initiator_direction, direction);
+	  flow_direction =
+	    (flow->src_intf == vnet_buffer (b)->gtpu.src_intf) ? FT_FORWARD : FT_REVERSE;
+	  is_http_req = (flow_direction == FT_FORWARD) && upf_check_http_req(pl, is_ip4);
 
-	  /* Check if initiator PDR is cached in this flow */
-	  if (flow->initiator_direction == direction)
-	    {
-	      if (flow->initiator_pdr_id != ~0)
-		{
-		  pdr = sx_get_pdr_by_id(active, flow->initiator_pdr_id);
-		}
-	    }
-	  else
-	  /* Check if responder PDR is cached in this flow */
-	    {
-	      if (flow->responder_pdr_id != ~0)
-		{
-		  pdr = sx_get_pdr_by_id(active, flow->responder_pdr_id);
-		}
-	    }
+	  gtp_debug("flow src: %u, pkt src: %u, flow_direction: %u",
+		    flow->src_intf, vnet_buffer (b)->gtpu.src_intf, flow_direction);
 
-	  /* Find responder PDR using app name */
+	  pdr = (flow->pdr_id[flow_direction] != ~0) ?
+	    sx_get_pdr_by_id(active, flow->pdr_id[flow_direction]) : NULL;
+
+	  /* Find responder PDR using application name */
 	  if (pdr == NULL)
 	    {
-	      if ((flow->initiator_direction != direction) && flow->app_index != ~0)
+	      if (flow_direction == FT_REVERSE && flow->app_index != ~0)
 	      {
 		pdr = upf_get_adf_pdr_by_name(active, direction, flow->app_index);
 		if (pdr)
 		  {
-		    flow->responder_pdr_id = pdr->id;
-		    gtp_debug("responder PDR: %u, app_index: %u",
-			      flow->responder_pdr_id, flow->app_index);
+		      flow->pdr_id[flow_direction] = pdr->id;
+		      gtp_debug("responder PDR: %u, app_index: %u", pdr->id, flow->app_index);
 		  }
 	      }
 	    }
@@ -302,15 +293,15 @@ upf_classify (vlib_main_t * vm, vlib_node_runtime_t * node,
 		{
 		  far = sx_get_far_by_id(active, pdr->far_id);
 
-		  if ((flow->initiator_direction == direction) &&
-		      (flow->initiator_pdr_id == ~0) && is_http_req)
+	      if ((flow_direction == FT_FORWARD) &&
+		  (flow->pdr_id[flow_direction] == ~0) && is_http_req)
 		    {
 		      upf_update_flow_app_index(flow, pdr, pl, is_ip4);
 		      if (flow->app_index != ~0)
 			{
-			  flow->initiator_pdr_id = pdr->id;
+		      flow->pdr_id[flow_direction] = pdr->id;
 			  gtp_debug("initiator PDR: %u, app_index: %u",
-				    flow->initiator_pdr_id, flow->app_index);
+				flow->pdr_id[flow_direction], flow->app_index);
 			}
 		    }
 

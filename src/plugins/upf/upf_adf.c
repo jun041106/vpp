@@ -1099,7 +1099,7 @@ foreach_upf_flows (BVT (clib_bihash_kv) * kvp,
 
       vlib_cli_output (vm, "%llu: proto 0x%x, %U(%u) <-> %U(%u), "
                        "UL pkt %u, DL pkt %u, "
-                       "initiator dir %u, initiator PDR %u, responder PDR %u, "
+                       "Src Intf %u, Forward PDR %u, Reverse PDR %u, "
                        "app %v, lifetime %u",
                        flow->infos.data.flow_id,
                        flow->sig.s.ip4.proto,
@@ -1109,9 +1109,9 @@ foreach_upf_flows (BVT (clib_bihash_kv) * kvp,
                        ntohs(flow->sig.s.ip4.port_dst),
                        flow->stats[0].pkts,
                        flow->stats[1].pkts,
-                       flow->initiator_direction,
-                       flow->initiator_pdr_id,
-                       flow->responder_pdr_id,
+                       flow->src_intf,
+                       flow->pdr_id[FT_FORWARD],
+                       flow->pdr_id[FT_REVERSE],
                        app_name,
                        flow->lifetime);
 

@@ -410,7 +410,7 @@ flowtable_entry_lookup_create(flowtable_main_t * fm,
                               BVT(clib_bihash_kv) * kv,
                               flow_signature_t const * sig,
                               u32 const now,
-                              u8 direction,
+			      u32 src_intf,
                               int is_ip4,
                               int * created)
 {
@@ -441,6 +441,9 @@ flowtable_entry_lookup_create(flowtable_main_t * fm,
             f = pool_elt_at_index(fm->flows, e->value);
             if (PREDICT_TRUE(memcmp(&f->sig, sig, sig->len) == 0))
               {
+		flow_direction_t direction =
+		  (f->src_intf == src_intf) ? FT_FORWARD : FT_REVERSE;
+
                 f->stats[direction].pkts++;
                 return f;
               }
@@ -481,12 +484,11 @@ flowtable_entry_lookup_create(flowtable_main_t * fm,
 
     /* init UPF fields */
     f->app_index = ~0;
-    f->initiator_direction = ~0;
-    f->initiator_pdr_id = ~0;
-    f->responder_pdr_id = ~0;
+    memset(&f->pdr_id, ~0, sizeof(f->pdr_id));
+    f->src_intf = src_intf;
 
     /* update stats */
-    f->stats[direction].pkts++;
+    f->stats[FT_FORWARD].pkts++;
 
     /* insert in timer list */
     pool_get(fmt->timers, timer_entry);
@@ -618,10 +620,9 @@ flow_update_lifetime(flow_entry_t * f, u8 * packet, int is_ip4)
 clib_error_t *
 flowtable_init_session(flowtable_main_t *fm, flowtable_per_session_t * fmt);
 
-always_inline int
+always_inline flow_entry_t *
 flowtable_get_flow(u8 * packet, flowtable_per_session_t * fmt,
-                   flow_entry_t **flow, int is_ip4, u8 direction,
-                   u32 current_time)
+		   int is_ip4, u32 src_intf, u32 current_time)
 {
   uword is_reverse = 0;
   flow_signature_t sig;
@@ -629,6 +630,7 @@ flowtable_get_flow(u8 * packet, flowtable_per_session_t * fmt,
   int created = 0;
   flowtable_main_t * fm = &flowtable_main;
   clib_error_t * error = NULL;
+  flow_entry_t *flow;
 
   kv.key = compute_packet_hash(packet, is_ip4, &is_reverse, &sig);
 
@@ -636,29 +638,18 @@ flowtable_get_flow(u8 * packet, flowtable_per_session_t * fmt,
     {
       error = flowtable_init_session(fm, fmt);
       if (error)
-        return -1;
+	return NULL;
     }
 
-  *flow = flowtable_entry_lookup_create(fm, fmt, &kv, &sig,
-                                        current_time, direction,
-                                        is_ip4,
-                                        &created);
-
-  if (!(*flow))
-    {
-      return -1;
-    }
-
-  if (created == 1)
-    {
-      (*flow)->initiator_direction = direction;
-    }
+  flow = flowtable_entry_lookup_create(fm, fmt, &kv, &sig,
+				       current_time, src_intf,
+				       is_ip4,	&created);
+  if (!flow)
+    return NULL;
 
   /* timer management */
-  if (flow_update_lifetime(*flow, packet, is_ip4))
-    {
-        timer_wheel_resched_flow(fmt, *flow , current_time);
-    }
+  if (flow_update_lifetime(flow, packet, is_ip4))
+    timer_wheel_resched_flow(fmt, flow , current_time);
 
   return 0;
 }

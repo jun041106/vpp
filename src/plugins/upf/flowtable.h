@@ -100,6 +100,12 @@ typedef struct {
     u64 srv_bytes;
 } __attribute__ ((packed)) timeout_msg_t;
 
+typedef enum {
+  FT_FORWARD = 0,
+  FT_REVERSE,
+  FT_DIRECTION_MAX
+} flow_direction_t;
+
 typedef struct flow_entry {
   /* Required for pool_get_aligned  */
   CLIB_CACHE_LINE_ALIGN_MARK (cacheline0);
@@ -114,7 +120,7 @@ typedef struct flow_entry {
     u32 ht_index;  /* index in the hashtable line pool */
 
     /* stats */
-    flow_stats_t stats[2];
+    flow_stats_t stats[FT_DIRECTION_MAX];
 
     /* timers */
     u32 expire;  /* in seconds */
@@ -130,14 +136,11 @@ typedef struct flow_entry {
     /* L7 app index */
     u32 app_index;
 
-    /* TCP initiator direction */
-    u8 initiator_direction;
+  /* source interface */
+  u32 src_intf;
 
     /* Initiator PDR */
-    u32 initiator_pdr_id;
-
-    /* Responder PDR */
-    u32 responder_pdr_id;
+  u32 pdr_id[FT_DIRECTION_MAX];
 } flow_entry_t;
 
 /* Timers (in seconds) */

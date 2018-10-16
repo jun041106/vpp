@@ -2167,6 +2167,13 @@ static const char * source_intf_name[] = {
   "CP-function"
 };
 
+static const char * outer_header_removal_str[] = {
+  "GTP-U/UDP/IPv4",
+  "GTP-U/UDP/IPv6",
+  "UDP/IPv4",
+  "UDP/IPv6"
+};
+
 static u8 *
 format_urr_counter(u8 * s, va_list * args)
 {
@@ -2289,12 +2296,14 @@ format_sx_session(u8 * s, va_list * args)
       s = format(s, "    SDF Filter:\n");
       s = format(s, "      %U\n", format_ipfilter, &pdr->pdi.acl);
     }
-    s = format(s, "  Outer Header Removal: %u\n"
+    s = format(s, "  Outer Header Removal: %s\n"
 	       "  FAR Id: %u\n"
 	       "  URR Ids: [",
-	       pdr->outer_header_removal, pdr->far_id);
+	       (pdr->outer_header_removal >= ARRAY_LEN(outer_header_removal_str))
+	       ? "no" : outer_header_removal_str[pdr->outer_header_removal],
+	       pdr->far_id);
     vec_foreach_index (j, pdr->urr_ids)
-      s = format(s, "%s%u", j != 0 ? ":" : "", vec_elt(pdr->urr_ids, j));
+      s = format(s, "%s%u", j != 0 ? "," : "", vec_elt(pdr->urr_ids, j));
     s = format(s, "] @ %p\n", pdr->urr_ids);
 
 
@@ -2302,7 +2311,7 @@ format_sx_session(u8 * s, va_list * args)
      {
        upf_adf_app_t *app = NULL;
        app = pool_elt_at_index (gtm->upf_apps, pdr->app_index);
-       s = format(s, "  L7 adf app name: %v\n"
+       s = format(s, "  Application Id: %v\n"
                      "  ADF DB Id: %u\n",
                      app->name,
                      pdr->adf_db_id);
