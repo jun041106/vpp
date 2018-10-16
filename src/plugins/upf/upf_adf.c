@@ -117,23 +117,9 @@ upf_adf_db_ref_cnt_check_zero(u32 db_index)
 }
 
 int
-upf_adf_get_db_contents(u32 db_index, regex_t ** expressions, u32 ** ids)
-{
-  upf_adf_entry_t *entry = NULL;
-
-  entry = pool_elt_at_index (upf_adf_db, db_index);
-  if (!entry)
-    return -1;
-
-  *expressions = entry->expressions;
-  *ids = entry->ids;
-
-  return 0;
-}
-
-int
 upf_adf_add_multi_regex(upf_adf_app_t * app, u32 * db_index)
 {
+  upf_main_t *gtm = &upf_main;
   upf_adf_entry_t *entry = NULL;
   hs_compile_error_t *compile_err = NULL;
   int error = 0;
@@ -165,7 +151,7 @@ upf_adf_add_multi_regex(upf_adf_app_t * app, u32 * db_index)
      regex_t regex = NULL;
      rule = pool_elt_at_index(app->rules, index);
 
-     vec_add1(entry->ids, app->id);
+     vec_add1(entry->ids, app - gtm->upf_apps);
 
      vec_add(regex, ".*\\Q", 4);
      vec_add(regex, rule->host, vec_len(rule->host));
@@ -174,7 +160,7 @@ upf_adf_add_multi_regex(upf_adf_app_t * app, u32 * db_index)
      vec_add(regex, "\\E.*", 4);
      vec_add1(regex, 0);
 
-     adf_debug("app id: %u, regex: %s", app->id, regex);
+     adf_debug("app id: %u, regex: %s", app - gtm->upf_apps, regex);
 
      vec_add1(entry->expressions, regex);
 
@@ -314,7 +300,6 @@ upf_adf_app_add_command_fn (vlib_main_t * vm,
   u16 pdr_id = 0;
   u8 add_flag = ~0;
   upf_main_t *gtm = &upf_main;
-  upf_adf_app_t *app = NULL;
   uword *p = NULL;
 
   /* Get a line of input. */
@@ -363,15 +348,15 @@ upf_adf_app_add_command_fn (vlib_main_t * vm,
       goto done;
     }
 
-  app = pool_elt_at_index (gtm->upf_apps, p[0]);
+  ASSERT(!pool_is_free_index (gtm->upf_apps, p[0]));
 
   if (add_flag == 0)
     {
-      res = upf_adf_get_db_id(app->id, &pdr->adf_db_id);
+      res = upf_adf_get_db_id(p[0], &pdr->adf_db_id);
     }
   else if (add_flag == 1)
     {
-      res = upf_adf_get_db_id(app->id, &pdr->adf_db_id);
+      res = upf_adf_get_db_id(p[0], &pdr->adf_db_id);
     }
 
   if (res == 0)
@@ -466,14 +451,11 @@ upf_adf_show_db_command_fn (vlib_main_t * vm,
   u8 *name = NULL;
   u32 db_id = 0;
   int res = 0;
-  regex_t *regex = NULL;
   regex_t *expressions = NULL;
-  u32 *ids = NULL;
-  int i = 0;
-  u32 app_id = 0;
   upf_adf_app_t *app = NULL;
   upf_main_t * sm = &upf_main;
   uword *p = NULL;
+  upf_adf_entry_t *e;
 
   /* Get a line of input. */
   if (!unformat_user (input, unformat_line_input, line_input))
@@ -495,39 +477,28 @@ upf_adf_show_db_command_fn (vlib_main_t * vm,
 
   p = hash_get_mem (sm->upf_app_by_name, name);
   if (!p)
-    {
       goto done;
-    }
 
-  app = pool_elt_at_index (sm->upf_apps, p[0]);
-
-  res = upf_adf_get_db_id(app->id, &db_id);
+  res = upf_adf_get_db_id(p[0], &db_id);
   if (res < 0 || db_id == ~0)
     {
       error = clib_error_return (0, "DB does not exist...");
       goto done;
     }
 
-  res = upf_adf_get_db_contents(db_id, &expressions, &ids);
-  if (res == 0)
+  e = pool_elt_at_index (upf_adf_db, db_id);
+  if (e)
     {
-      for (i = 0; i < vec_len(expressions); i++)
+      for (int i = 0; i < vec_len(e->expressions); i++)
 	{
-	  regex = &expressions[i];
-	  app_id = ids[i];
+	  if (e->ids[i] != ~0)
+	    app = pool_elt_at_index (sm->upf_apps, e->ids[i]);
 
-	  if (app_id != ~0)
-	    {
-	      app = pool_elt_at_index (sm->upf_apps, app_id);
-	    }
-
-	  vlib_cli_output (vm, "regex: %v, app: %v", *regex, app->name);
+	  vlib_cli_output (vm, "regex: %v, app: %v", expressions[i], app ? app->name : (u8 *)"NULL");
 	}
     }
   else
-    {
-      error = clib_error_return (0, "DB does not exist...");
-    }
+    error = clib_error_return (0, "DB does not exist...");
 
 done:
   vec_free (name);
@@ -595,9 +566,8 @@ vnet_upf_app_add_del(u8 * name, u8 add)
       app->name = vec_dup(name);
       app->rules_by_id = hash_create_mem (0, sizeof (u32), sizeof (uword));
       app->db_index = ~0;
-      app->id = app - sm->upf_apps;
 
-      hash_set_mem (sm->upf_app_by_name, app->name, app->id);
+      hash_set_mem (sm->upf_app_by_name, app->name, app - sm->upf_apps);
     }
   else
     {

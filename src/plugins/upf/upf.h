@@ -529,14 +529,10 @@ typedef struct {
 } upf_adr_t;
 
 typedef struct {
-  u32 id;
   u8 * name;
-  /* Rules hash */
-  uword* rules_by_id;
-  /* Rules vector */
-  upf_adr_t *rules;
-  /* adf DB id */
-  u32 db_index;
+  uword* rules_by_id;    /* hash over rules id */
+  upf_adr_t * rules;     /* vector of rules definition */
+  u32 db_index;          /* index in ADR pool */
 } upf_adf_app_t;
 
 typedef struct {
