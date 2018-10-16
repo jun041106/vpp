@@ -23,23 +23,31 @@
  * keep this under 6x4 Bytes so that it may fit into unused opaques' field.
  */
 typedef union {
-    struct {
-        u64 offloaded : 1;
-        u64 flow_id : 63;
+  struct {
+    u64 offloaded : 1;
+    u64 flow_id : 63;
 
-        union {
-            u32 ctx_id;
-            u8 opaque[16];
-        };
-    } __attribute__ ((packed)) data;
+    union {
+      u32 ctx_id;
+      u8 opaque[16];
+    };
+  } __attribute__ ((packed)) data;
 
-    u32 flow_data[6];
+  u32 flow_data[6];
 } flow_data_t;
 
 static_always_inline u8 *
 vnet_plugin_buffer(vlib_buffer_t * b)
 {
-    return (u8 *) &(vnet_buffer(b)->unused);
+  return (u8 *) &(vnet_buffer(b)->unused);
 }
 
 #endif  /* __flowdata_h__ */
+
+/*
+ * fd.io coding-style-patch-verification: ON
+ *
+ * Local Variables:
+ * eval: (c-set-style "gnu")
+ * End:
+ */

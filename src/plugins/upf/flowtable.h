@@ -68,9 +68,9 @@ __attribute__ ((packed));
 
 typedef struct flow_signature {
     union {
-        struct ip6_sig ip6;
-        struct ip4_sig ip4;
-        u8 data[0];  /* gcc will take the max */
+	struct ip6_sig ip6;
+	struct ip4_sig ip4;
+	u8 data[0];  /* gcc will take the max */
     } s;
     u8 len;
 } flow_signature_t;
@@ -79,8 +79,8 @@ typedef struct flow_signature {
 /* dlist helpers */
 #define dlist_is_empty(pool, head_index)                              \
     ({                                                                \
-        dlist_elt_t * head = pool_elt_at_index((pool), (head_index)); \
-        (head->next == (u32) ~0 || head->next == (head_index));       \
+	dlist_elt_t * head = pool_elt_at_index((pool), (head_index)); \
+	(head->next == (u32) ~0 || head->next == (head_index));       \
     })
 
 /* flow helpers */
@@ -110,7 +110,7 @@ typedef struct flow_entry {
   /* Required for pool_get_aligned  */
   CLIB_CACHE_LINE_ALIGN_MARK (cacheline0);
 
-    /* flow signature */
+/* flow signature */
     flow_signature_t sig;
     u16 tcp_state;
     u64 sig_hash;  /* used to delete hashtable entries */
@@ -139,7 +139,7 @@ typedef struct flow_entry {
   /* source interface */
   u32 src_intf;
 
-    /* Initiator PDR */
+  /* Initiator PDR */
   u32 pdr_id[FT_DIRECTION_MAX];
 } flow_entry_t;
 
@@ -235,3 +235,11 @@ typedef enum {
 } flowtable_timeout_type_t;
 
 #endif  /* __flowtable_h__ */
+
+/*
+ * fd.io coding-style-patch-verification: ON
+ *
+ * Local Variables:
+ * eval: (c-set-style "gnu")
+ * End:
+ */

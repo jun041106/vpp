@@ -15,6 +15,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 #ifndef __included_upf_adf_h__
 #define __included_upf_adf_h__
 
@@ -34,7 +35,7 @@ int upf_adf_remove(u32 db_index);
 int upf_adf_get_db_contents(u32 db_index, regex_t ** expressions, u32 ** ids);
 int upf_app_add_del (upf_main_t * sm, u8 * name, int add);
 int upf_rule_add_del (upf_main_t * sm, u8 * name, u32 id,
-                      int add, upf_rule_args_t * args);
+		      int add, upf_rule_args_t * args);
 void foreach_upf_flows (BVT (clib_bihash_kv) * kvp, void * arg);
 
 int upf_adf_get_db_id(u32 app_index, u32 * db_index);
@@ -113,7 +114,7 @@ upf_adf_parse_ip4_packet(ip4_header_t * ip4, u32 db_id, u32 * app_index)
   tcp = (tcp_header_t *) ip4_next_header(ip4);
 
   tcp_payload_len = clib_net_to_host_u16(ip4->length) -
-                    sizeof(ip4_header_t) - tcp_header_bytes(tcp);
+		    sizeof(ip4_header_t) - tcp_header_bytes(tcp);
 
   if (tcp_payload_len < 8)
     return -1;
@@ -136,7 +137,7 @@ upf_adf_parse_ip6_packet(ip6_header_t * ip6, u32 db_id, u32 * app_index)
   tcp = (tcp_header_t *) ip6_next_header(ip6);
 
   tcp_payload_len = clib_net_to_host_u16(ip6->payload_length) -
-                    tcp_header_bytes(tcp);
+		    tcp_header_bytes(tcp);
 
   if (tcp_payload_len < 8)
     return -1;
@@ -157,20 +158,20 @@ upf_get_highest_adf_pdr (struct rules * active, int direction)
   vec_foreach (pdr_iter, active->pdr)
     {
       if (pdr_iter->app_index == ~0)
-        continue;
+	continue;
 
       iter_direction = (pdr_iter->pdi.src_intf == SRC_INTF_ACCESS) ? UL_SDF : DL_SDF;
       if (iter_direction != direction)
-        continue;
+	continue;
 
       if (pdr == NULL)
-        {
-          pdr = pdr_iter;
-          continue;
-        }
+	{
+	  pdr = pdr_iter;
+	  continue;
+	}
 
       if (pdr_iter->precedence < pdr->precedence)
-        pdr = pdr_iter;
+	pdr = pdr_iter;
     }
 
   return pdr;
@@ -187,21 +188,21 @@ upf_check_http_req (u8 * pl, int is_ip4)
     {
       ip4_header_t *ip4 = (ip4_header_t *)pl;
       if (ip4->protocol != IP_PROTOCOL_TCP)
-        return 0;
+	return 0;
 
       tcp = (tcp_header_t *) ip4_next_header(ip4);
       tcp_payload_len = clib_net_to_host_u16(ip4->length) -
-                        sizeof(ip4_header_t) - tcp_header_bytes(tcp);
+			sizeof(ip4_header_t) - tcp_header_bytes(tcp);
     }
   else
     {
       ip6_header_t *ip6 = (ip6_header_t *)pl;
       if (ip6->protocol != IP_PROTOCOL_TCP)
-        return 0;
+	return 0;
 
       tcp = (tcp_header_t *) ip6_next_header(ip6);
       tcp_payload_len = clib_net_to_host_u16(ip6->payload_length) -
-                        tcp_header_bytes(tcp);
+			tcp_header_bytes(tcp);
     }
 
   if (tcp_payload_len < 8)
@@ -221,7 +222,7 @@ upf_check_http_req (u8 * pl, int is_ip4)
 
 always_inline void
 upf_update_flow_app_index (flow_entry_t * flow, upf_pdr_t * pdr,
-                           u8 * pl, int is_ip4)
+			   u8 * pl, int is_ip4)
 {
   if (!flow)
     return;
@@ -235,15 +236,15 @@ upf_update_flow_app_index (flow_entry_t * flow, upf_pdr_t * pdr,
   if (is_ip4)
     {
       upf_adf_parse_ip4_packet((ip4_header_t *)pl,
-                               pdr->adf_db_id,
-                               &flow->app_index);
+			       pdr->adf_db_id,
+			       &flow->app_index);
 
     }
   else
     {
       upf_adf_parse_ip6_packet((ip6_header_t *)pl,
-                               pdr->adf_db_id,
-                               &flow->app_index);
+			       pdr->adf_db_id,
+			       &flow->app_index);
     }
 }
 
@@ -260,17 +261,17 @@ upf_get_adf_pdr_by_name (struct rules * active, int direction, u32 app_index)
   vec_foreach (pdr, active->pdr)
     {
       if (pdr->app_index == ~0)
-        continue;
+	continue;
 
       iter_direction = (pdr->pdi.src_intf == SRC_INTF_ACCESS) ? UL_SDF : DL_SDF;
       if (iter_direction != direction)
-        continue;
+	continue;
 
       if (pdr->app_index == app_index)
-        {
-          res = pdr;
-          break;
-        }
+	{
+	  res = pdr;
+	  break;
+	}
     }
 
   return res;

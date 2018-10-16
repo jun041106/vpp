@@ -49,8 +49,8 @@
 #endif
 
 /* Statistics (not all errors) */
-#define foreach_upf_classify_error    \
-_(CLASSIFY, "good packets classify")
+#define foreach_upf_classify_error		\
+  _(CLASSIFY, "good packets classify")
 
 static char * upf_classify_error_strings[] = {
 #define _(sym,string) string,
@@ -60,9 +60,9 @@ static char * upf_classify_error_strings[] = {
 
 typedef enum {
 #define _(sym,str) UPF_CLASSIFY_ERROR_##sym,
-    foreach_upf_classify_error
+  foreach_upf_classify_error
 #undef _
-    UPF_CLASSIFY_N_ERROR,
+  UPF_CLASSIFY_N_ERROR,
 } upf_classify_error_t;
 
 typedef struct {
@@ -90,7 +90,7 @@ u8 * format_upf_classify_trace (u8 * s, va_list * args)
 
 static uword
 upf_classify (vlib_main_t * vm, vlib_node_runtime_t * node,
-		 vlib_frame_t * from_frame, int is_ip4)
+	      vlib_frame_t * from_frame, int is_ip4)
 {
   u32 n_left_from, next_index, * from, * to_next;
   upf_main_t * gtm = &upf_main;
@@ -119,7 +119,7 @@ upf_classify (vlib_main_t * vm, vlib_node_runtime_t * node,
   stats_n_packets = stats_n_bytes = 0;
 
   u32 current_time = (u32) ((u64) vm->cpu_time_last_node_dispatch /
-                             vm->clib_time.clocks_per_second);
+			    vm->clib_time.clocks_per_second);
 
   while (n_left_from > 0)
     {
@@ -160,7 +160,7 @@ upf_classify (vlib_main_t * vm, vlib_node_runtime_t * node,
 	  flow = flowtable_get_flow
 	    (pl, &sess->fmt, is_ip4, vnet_buffer (b)->gtpu.src_intf, current_time);
 	  assert (flow);
-	
+
 	  flow_direction =
 	    (flow->src_intf == vnet_buffer (b)->gtpu.src_intf) ? FT_FORWARD : FT_REVERSE;
 	  is_http_req = (flow_direction == FT_FORWARD) && upf_check_http_req(pl, is_ip4);
@@ -175,14 +175,14 @@ upf_classify (vlib_main_t * vm, vlib_node_runtime_t * node,
 	  if (pdr == NULL)
 	    {
 	      if (flow_direction == FT_REVERSE && flow->app_index != ~0)
-	      {
-		pdr = upf_get_adf_pdr_by_name(active, direction, flow->app_index);
-		if (pdr)
-		  {
+		{
+		  pdr = upf_get_adf_pdr_by_name(active, direction, flow->app_index);
+		  if (pdr)
+		    {
 		      flow->pdr_id[flow_direction] = pdr->id;
 		      gtp_debug("responder PDR: %u, app_index: %u", pdr->id, flow->app_index);
-		  }
-	      }
+		    }
+		}
 	    }
 
 	  if (pdr == NULL)
@@ -193,117 +193,117 @@ upf_classify (vlib_main_t * vm, vlib_node_runtime_t * node,
 		  adf_pdr = upf_get_highest_adf_pdr(active, direction);
 		}
 
-	  if (acl == NULL)
-	    {
-	      gtpu_intf_tunnel_key_t key;
-	      uword *p;
-
-	      if (adf_pdr == NULL)
-	        {
-	      key.src_intf = vnet_buffer (b)->gtpu.src_intf;
-	      key.teid = vnet_buffer (b)->gtpu.teid;
-
-	      p = hash_get (active->wildcard_teid, key.as_u64);
-
-	      if (PREDICT_TRUE (p != NULL))
+	      if (acl == NULL)
 		{
-		  pdr = sx_get_pdr_by_id(active, p[0]);
-		  if (PREDICT_TRUE (pdr != NULL))
+		  gtpu_intf_tunnel_key_t key;
+		  uword *p;
+
+		  if (adf_pdr == NULL)
 		    {
-		      vnet_buffer (b)->gtpu.pdr_idx = pdr - active->pdr;
-		        }
+		      key.src_intf = vnet_buffer (b)->gtpu.src_intf;
+		      key.teid = vnet_buffer (b)->gtpu.teid;
+
+		      p = hash_get (active->wildcard_teid, key.as_u64);
+
+		      if (PREDICT_TRUE (p != NULL))
+			{
+			  pdr = sx_get_pdr_by_id(active, p[0]);
+			  if (PREDICT_TRUE (pdr != NULL))
+			    {
+			      vnet_buffer (b)->gtpu.pdr_idx = pdr - active->pdr;
+			    }
+			}
 		    }
-		}
-              else
-                {
-                  pdr = adf_pdr;
-                }
-	    }
-	  else
-	    {
-	      u32 save, *teid;
-
-	      data[0] = pl;
-
-	      /* append TEID to data */
-	      teid = (u32 *)(pl + (is_ip4 ? sizeof(ip4_header_t) : sizeof(ip6_header_t))
-			     + sizeof(udp_header_t));
-	      save = *teid;
-	      *teid = vnet_buffer (b)->gtpu.teid;
-
-	      if (is_ip4)
-		{
-#if CLIB_DEBUG > 0
-		  ip4_header_t *ip4 = (ip4_header_t *)pl;
-#endif
-
-		  rte_acl_classify(acl, data, results, 1, 1);
-		  gtp_debug("Ctx: %p, src: %U, dst %U, r: %d\n",
-			       acl,
-			       format_ip4_address, &ip4->src_address,
-			       format_ip4_address, &ip4->dst_address,
-			       results[0]);
-		  if (PREDICT_TRUE (results[0] != 0))
+		  else
 		    {
-		      vnet_buffer (b)->gtpu.pdr_idx = results[0] - 1;
-
-		      /* TODO: this should be optimized */
-		      pdr = active->pdr + results[0] - 1;
+		      pdr = adf_pdr;
+		    }
 		}
 	      else
 		{
+		  u32 save, *teid;
+
+		  data[0] = pl;
+
+		  /* append TEID to data */
+		  teid = (u32 *)(pl + (is_ip4 ? sizeof(ip4_header_t) : sizeof(ip6_header_t))
+				 + sizeof(udp_header_t));
+		  save = *teid;
+		  *teid = vnet_buffer (b)->gtpu.teid;
+
+		  if (is_ip4)
+		    {
 #if CLIB_DEBUG > 0
-		  ip6_header_t *ip6 = (ip6_header_t *)pl;
+		      ip4_header_t *ip4 = (ip4_header_t *)pl;
 #endif
 
-		  rte_acl_classify(acl, data, results, 1, 1);
-		  gtp_debug("Ctx: %p, src: %U, dst %U, r: %d\n",
-			       acl,
-			       format_ip6_address, &ip6->src_address,
-			       format_ip6_address, &ip6->dst_address,
-			       results[0]);
-		  if (PREDICT_TRUE (results[0] != 0))
-		    {
-		      vnet_buffer (b)->gtpu.session_index = sidx;
-		      vnet_buffer (b)->gtpu.pdr_idx = results[0] - 1;
+		      rte_acl_classify(acl, data, results, 1, 1);
+		      gtp_debug("Ctx: %p, src: %U, dst %U, r: %d\n",
+				acl,
+				format_ip4_address, &ip4->src_address,
+				format_ip4_address, &ip4->dst_address,
+				results[0]);
+		      if (PREDICT_TRUE (results[0] != 0))
+			{
+			  vnet_buffer (b)->gtpu.pdr_idx = results[0] - 1;
 
-		      /* TODO: this should be optimized */
-		      pdr = active->pdr + results[0] - 1;
-		    }
-		}
+			  /* TODO: this should be optimized */
+			  pdr = active->pdr + results[0] - 1;
+			}
+		      else
+			{
+#if CLIB_DEBUG > 0
+			  ip6_header_t *ip6 = (ip6_header_t *)pl;
+#endif
 
-	      *teid = save;
+			  rte_acl_classify(acl, data, results, 1, 1);
+			  gtp_debug("Ctx: %p, src: %U, dst %U, r: %d\n",
+				    acl,
+				    format_ip6_address, &ip6->src_address,
+				    format_ip6_address, &ip6->dst_address,
+				    results[0]);
+			  if (PREDICT_TRUE (results[0] != 0))
+			    {
+			      vnet_buffer (b)->gtpu.session_index = sidx;
+			      vnet_buffer (b)->gtpu.pdr_idx = results[0] - 1;
+
+			      /* TODO: this should be optimized */
+			      pdr = active->pdr + results[0] - 1;
+			    }
+			}
+
+		      *teid = save;
 
 		      if (pdr != NULL)
-		        {
-		          if (adf_pdr != NULL)
-		            {
-		              pdr = (pdr->precedence < adf_pdr->precedence) ? pdr : adf_pdr;
-		            }
-		        }
+			{
+			  if (adf_pdr != NULL)
+			    {
+			      pdr = (pdr->precedence < adf_pdr->precedence) ? pdr : adf_pdr;
+			    }
+			}
 		      else
-		        {
-		          pdr = adf_pdr;
-		        }
+			{
+			  pdr = adf_pdr;
+			}
 		    }
 		}
-		}
+	    }
 
 	  if (PREDICT_TRUE (pdr != 0))
-		{
-		  far = sx_get_far_by_id(active, pdr->far_id);
+	    {
+	      far = sx_get_far_by_id(active, pdr->far_id);
 
 	      if ((flow_direction == FT_FORWARD) &&
 		  (flow->pdr_id[flow_direction] == ~0) && is_http_req)
+		{
+		  upf_update_flow_app_index(flow, pdr, pl, is_ip4);
+		  if (flow->app_index != ~0)
 		    {
-		      upf_update_flow_app_index(flow, pdr, pl, is_ip4);
-		      if (flow->app_index != ~0)
-			{
 		      flow->pdr_id[flow_direction] = pdr->id;
-			  gtp_debug("initiator PDR: %u, app_index: %u",
+		      gtp_debug("initiator PDR: %u, app_index: %u",
 				flow->pdr_id[flow_direction], flow->app_index);
-			}
 		    }
+		}
 
 	      /* Outer Header Removal */
 	      switch (pdr->outer_header_removal)

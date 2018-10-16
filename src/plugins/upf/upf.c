@@ -910,13 +910,13 @@ upf_show_session_command_fn (vlib_main_t * vm,
   if (has_flows)
     {
       if (!(sess = sx_lookup(up_seid)))
-        {
-          error = clib_error_return (0, "Sessions 0x%lx not found", up_seid);
-          goto done;
-        }
+	{
+	  error = clib_error_return (0, "Sessions 0x%lx not found", up_seid);
+	  goto done;
+	}
 
       BV (clib_bihash_foreach_key_value_pair) (&sess->fmt.flows_ht,
-                                               foreach_upf_flows, &sess->fmt);
+					       foreach_upf_flows, &sess->fmt);
       goto done;
     }
 
@@ -1097,7 +1097,7 @@ static clib_error_t * upf_init (vlib_main_t * vm)
   sm->fib_node_type = fib_node_register_new_type (&upf_vft);
 
   sm->upf_app_by_name = hash_create_vec ( /* initial length */ 32,
-                                      sizeof (u8), sizeof (uword));
+				      sizeof (u8), sizeof (uword));
 
   flowtable_init(vm);
 

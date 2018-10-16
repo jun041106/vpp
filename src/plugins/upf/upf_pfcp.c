@@ -2312,9 +2312,9 @@ format_sx_session(u8 * s, va_list * args)
        upf_adf_app_t *app = NULL;
        app = pool_elt_at_index (gtm->upf_apps, pdr->app_index);
        s = format(s, "  Application Id: %v\n"
-                     "  ADF DB Id: %u\n",
-                     app->name,
-                     pdr->adf_db_id);
+		  "  ADF DB Id: %u\n",
+		  app->name,
+		  pdr->adf_db_id);
      }
   }
 
