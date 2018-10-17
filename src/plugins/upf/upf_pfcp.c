@@ -994,7 +994,7 @@ void sx_free_session(upf_session_t *sx)
   call_rcu(&si->rcu_head, rcu_free_sx_session_info);
 }
 
-#define sx_rule_vector_fns(t)						\
+#define sx_rule_vector_fns(t, REMOVE)					\
 upf_##t##_t * sx_get_##t##_by_id(struct rules *rules,			\
 				   typeof (((upf_##t##_t *)0)->id) t##_id) \
 {									\
@@ -1017,7 +1017,7 @@ upf_##t##_t *sx_get_##t(upf_session_t *sx, int rule,		\
   return vec_bsearch(&r, rules->t, sx_##t##_id_compare);		\
 }									\
 									\
-int sx_create_##t(upf_session_t *sx, upf_##t##_t *t)		\
+int sx_create_##t(upf_session_t *sx, upf_##t##_t *t)			\
 {									\
   struct rules *rules = sx_get_rules(sx, SX_PENDING);			\
 									\
@@ -1041,13 +1041,15 @@ int sx_delete_##t(upf_session_t *sx, u32 t##_id)			\
   if (!(p = vec_bsearch(&r, rules->t, sx_##t##_id_compare)))		\
     return -1;								\
 									\
+  do { REMOVE; } while (0);						\
+									\
   vec_del1(rules->t, p - rules->t);					\
   return 0;								\
 }
 
-sx_rule_vector_fns(pdr)
-sx_rule_vector_fns(far)
-sx_rule_vector_fns(urr)
+sx_rule_vector_fns(pdr, ({ upf_adf_put_adr_db(p->adf_db_id); }))
+sx_rule_vector_fns(far, ({}))
+sx_rule_vector_fns(urr, ({}))
 
 void sx_send_end_marker(upf_session_t *sx, u16 id)
 {
