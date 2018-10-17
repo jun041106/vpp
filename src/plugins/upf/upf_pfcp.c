@@ -815,8 +815,10 @@ static int make_pending_pdr(upf_session_t *sx)
       pending->pdr = vec_dup(active->pdr);
       vec_foreach_index (i, active->pdr)
 	{
-	  vec_elt(pending->pdr, i).urr_ids =
-	    vec_dup(vec_elt(active->pdr, i).urr_ids);
+	  upf_pdr_t *pdr = vec_elt_at_index(pending->pdr, i);
+
+	  pdr->adf_db_id = upf_adf_get_adr_db(pdr->app_index);
+	  pdr->urr_ids = vec_dup(vec_elt(active->pdr, i).urr_ids);
 	}
     }
 
@@ -885,7 +887,7 @@ static void sx_free_rules(upf_session_t *sx, int rule)
 
   vec_foreach (pdr, rules->pdr)
   {
-    upf_adf_db_ref_cnt_dec(pdr->adf_db_id);
+    upf_adf_put_adr_db(pdr->adf_db_id);
     vec_free(pdr->urr_ids);
   }
 

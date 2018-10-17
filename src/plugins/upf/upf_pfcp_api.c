@@ -813,7 +813,7 @@ static int handle_create_pdr(upf_session_t *sess, pfcp_create_pdr_t *create_pdr,
 
 	    ASSERT(!pool_is_free_index (gtm->upf_apps, p[0]));
 	    create->app_index = p[0];
-	    create->adf_db_id = upf_adf_get_db_id(p[0]);
+	    create->adf_db_id = upf_adf_get_adr_db(p[0]);
 
 #if CLIB_DEBUG > 0
 	      {
@@ -952,9 +952,8 @@ static int handle_update_pdr(upf_session_t *sess, pfcp_update_pdr_t *update_pdr,
 	    }
 
 	  ASSERT(!pool_is_free_index (gtm->upf_apps, p[0]));
-
 	  update->app_index = p[0];
-	  update->adf_db_id = upf_adf_get_db_id(p[0]);
+	  update->adf_db_id =  upf_adf_get_adr_db(p[0]);
 
 #if CLIB_DEBUG > 0
 	  {
@@ -1007,7 +1006,7 @@ static int handle_remove_pdr(upf_session_t *sess, pfcp_remove_pdr_t *remove_pdr,
     delete = sx_get_pdr(sess, SX_PENDING, pdr->pdr_id);
     if (delete)
       {
-	upf_adf_db_ref_cnt_dec(delete->adf_db_id);
+	upf_adf_put_adr_db(delete->adf_db_id);
       }
 
     if ((r = sx_delete_pdr(sess, pdr->pdr_id)) != 0)

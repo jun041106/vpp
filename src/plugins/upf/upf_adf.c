@@ -61,50 +61,6 @@ upf_adf_cleanup_db_entry(upf_adf_entry_t *entry)
   memset(entry, 0, sizeof(upf_adf_entry_t));
 }
 
-int
-upf_adf_db_ref_cnt_dec(u32 db_index)
-{
-  upf_adf_entry_t *entry = NULL;
-
-  if (db_index == ~0)
-    return -1;
-
-  entry = pool_elt_at_index (upf_adf_db, db_index);
-  entry->ref_cnt--;
-
-  return 0;
-}
-
-static int
-upf_adf_db_ref_cnt_inc(u32 db_index)
-{
-  upf_adf_entry_t *entry = NULL;
-
-  if (db_index == ~0)
-    return -1;
-
-  entry = pool_elt_at_index (upf_adf_db, db_index);
-  entry->ref_cnt++;
-
-  return 0;
-}
-
-static int
-upf_adf_db_ref_cnt_check_zero(u32 db_index)
-{
-  upf_adf_entry_t *entry = NULL;
-
-  if (db_index == ~0)
-    return 1;
-
-  entry = pool_elt_at_index (upf_adf_db, db_index);
-
-  if (entry->ref_cnt == 0)
-    return 1;
-
-  return 0;
-}
-
 static int upf_adf_create_update_db(upf_adf_app_t * app)
 {
   upf_adf_entry_t *entry = NULL;
@@ -221,16 +177,42 @@ upf_adf_remove(u32 db_index)
   return 0;
 }
 
-u32 upf_adf_get_db_id(u32 app_index)
+u32 upf_adf_get_adr_db(u32 app_index)
 {
   upf_main_t * sm = &upf_main;
-  upf_adf_app_t *app = NULL;
+  upf_adf_app_t *app;
 
   app = pool_elt_at_index(sm->upf_apps, app_index);
-  upf_adf_db_ref_cnt_inc(app->db_index);
+  if (app->db_index != ~0 &&
+      !pool_is_free_index (upf_adf_db, app->db_index))
+    {
+      upf_adf_entry_t *entry = pool_elt_at_index (upf_adf_db, app->db_index);
+      clib_smp_atomic_add(&entry->ref_cnt, 1);
+    }
 
   return app->db_index;
 }
+
+void upf_adf_put_adr_db(u32 db_index)
+{
+  if (db_index != ~0)
+    {
+      upf_adf_entry_t *entry = pool_elt_at_index (upf_adf_db, db_index);
+      clib_smp_atomic_add(&entry->ref_cnt, -1);
+    }
+}
+
+static u32 upf_adf_adr_ref_count(u32 db_index)
+{
+  if (db_index != ~0)
+    {
+      upf_adf_entry_t *entry = pool_elt_at_index (upf_adf_db, db_index);
+      return entry->ref_cnt;
+    }
+
+  return 0;
+}
+
 
 static clib_error_t *
 upf_adf_app_add_command_fn (vlib_main_t * vm,
@@ -298,12 +280,17 @@ upf_adf_app_add_command_fn (vlib_main_t * vm,
 
   if (add_flag == 0)
     {
-      /* FIXME: that can't be right... */
-      pdr->adf_db_id = upf_adf_get_db_id(p[0]);
+      upf_adf_put_adr_db(pdr->adf_db_id);
+
+      pdr->pdi.fields &= ~F_PDI_APPLICATION_ID;
+      pdr->app_index = ~0;
+      pdr->adf_db_id = ~0;
     }
   else if (add_flag == 1)
     {
-      pdr->adf_db_id = upf_adf_get_db_id(p[0]);
+      pdr->pdi.fields |= F_PDI_APPLICATION_ID;
+      pdr->app_index = p[0];
+      pdr->adf_db_id = upf_adf_get_adr_db(p[0]);
     }
 
   vlib_cli_output (vm, "ADF DB id: %u", pdr->adf_db_id);
@@ -498,7 +485,7 @@ vnet_upf_app_add_del(u8 * name, u8 add)
       hash_unset_mem (sm->upf_app_by_name, name);
       app = pool_elt_at_index (sm->upf_apps, p[0]);
 
-      if (upf_adf_db_ref_cnt_check_zero(app->db_index) != 1)
+      if (upf_adf_adr_ref_count(app->db_index) != 0)
 	return VNET_API_ERROR_INSTANCE_IN_USE;
 
       /* *INDENT-OFF* */
@@ -662,7 +649,7 @@ vnet_upf_rule_add_del(u8 * app_name, u32 rule_index, u8 add,
 
   app = pool_elt_at_index (sm->upf_apps, p[0]);
 
-  if (upf_adf_db_ref_cnt_check_zero(app->db_index) != 1)
+  if (upf_adf_adr_ref_count(app->db_index) != 0)
     return VNET_API_ERROR_INSTANCE_IN_USE;
 
   p = hash_get_mem (app->rules_by_id, &rule_index);

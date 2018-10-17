@@ -523,14 +523,14 @@ typedef struct {
 typedef u8 * regex_t;
 
 typedef struct {
-  u32 id;
+  u32 id;               /* bit 31 == 1 indicates PFD from CP */
   regex_t host;
   regex_t path;
 } upf_adr_t;
 
 typedef struct {
   u8 * name;
-  uword* rules_by_id;    /* hash over rules id */
+  uword * rules_by_id;   /* hash over rules id */
   upf_adr_t * rules;     /* vector of rules definition */
   u32 db_index;          /* index in ADR pool */
 } upf_adf_app_t;
