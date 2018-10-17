@@ -240,6 +240,11 @@ struct rte_acl_ctx {};
 #define INTF_LI		4
 #define INTF_NUM	(INTF_LI + 1)
 
+typedef struct {
+  u32 application_id;
+  u32 db_id;
+} adr_rule_t;
+
 /* Packet Detection Information */
 typedef struct {
   u8 src_intf;
@@ -260,6 +265,7 @@ typedef struct {
   pfcp_f_teid_t teid;
   pfcp_ue_ip_address_t ue_addr;
   acl_rule_t acl;
+  adr_rule_t adr;
 } upf_pdi_t;
 
 /* Packet Detection Rules */
@@ -271,8 +277,6 @@ typedef struct {
   u8 outer_header_removal;
   u16 far_id;
   u16 *urr_ids;
-  u32 app_index;
-  u32 adf_db_id;
 } upf_pdr_t;
 
 /* Forward Action Rules - Forwarding Parameters */

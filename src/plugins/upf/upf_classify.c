@@ -174,13 +174,13 @@ upf_classify (vlib_main_t * vm, vlib_node_runtime_t * node,
 	  /* Find responder PDR using application name */
 	  if (pdr == NULL)
 	    {
-	      if (flow_direction == FT_REVERSE && flow->app_index != ~0)
+	      if (flow_direction == FT_REVERSE && flow->application_id != ~0)
 		{
-		  pdr = upf_get_adf_pdr_by_name(active, direction, flow->app_index);
+		  pdr = upf_get_adf_pdr_by_name(active, direction, flow->application_id);
 		  if (pdr)
 		    {
 		      flow->pdr_id[flow_direction] = pdr->id;
-		      gtp_debug("responder PDR: %u, app_index: %u", pdr->id, flow->app_index);
+		      gtp_debug("responder PDR: %u, application_id: %u", pdr->id, flow->application_id);
 		    }
 		}
 	    }
@@ -296,12 +296,12 @@ upf_classify (vlib_main_t * vm, vlib_node_runtime_t * node,
 	      if ((flow_direction == FT_FORWARD) &&
 		  (flow->pdr_id[flow_direction] == ~0) && is_http_req)
 		{
-		  upf_update_flow_app_index(flow, pdr, pl, is_ip4);
-		  if (flow->app_index != ~0)
+		  upf_update_flow_application_id(flow, pdr, pl, is_ip4);
+		  if (flow->application_id != ~0)
 		    {
 		      flow->pdr_id[flow_direction] = pdr->id;
-		      gtp_debug("initiator PDR: %u, app_index: %u",
-				flow->pdr_id[flow_direction], flow->app_index);
+		      gtp_debug("initiator PDR: %u, application_id: %u",
+				flow->pdr_id[flow_direction], flow->application_id);
 		    }
 		}
 

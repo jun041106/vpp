@@ -134,7 +134,7 @@ typedef struct flow_entry {
     flow_data_t infos;
 
     /* L7 app index */
-    u32 app_index;
+    u32 application_id;
 
   /* source interface */
   u32 src_intf;

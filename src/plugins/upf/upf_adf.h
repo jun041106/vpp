@@ -36,7 +36,7 @@ int upf_rule_add_del (upf_main_t * sm, u8 * name, u32 id,
 		      int add, upf_rule_args_t * args);
 void foreach_upf_flows (BVT (clib_bihash_kv) * kvp, void * arg);
 
-u32 upf_adf_get_adr_db(u32 app_index);
+u32 upf_adf_get_adr_db(u32 application_id);
 void upf_adf_put_adr_db(u32 db_index);
 
 int upf_flow_timeout_update (flowtable_timeout_type_t type, u16 timeout);
@@ -155,7 +155,7 @@ upf_get_highest_adf_pdr (struct rules * active, int direction)
 
   vec_foreach (pdr_iter, active->pdr)
     {
-      if (pdr_iter->app_index == ~0)
+      if (!(pdr->pdi.fields & F_PDI_APPLICATION_ID))
 	continue;
 
       iter_direction = (pdr_iter->pdi.src_intf == SRC_INTF_ACCESS) ? UL_SDF : DL_SDF;
@@ -219,7 +219,7 @@ upf_check_http_req (u8 * pl, int is_ip4)
 }
 
 always_inline void
-upf_update_flow_app_index (flow_entry_t * flow, upf_pdr_t * pdr,
+upf_update_flow_application_id (flow_entry_t * flow, upf_pdr_t * pdr,
 			   u8 * pl, int is_ip4)
 {
   int r;
@@ -227,22 +227,22 @@ upf_update_flow_app_index (flow_entry_t * flow, upf_pdr_t * pdr,
   if (!flow)
     return;
 
-  if (flow->app_index != ~0)
+  if (flow->application_id != ~0)
     return;
 
-  if (pdr->app_index == ~0)
+  if (!(pdr->pdi.fields & F_PDI_APPLICATION_ID))
     return;
 
   r = (is_ip4) ?
-    upf_adf_parse_ip4_packet((ip4_header_t *)pl, pdr->adf_db_id) :
-    upf_adf_parse_ip6_packet((ip6_header_t *)pl, pdr->adf_db_id);
+    upf_adf_parse_ip4_packet((ip4_header_t *)pl, pdr->pdi.adr.db_id) :
+    upf_adf_parse_ip6_packet((ip6_header_t *)pl, pdr->pdi.adr.db_id);
 
   if (r == 0)
-    flow->app_index = pdr->app_index;
+    flow->application_id = pdr->pdi.adr.application_id;
 }
 
 always_inline upf_pdr_t *
-upf_get_adf_pdr_by_name (struct rules * active, int direction, u32 app_index)
+upf_get_adf_pdr_by_name (struct rules * active, int direction, u32 application_id)
 {
   upf_pdr_t *pdr = NULL;
   upf_pdr_t *res = NULL;
@@ -253,14 +253,14 @@ upf_get_adf_pdr_by_name (struct rules * active, int direction, u32 app_index)
 
   vec_foreach (pdr, active->pdr)
     {
-      if (pdr->app_index == ~0)
+      if (!(pdr->pdi.fields & F_PDI_APPLICATION_ID))
 	continue;
 
       iter_direction = (pdr->pdi.src_intf == SRC_INTF_ACCESS) ? UL_SDF : DL_SDF;
       if (iter_direction != direction)
 	continue;
 
-      if (pdr->app_index == app_index)
+      if (pdr->pdi.adr.application_id == application_id)
 	{
 	  res = pdr;
 	  break;

@@ -817,7 +817,7 @@ static int make_pending_pdr(upf_session_t *sx)
 	{
 	  upf_pdr_t *pdr = vec_elt_at_index(pending->pdr, i);
 
-	  pdr->adf_db_id = upf_adf_get_adr_db(pdr->app_index);
+	  pdr->pdi.adr.db_id = upf_adf_get_adr_db(pdr->pdi.adr.application_id);
 	  pdr->urr_ids = vec_dup(vec_elt(active->pdr, i).urr_ids);
 	}
     }
@@ -887,7 +887,7 @@ static void sx_free_rules(upf_session_t *sx, int rule)
 
   vec_foreach (pdr, rules->pdr)
   {
-    upf_adf_put_adr_db(pdr->adf_db_id);
+    upf_adf_put_adr_db(pdr->pdi.adr.db_id);
     vec_free(pdr->urr_ids);
   }
 
@@ -1047,7 +1047,7 @@ int sx_delete_##t(upf_session_t *sx, u32 t##_id)			\
   return 0;								\
 }
 
-sx_rule_vector_fns(pdr, ({ upf_adf_put_adr_db(p->adf_db_id); }))
+sx_rule_vector_fns(pdr, ({ upf_adf_put_adr_db(p->pdi.adr.db_id); }))
 sx_rule_vector_fns(far, ({}))
 sx_rule_vector_fns(urr, ({}))
 
@@ -2300,6 +2300,12 @@ format_sx_session(u8 * s, va_list * args)
       s = format(s, "    SDF Filter:\n");
       s = format(s, "      %U\n", format_ipfilter, &pdr->pdi.acl);
     }
+    if (pdr->pdi.fields & F_PDI_APPLICATION_ID)
+      {
+	s = format(s, "  Application Id: %v [db:%u]\n",
+		   pool_elt_at_index (gtm->upf_apps, pdr->pdi.adr.application_id)->name,
+		   pdr->pdi.adr.db_id);
+      }
     s = format(s, "  Outer Header Removal: %s\n"
 	       "  FAR Id: %u\n"
 	       "  URR Ids: [",
@@ -2309,17 +2315,6 @@ format_sx_session(u8 * s, va_list * args)
     vec_foreach_index (j, pdr->urr_ids)
       s = format(s, "%s%u", j != 0 ? "," : "", vec_elt(pdr->urr_ids, j));
     s = format(s, "] @ %p\n", pdr->urr_ids);
-
-
-   if (pdr->app_index != ~0)
-     {
-       upf_adf_app_t *app = NULL;
-       app = pool_elt_at_index (gtm->upf_apps, pdr->app_index);
-       s = format(s, "  Application Id: %v\n"
-		  "  ADF DB Id: %u\n",
-		  app->name,
-		  pdr->adf_db_id);
-     }
   }
 
   vec_foreach (far, rules->far) {

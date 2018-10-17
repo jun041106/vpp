@@ -177,12 +177,12 @@ upf_adf_remove(u32 db_index)
   return 0;
 }
 
-u32 upf_adf_get_adr_db(u32 app_index)
+u32 upf_adf_get_adr_db(u32 application_id)
 {
   upf_main_t * sm = &upf_main;
   upf_adf_app_t *app;
 
-  app = pool_elt_at_index(sm->upf_apps, app_index);
+  app = pool_elt_at_index(sm->upf_apps, application_id);
   if (app->db_index != ~0 &&
       !pool_is_free_index (upf_adf_db, app->db_index))
     {
@@ -280,20 +280,20 @@ upf_adf_app_add_command_fn (vlib_main_t * vm,
 
   if (add_flag == 0)
     {
-      upf_adf_put_adr_db(pdr->adf_db_id);
+      upf_adf_put_adr_db(pdr->pdi.adr.db_id);
 
       pdr->pdi.fields &= ~F_PDI_APPLICATION_ID;
-      pdr->app_index = ~0;
-      pdr->adf_db_id = ~0;
+      pdr->pdi.adr.application_id = ~0;
+      pdr->pdi.adr.db_id = ~0;
     }
   else if (add_flag == 1)
     {
       pdr->pdi.fields |= F_PDI_APPLICATION_ID;
-      pdr->app_index = p[0];
-      pdr->adf_db_id = upf_adf_get_adr_db(p[0]);
+      pdr->pdi.adr.application_id = p[0];
+      pdr->pdi.adr.db_id = upf_adf_get_adr_db(p[0]);
     }
 
-  vlib_cli_output (vm, "ADF DB id: %u", pdr->adf_db_id);
+  vlib_cli_output (vm, "ADR DB id: %u", pdr->pdi.adr.db_id);
 
 done:
   vec_free (name);
@@ -962,9 +962,9 @@ foreach_upf_flows (BVT (clib_bihash_kv) * kvp,
       flow = pool_elt_at_index(fm->flows, e->value);
       index = e->next;
 
-      if (flow->app_index != ~0)
+      if (flow->application_id != ~0)
 	{
-	  upf_adf_app_t *app = pool_elt_at_index (sm->upf_apps, flow->app_index);
+	  upf_adf_app_t *app = pool_elt_at_index (sm->upf_apps, flow->application_id);
 	  app_name = format (0, "%v", app->name);
 	}
       else
