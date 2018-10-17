@@ -242,32 +242,24 @@ upf_update_flow_application_id (flow_entry_t * flow, upf_pdr_t * pdr,
 }
 
 always_inline upf_pdr_t *
-upf_get_adf_pdr_by_name (struct rules * active, int direction, u32 application_id)
+upf_get_adf_pdr_by_name (struct rules * active, u8 src_intf, u32 application_id)
 {
-  upf_pdr_t *pdr = NULL;
-  upf_pdr_t *res = NULL;
-  int iter_direction = 0;
-
-  if (vec_len(active->pdr) == 0)
-    return NULL;
+  upf_pdr_t *pdr;
 
   vec_foreach (pdr, active->pdr)
     {
       if (!(pdr->pdi.fields & F_PDI_APPLICATION_ID))
 	continue;
 
-      iter_direction = (pdr->pdi.src_intf == SRC_INTF_ACCESS) ? UL_SDF : DL_SDF;
-      if (iter_direction != direction)
+      if (pdr->pdi.src_intf != src_intf)
 	continue;
 
       if (pdr->pdi.adr.application_id == application_id)
-	{
-	  res = pdr;
-	  break;
-	}
+	return pdr;
     }
 
-  return res;
+  /* not found */
+  return NULL;
 }
 
 #endif /* __included_upf_adf_h__ */

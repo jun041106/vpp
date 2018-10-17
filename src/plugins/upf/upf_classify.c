@@ -176,7 +176,8 @@ upf_classify (vlib_main_t * vm, vlib_node_runtime_t * node,
 	    {
 	      if (flow_direction == FT_REVERSE && flow->application_id != ~0)
 		{
-		  pdr = upf_get_adf_pdr_by_name(active, direction, flow->application_id);
+		  pdr = upf_get_adf_pdr_by_name
+		    (active, vnet_buffer (b)->gtpu.src_intf, flow->application_id);
 		  if (pdr)
 		    {
 		      flow->pdr_id[flow_direction] = pdr->id;
