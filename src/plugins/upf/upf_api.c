@@ -145,7 +145,7 @@ static void vl_api_upf_app_flow_timeout_set_t_handler
   vl_api_upf_app_l7_rule_add_del_reply_t * rmp = NULL;
   upf_main_t * sm = &upf_main;
 
-  rv = upf_flow_timeout_update(mp->type, mp->default_value);
+  //rv = upf_flow_timeout_update(mp->type, mp->default_value);
 
   REPLY_MACRO(VL_API_UPF_APP_FLOW_TIMEOUT_SET_REPLY);
 }

@@ -943,7 +943,7 @@ foreach_upf_flows (BVT (clib_bihash_kv) * kvp,
   dlist_elt_t *ht_line = NULL;
   u32 index = 0;
   flow_entry_t *flow = NULL;
-  flowtable_per_session_t *fmt = arg;
+  flowtable_main_per_cpu_t *fmt = arg;
   u32 ht_line_head_index = (u32) kvp->value;
   flowtable_main_t * fm = &flowtable_main;
   u8 *app_name = NULL;
@@ -970,11 +970,10 @@ foreach_upf_flows (BVT (clib_bihash_kv) * kvp,
       else
 	app_name = format (0, "%s", "None");
 
-      vlib_cli_output (vm, "%llu: proto 0x%x, %U(%u) <-> %U(%u), "
+      vlib_cli_output (vm, "proto 0x%x, %U(%u) <-> %U(%u), "
 		       "UL pkt %u, DL pkt %u, "
 		       "Src Intf %u, Forward PDR %u, Reverse PDR %u, "
 		       "app %v, lifetime %u",
-		       flow->infos.data.flow_id,
 		       flow->sig.s.ip4.proto,
 		       format_ip4_address, &flow->sig.s.ip4.src,
 		       ntohs(flow->sig.s.ip4.port_src),
@@ -995,7 +994,7 @@ foreach_upf_flows (BVT (clib_bihash_kv) * kvp,
 static clib_error_t *
 vnet_upf_flow_timeout_update(flowtable_timeout_type_t type, u16 timeout)
 {
-  return flowtable_timelife_update(type, timeout);
+  return flowtable_lifetime_update(type, timeout);
 }
 
 int upf_flow_timeout_update (flowtable_timeout_type_t type, u16 timeout)
@@ -1010,7 +1009,7 @@ int upf_flow_timeout_update (flowtable_timeout_type_t type, u16 timeout)
 static u16
 vnet_upf_get_flow_timeout(flowtable_timeout_type_t type)
 {
-  return flowtable_timelife_get(type);
+  return flowtable_lifetime_get(type);
 }
 
 static clib_error_t *
@@ -1029,11 +1028,6 @@ upf_flow_timeout_command_fn (vlib_main_t * vm,
 
   while (unformat_check_input (line_input) != UNFORMAT_END_OF_INPUT)
     {
-      if (unformat (line_input, "default %u", &timeout))
-	{
-	  type = FT_TIMEOUT_TYPE_DEFAULT;
-	  break;
-	}
       if (unformat (line_input, "ip4 %u", &timeout))
 	{
 	  type = FT_TIMEOUT_TYPE_IPV4;
@@ -1099,11 +1093,6 @@ upf_show_flow_timeout_command_fn (vlib_main_t * vm,
 
   while (unformat_check_input (line_input) != UNFORMAT_END_OF_INPUT)
     {
-      if (unformat (line_input, "default"))
-	{
-	  type = FT_TIMEOUT_TYPE_DEFAULT;
-	  break;
-	}
       if (unformat (line_input, "ip4"))
 	{
 	  type = FT_TIMEOUT_TYPE_IPV4;

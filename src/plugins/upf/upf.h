@@ -41,7 +41,6 @@
 #include <vnet/fib/fib_table.h>
 
 #include "pfcp.h"
-#include "flowtable_impl.h"
 #include "flowtable.h"
 
 
@@ -445,9 +444,6 @@ typedef struct {
   u32 hw_if_index;
 
   f64 unix_time_start;
-
-  /* flow table*/
-  flowtable_per_session_t fmt;
 } upf_session_t;
 
 

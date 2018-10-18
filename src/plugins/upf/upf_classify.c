@@ -34,8 +34,6 @@
 #include <upf/upf_http_redirect_server.h>
 
 #include <upf/flowtable.h>
-#include <upf/flowtable_impl.h>
-
 #include <upf/upf_adf.h>
 
 #undef CLIB_DEBUG
@@ -118,8 +116,8 @@ upf_classify (vlib_main_t * vm, vlib_node_runtime_t * node,
   stats_sw_if_index = node->runtime_data[0];
   stats_n_packets = stats_n_bytes = 0;
 
-  u32 current_time = (u32) ((u64) vm->cpu_time_last_node_dispatch /
-			    vm->clib_time.clocks_per_second);
+  /* u32 current_time = (u32) ((u64) vm->cpu_time_last_node_dispatch / */
+  /* 			    vm->clib_time.clocks_per_second); */
 
   while (n_left_from > 0)
     {
@@ -157,9 +155,15 @@ upf_classify (vlib_main_t * vm, vlib_node_runtime_t * node,
 
 	  pl = vlib_buffer_get_current(b) + vnet_buffer (b)->gtpu.data_offset;
 
+#if FLOWTABLE_TODO
 	  flow = flowtable_get_flow
 	    (pl, &sess->fmt, is_ip4, vnet_buffer (b)->gtpu.src_intf, current_time);
-	  assert (flow);
+#else
+	  /* flow = flowtable_get_flow */
+	  /*   (pl, NULL, is_ip4, vnet_buffer (b)->gtpu.src_intf, current_time); */
+	  flow = NULL;
+#endif
+	  ASSERT (flow);
 
 	  flow_direction =
 	    (flow->src_intf == vnet_buffer (b)->gtpu.src_intf) ? FT_FORWARD : FT_REVERSE;

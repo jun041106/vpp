@@ -39,8 +39,6 @@ void foreach_upf_flows (BVT (clib_bihash_kv) * kvp, void * arg);
 u32 upf_adf_get_adr_db(u32 application_id);
 void upf_adf_put_adr_db(u32 db_index);
 
-int upf_flow_timeout_update (flowtable_timeout_type_t type, u16 timeout);
-
 #define MIN(x,y) (((x)<(y))?(x):(y))
 
 always_inline int

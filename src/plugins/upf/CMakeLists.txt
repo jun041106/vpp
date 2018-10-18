@@ -129,8 +129,8 @@ if(DPDK_INCLUDE_DIR AND DPDK_LIB)
     upf_pfcp_server.c
     upf_http_redirect_server.c
     upf_adf.c
-    upf_timer.c
-    flowtable_impl.c
+    flowtable_init.c
+    upf_flow_node.c
 
     API_FILES
     upf.api
@@ -145,10 +145,8 @@ if(DPDK_INCLUDE_DIR AND DPDK_LIB)
     upf_pfcp_server.h
     upf_http_redirect_server.h
     upf_adf.h
-    flowdata.h
     flowtable.h
     flowtable_tcp.h
-    flowtable_impl.h
 
     LINK_LIBRARIES
     ${URCU_LIBRARIES}

@@ -31,8 +31,7 @@
 #include <upf/pfcp.h>
 #include <upf/upf_pfcp_server.h>
 
-#include "flowtable.h"
-#include <upf/flowtable_impl.h>
+#include <upf/flowtable.h>
 #include <upf/upf_adf.h>
 
 int upf_enable_disable (upf_main_t * sm, u32 sw_if_index,
@@ -877,7 +876,9 @@ upf_show_session_command_fn (vlib_main_t * vm,
   ip46_address_t cp_ip;
   u8 has_cp_f_seid = 0, has_up_seid = 0;
   upf_session_t *sess = NULL;
+#if FLOWTABLE_TODO
   u8 has_flows = 0;
+#endif
 
   if (unformat_user (main_input, unformat_line_input, line_input))
     {
@@ -893,10 +894,12 @@ upf_show_session_command_fn (vlib_main_t * vm,
 	    has_up_seid = 1;
 	  else if (unformat (line_input, "up seid 0x%lx", &up_seid))
 	    has_up_seid = 1;
-		else if (unformat (line_input, "%lu flows", &up_seid))
+#if FLOWTABLE_TODO
+	  else if (unformat (line_input, "%lu flows", &up_seid))
 	    has_flows = 1;
-		else if (unformat (line_input, "0x%lx flows", &up_seid))
+	  else if (unformat (line_input, "0x%lx flows", &up_seid))
 	    has_flows = 1;
+#endif
 	  else {
 	    error = unformat_parse_error (line_input);
 	    unformat_free (line_input);
@@ -907,6 +910,7 @@ upf_show_session_command_fn (vlib_main_t * vm,
       unformat_free (line_input);
     }
 
+#if FLOWTABLE_TODO
   if (has_flows)
     {
       if (!(sess = sx_lookup(up_seid)))
@@ -919,6 +923,7 @@ upf_show_session_command_fn (vlib_main_t * vm,
 					       foreach_upf_flows, &sess->fmt);
       goto done;
     }
+#endif
 
   if (has_cp_f_seid)
     {
@@ -1048,6 +1053,28 @@ VLIB_CLI_COMMAND (upf_show_assoc_command, static) =
 };
 /* *INDENT-ON* */
 
+static clib_error_t *
+upf_show_flows_command_fn (vlib_main_t * vm,
+			   unformat_input_t * input,
+			   vlib_cli_command_t * cmd)
+{
+  flowtable_main_t * fm = &flowtable_main;
+  flowtable_main_per_cpu_t * fmt = &fm->per_cpu[0];
+
+  BV (clib_bihash_foreach_key_value_pair) (&fmt->flows_ht, foreach_upf_flows, vm);
+
+  return NULL;
+}
+
+/* *INDENT-OFF* */
+VLIB_CLI_COMMAND (upf_show_flows_command, static) =
+{
+  .path = "show upf flows",
+  .short_help = "show upf flows",
+  .function = upf_show_flows_command_fn,
+};
+/* *INDENT-ON* */
+
 static clib_error_t * upf_init (vlib_main_t * vm)
 {
   upf_main_t * sm = &upf_main;
@@ -1099,7 +1126,9 @@ static clib_error_t * upf_init (vlib_main_t * vm)
   sm->upf_app_by_name = hash_create_vec ( /* initial length */ 32,
 				      sizeof (u8), sizeof (uword));
 
-  flowtable_init(vm);
+  error = flowtable_init(vm);
+  if (error)
+    return error;
 
   return sx_server_main_init(vm);
 }
