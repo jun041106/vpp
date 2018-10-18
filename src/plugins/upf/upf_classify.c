@@ -172,8 +172,7 @@ upf_classify (vlib_main_t * vm, vlib_node_runtime_t * node,
 	  gtp_debug("flow src: %u, pkt src: %u, flow_direction: %u",
 		    flow->src_intf, vnet_buffer (b)->gtpu.src_intf, flow_direction);
 
-	  pdr = (flow->pdr_id[flow_direction] != ~0) ?
-	    sx_get_pdr_by_id(active, flow->pdr_id[flow_direction]) : NULL;
+	  pdr = flow->pdr_id != ~0 ? sx_get_pdr_by_id(active, flow->pdr_id) : NULL;
 
 	  /* Find responder PDR using application name */
 	  if (pdr == NULL)
@@ -184,7 +183,7 @@ upf_classify (vlib_main_t * vm, vlib_node_runtime_t * node,
 		    (active, vnet_buffer (b)->gtpu.src_intf, flow->application_id);
 		  if (pdr)
 		    {
-		      flow->pdr_id[flow_direction] = pdr->id;
+		      flow->pdr_id = pdr->id;
 		      gtp_debug("responder PDR: %u, application_id: %u", pdr->id, flow->application_id);
 		    }
 		}
@@ -299,14 +298,14 @@ upf_classify (vlib_main_t * vm, vlib_node_runtime_t * node,
 	      far = sx_get_far_by_id(active, pdr->far_id);
 
 	      if ((flow_direction == FT_FORWARD) &&
-		  (flow->pdr_id[flow_direction] == ~0) && is_http_req)
+		  (flow->pdr_id == ~0) && is_http_req)
 		{
 		  upf_update_flow_application_id(flow, pdr, pl, is_ip4);
 		  if (flow->application_id != ~0)
 		    {
-		      flow->pdr_id[flow_direction] = pdr->id;
+		      flow->pdr_id = pdr->id;
 		      gtp_debug("initiator PDR: %u, application_id: %u",
-				flow->pdr_id[flow_direction], flow->application_id);
+				flow->pdr_id, flow->application_id);
 		    }
 		}
 

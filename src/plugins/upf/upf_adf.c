@@ -937,58 +937,40 @@ VLIB_CLI_COMMAND (upf_show_apps_command, static) =
 /* *INDENT-ON* */
 
 void
-foreach_upf_flows (BVT (clib_bihash_kv) * kvp,
-		   void * arg)
+foreach_upf_flows (BVT (clib_bihash_kv) * kvp, void * arg)
 {
-  dlist_elt_t *ht_line = NULL;
-  u32 index = 0;
   flow_entry_t *flow = NULL;
-  flowtable_main_per_cpu_t *fmt = arg;
-  u32 ht_line_head_index = (u32) kvp->value;
   flowtable_main_t * fm = &flowtable_main;
   u8 *app_name = NULL;
   upf_main_t * sm = &upf_main;
   vlib_main_t *vm = sm->vlib_main;
 
-  if (dlist_is_empty(fmt->ht_lines, ht_line_head_index))
-    return;
-
-  ht_line = pool_elt_at_index(fmt->ht_lines, ht_line_head_index);
-  index = ht_line->next;
-
-  while (index != ht_line_head_index)
+  flow = pool_elt_at_index(fm->flows, kvp->value);
+  if (flow->application_id != ~0)
     {
-      dlist_elt_t * e = pool_elt_at_index(fmt->ht_lines, index);
-      flow = pool_elt_at_index(fm->flows, e->value);
-      index = e->next;
-
-      if (flow->application_id != ~0)
-	{
-	  upf_adf_app_t *app = pool_elt_at_index (sm->upf_apps, flow->application_id);
-	  app_name = format (0, "%v", app->name);
-	}
-      else
-	app_name = format (0, "%s", "None");
-
-      vlib_cli_output (vm, "proto 0x%x, %U(%u) <-> %U(%u), "
-		       "UL pkt %u, DL pkt %u, "
-		       "Src Intf %u, Forward PDR %u, Reverse PDR %u, "
-		       "app %v, lifetime %u",
-		       flow->sig.s.ip4.proto,
-		       format_ip4_address, &flow->sig.s.ip4.src,
-		       ntohs(flow->sig.s.ip4.port_src),
-		       format_ip4_address, &flow->sig.s.ip4.dst,
-		       ntohs(flow->sig.s.ip4.port_dst),
-		       flow->stats[0].pkts,
-		       flow->stats[1].pkts,
-		       flow->src_intf,
-		       flow->pdr_id[FT_FORWARD],
-		       flow->pdr_id[FT_REVERSE],
-		       app_name,
-		       flow->lifetime);
-
-      vec_free(app_name);
+      upf_adf_app_t *app = pool_elt_at_index (sm->upf_apps, flow->application_id);
+      app_name = format (0, "%v", app->name);
     }
+  else
+    app_name = format (0, "%s", "None");
+
+  vlib_cli_output (vm, "proto 0x%x, %U(%u) <-> %U(%u), "
+		   "UL pkt %u, DL pkt %u, "
+		   "Src Intf %u, Forward PDR %u, Reverse PDR %u, "
+		   "app %v, lifetime %u",
+		   flow->key.proto,
+		   format_ip46_address, &flow->key.ip.src, IP46_TYPE_ANY,
+		   clib_net_to_host_u16(flow->key.port.src),
+		   format_ip46_address, &flow->key.ip.dst, IP46_TYPE_ANY,
+		   clib_net_to_host_u16(flow->key.port.dst),
+		   flow->stats[0].pkts,
+		   flow->stats[1].pkts,
+		   flow->src_intf,
+		   flow->pdr_id,
+		   app_name,
+		   flow->lifetime);
+
+  vec_free(app_name);
 }
 
 static clib_error_t *

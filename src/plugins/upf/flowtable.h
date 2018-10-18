@@ -22,7 +22,7 @@
 #include <vppinfra/error.h>
 #include <vnet/vnet.h>
 #include <vnet/ip/ip.h>
-#include <vppinfra/bihash_8_8.h>
+#include <vppinfra/bihash_48_8.h>
 #include <vppinfra/dlist.h>
 #include <vppinfra/pool.h>
 #include <vppinfra/vec.h>
@@ -52,29 +52,24 @@ typedef enum {
   FT_NEXT_N_NEXT
 } flowtable_next_t;
 
-/* signatures */
-struct ip6_sig {
-  ip6_address_t src, dst;
-  u8 proto;
-  u16 port_src, port_dst;
-}
-  __attribute__ ((packed));
-struct ip4_sig {
-  ip4_address_t src, dst;
-  u8 proto;
-  u16 port_src, port_dst;
-}
-  __attribute__ ((packed));
-
-typedef struct flow_signature {
+/* key */
+typedef struct {
   union {
-    struct ip6_sig ip6;
-    struct ip4_sig ip4;
-    u8 data[0];  /* gcc will take the max */
-  } s;
-  u8 len;
-} flow_signature_t;
-#define flow_signature_is_ip4(s) (s->len == sizeof(struct ip4_sig))
+    struct {
+      struct {
+	ip46_address_t src;
+	ip46_address_t dst;
+      } ip;
+      u32 session_id;
+      struct {
+	u16 src;
+	u16 dst;
+      } port;
+      u8 proto;
+    };
+    u64 key[6];
+  };
+} flow_key_t;
 
 /* dlist helpers */
 #define dlist_is_empty(pool, head_index)				\
@@ -109,13 +104,9 @@ typedef struct flow_entry {
   CLIB_CACHE_LINE_ALIGN_MARK (cacheline0);
 
   /* flow signature */
-  flow_signature_t sig;
+  flow_key_t key;
   u16 tcp_state;
   u64 sig_hash;  /* used to delete hashtable entries */
-
-  /* hashtable */
-  u32 ht_line_index;  /* index of the list head of the line in the hashtable */
-  u32 ht_index;  /* index in the hashtable line pool */
 
   /* stats */
   flow_stats_t stats[FT_DIRECTION_MAX];
@@ -128,7 +119,7 @@ typedef struct flow_entry {
   /* UPF data */
   u32 application_id;                 /* L7 app index */
   u32 src_intf;                       /* source interface */
-  u32 pdr_id                          /* Initiator PDR */
+  u32 pdr_id;                         /* Initiator PDR */
 } flow_entry_t;
 
 /* Timers (in seconds) */
@@ -143,7 +134,6 @@ typedef struct flow_entry {
 typedef struct {
   /* hashtable */
   BVT(clib_bihash) flows_ht;
-  dlist_elt_t * ht_lines;
 
   /* timers */
   dlist_elt_t * timers;
@@ -206,13 +196,12 @@ static inline u16 flowtable_lifetime_get(flowtable_timeout_type_t type)
 }
 
 int
-flowtable_update(u8 is_ip4, u8 ip_src[16], u8 ip_dst[16], u8 ip_upper_proto,
-		 u16 port_src, u16 port_dst, u16 lifetime, u8 infos[16]);
+flowtable_update(ip46_address_t ip_src, ip46_address_t ip_dst, u8 ip_upper_proto,
+		 u16 port_src, u16 port_dst, u16 lifetime);
 
 flow_entry_t *
 flowtable_entry_lookup_create(flowtable_main_t * fm, flowtable_main_per_cpu_t * fmt,
-			      BVT(clib_bihash_kv) * kv, flow_signature_t const * sig,
-			      u32 const now, int * created);
+			      BVT(clib_bihash_kv) * kv, u32 const now, int * created);
 
 void
 timer_wheel_index_update(flowtable_main_t * fm, flowtable_main_per_cpu_t * fmt, u32 now);
@@ -220,118 +209,85 @@ timer_wheel_index_update(flowtable_main_t * fm, flowtable_main_per_cpu_t * fmt, 
 u64
 flowtable_timer_expire(flowtable_main_t * fm, flowtable_main_per_cpu_t * fmt, u32 now);
 
-static inline u64
-hash_signature(flow_signature_t const * sig)
+static inline void
+parse_packet_protocol(udp_header_t * udp, uword is_reverse, flow_key_t * key)
 {
-  if (flow_signature_is_ip4(sig))
+  if (key->proto == IP_PROTOCOL_UDP || key->proto == IP_PROTOCOL_TCP)
     {
-      return clib_xxhash(sig->s.ip4.src.as_u32 ^ sig->s.ip4.dst.as_u32
-			 ^ sig->s.ip4.proto ^ sig->s.ip4.port_src ^ sig->s.ip4.port_dst);
+      /* tcp and udp ports have the same offset */
+      if (is_reverse)
+	{
+	  key->port.src = udp->src_port;
+	  key->port.dst = udp->dst_port;
+	}
+      else
+	{
+	  key->port.src = udp->dst_port;
+	  key->port.dst = udp->src_port;
+	}
     }
   else
     {
-      return clib_xxhash(sig->s.ip6.dst.as_u64[0] ^ sig->s.ip6.dst.as_u64[1]
-			 ^ sig->s.ip6.src.as_u64[0] ^ sig->s.ip6.src.as_u64[1]
-			 ^ sig->s.ip4.port_src ^ sig->s.ip4.port_dst);
-  }
+      key->port.src = 0;
+      key->port.dst = 0;
+    }
 }
 
 static inline void
-parse_ip4_packet(ip4_header_t * ip4, uword * is_reverse, struct ip4_sig * ip4_sig)
+parse_ip4_packet(ip4_header_t * ip4, uword * is_reverse, flow_key_t * key)
 {
-  ip4_sig->proto = ip4->protocol;
+  key->proto = ip4->protocol;
 
   if (ip4_address_compare(&ip4->src_address, &ip4->dst_address) < 0)
     {
-      ip4_sig->src = ip4->src_address;
-      ip4_sig->dst = ip4->dst_address;
+      ip46_address_set_ip4(&key->ip.src, &ip4->src_address);
+      ip46_address_set_ip4(&key->ip.dst, &ip4->dst_address);
       *is_reverse = 1;
     }
   else
     {
-      ip4_sig->src = ip4->dst_address;
-      ip4_sig->dst = ip4->src_address;
+      ip46_address_set_ip4(&key->ip.src, &ip4->dst_address);
+      ip46_address_set_ip4(&key->ip.dst, &ip4->src_address);
     }
 
-  if (ip4_sig->proto == IP_PROTOCOL_UDP || ip4_sig->proto == IP_PROTOCOL_TCP)
-    {
-      /* tcp and udp ports have the same offset */
-      udp_header_t * udp0 = (udp_header_t *) ip4_next_header(ip4);
-      if (*is_reverse)
-	{
-	  ip4_sig->port_src = udp0->src_port;
-	  ip4_sig->port_dst = udp0->dst_port;
-	}
-      else
-	{
-	  ip4_sig->port_src = udp0->dst_port;
-	  ip4_sig->port_dst = udp0->src_port;
-	}
-    }
-  else
-    {
-      ip4_sig->port_src = 0;
-      ip4_sig->port_dst = 0;
-    }
+  parse_packet_protocol((udp_header_t *) ip4_next_header(ip4), *is_reverse, key);
 }
 
 static inline void
-parse_ip6_packet(ip6_header_t * ip6, uword * is_reverse, struct ip6_sig * ip6_sig)
+parse_ip6_packet(ip6_header_t * ip6, uword * is_reverse, flow_key_t * key)
 {
-  ip6_sig->proto = ip6->protocol;
+  key->proto = ip6->protocol;
 
   if (ip6_address_compare(&ip6->src_address, &ip6->dst_address) < 0)
     {
-      ip6_sig->src = ip6->src_address;
-      ip6_sig->dst = ip6->dst_address;
+      ip46_address_set_ip6(&key->ip.src, &ip6->src_address);
+      ip46_address_set_ip6(&key->ip.dst, &ip6->dst_address);
       *is_reverse = 1;
     }
   else
     {
-      ip6_sig->src = ip6->dst_address;
-      ip6_sig->dst = ip6->src_address;
+      ip46_address_set_ip6(&key->ip.src, &ip6->dst_address);
+      ip46_address_set_ip6(&key->ip.dst, &ip6->src_address);
     }
 
-  if (ip6_sig->proto == IP_PROTOCOL_UDP || ip6_sig->proto == IP_PROTOCOL_TCP)
-    {
-      /* tcp and udp ports have the same offset */
-      udp_header_t * udp0 = (udp_header_t *) ip6_next_header(ip6);
-      if (*is_reverse)
-	{
-	  ip6_sig->port_src = udp0->src_port;
-	  ip6_sig->port_dst = udp0->dst_port;
-	}
-      else
-	{
-	  ip6_sig->port_src = udp0->dst_port;
-	  ip6_sig->port_dst = udp0->src_port;
-	}
-    }
-  else
-    {
-      ip6_sig->port_src = 0;
-      ip6_sig->port_dst = 0;
-    }
+  parse_packet_protocol((udp_header_t *) ip6_next_header(ip6), *is_reverse, key);
 }
 
-static inline u64
-compute_packet_hash(vlib_buffer_t * buffer, u8 is_ip4,
-		    uword * is_reverse, flow_signature_t * sig)
+static inline void
+flow_mk_key(vlib_buffer_t * buffer, u8 is_ip4, uword * is_reverse, BVT(clib_bihash_kv) * kv)
 {
+  flow_key_t * key = (flow_key_t *)&kv->key;
+
   /* compute 5 tuple key so that 2 half connections
    * get into the same flow */
   if (is_ip4)
     {
-      sig->len = sizeof(struct ip4_sig);
-      parse_ip4_packet(vlib_buffer_get_current(buffer), is_reverse, (struct ip4_sig *) sig);
+      parse_ip4_packet(vlib_buffer_get_current(buffer), is_reverse, key);
     }
   else
     {
-      sig->len = sizeof(struct ip6_sig);
-      parse_ip6_packet(vlib_buffer_get_current(buffer), is_reverse, (struct ip6_sig *) sig);
+      parse_ip6_packet(vlib_buffer_get_current(buffer), is_reverse, key);
     }
-
-  return hash_signature(sig);
 }
 
 always_inline int
@@ -357,24 +313,16 @@ flow_tcp_update_lifetime(flow_entry_t * f, tcp_header_t * hdr)
 always_inline int
 flow_update_lifetime(flow_entry_t * f, vlib_buffer_t * b, u8 is_ip4)
 {
-  tcp_header_t * hdr;
-
   /*
    * CHECK-ME: assert we have enough wellformed data to read the tcp header.
    */
-  if (is_ip4)
+  if (f->key.proto == IP_PROTOCOL_TCP)
     {
-      if (f->sig.s.ip4.proto == IP_PROTOCOL_TCP) {
-	hdr = (tcp_header_t *)vlib_buffer_get_current (b) + sizeof(ip4_header_t);
-	return flow_tcp_update_lifetime(f, hdr);
-      }
-    }
-  else
-    {
-      if (f->sig.s.ip6.proto == IP_PROTOCOL_TCP) {
-	hdr = (tcp_header_t *)vlib_buffer_get_current (b) + sizeof(ip6_header_t);
-	return flow_tcp_update_lifetime(f, hdr);
-      }
+      tcp_header_t * hdr =
+	(tcp_header_t *)(vlib_buffer_get_current (b) +
+			 (is_ip4 ? sizeof(ip4_header_t) : sizeof(ip6_header_t)));
+
+      return flow_tcp_update_lifetime(f, hdr);
     }
 
   return 0;

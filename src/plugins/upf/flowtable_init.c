@@ -57,7 +57,6 @@ flowtable_init_cpu(flowtable_main_t *fm, flowtable_main_per_cpu_t * fmt)
   clib_error_t * error = 0;
 
   /* init hashtable */
-  pool_alloc(fmt->ht_lines, 2 * fm->flows_max);
   BV(clib_bihash_init) (&fmt->flows_ht, "flow hash table",
 			FM_NUM_BUCKETS, FM_MEMORY_SIZE);
 

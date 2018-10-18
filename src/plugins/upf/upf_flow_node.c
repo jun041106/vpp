@@ -77,7 +77,6 @@ upf_flow_process(vlib_main_t * vm, vlib_node_runtime_t * node,
 	  BVT(clib_bihash_kv) kv0, kv1;
 	  int created0, created1;
 	  uword is_reverse0, is_reverse1;
-	  flow_signature_t sig0, sig1;
 	  flow_entry_t * flow0, * flow1;
 
 	  /* prefetch next iteration */
@@ -107,19 +106,17 @@ upf_flow_process(vlib_main_t * vm, vlib_node_runtime_t * node,
 	  n_left_from -= 2;
 	  n_left_to_next -= 2;
 
-	  kv0.key = compute_packet_hash(b0, is_ip4, &is_reverse0, &sig0);
-	  kv1.key = compute_packet_hash(b1, is_ip4, &is_reverse1, &sig1);
+	  flow_mk_key(b0, is_ip4, &is_reverse0, &kv0);
+	  flow_mk_key(b1, is_ip4, &is_reverse1, &kv1);
 
 	  /* lookup/create flow */
-	  flow0 = flowtable_entry_lookup_create(fm, fmt, &kv0, &sig0,
-						current_time, &created0);
+	  flow0 = flowtable_entry_lookup_create(fm, fmt, &kv0, current_time, &created0);
 	  if (PREDICT_FALSE(flow0 == NULL))
 	    {
 	      CPT_UNHANDLED++;
 	    }
 
-	  flow1 = flowtable_entry_lookup_create(fm, fmt, &kv1, &sig1,
-						current_time, &created1);
+	  flow1 = flowtable_entry_lookup_create(fm, fmt, &kv1, current_time, &created1);
 	  if (PREDICT_FALSE(flow1 == NULL))
 	    {
 	      CPT_UNHANDLED++;
@@ -179,15 +176,13 @@ upf_flow_process(vlib_main_t * vm, vlib_node_runtime_t * node,
 	  flow_entry_t * flow = NULL;
 	  uword is_reverse = 0;
 	  BVT(clib_bihash_kv) kv;
-	  flow_signature_t sig;
 
 	  bi0 = to_next[0] = from[0];
 	  b0 = vlib_get_buffer(vm, bi0);
 
 	  /* lookup/create flow */
-	  kv.key = compute_packet_hash(b0, is_ip4, &is_reverse, &sig);
-	  flow = flowtable_entry_lookup_create(fm, fmt, &kv, &sig,
-					       current_time, &created);
+	  flow_mk_key(b0, is_ip4, &is_reverse, &kv);
+	  flow = flowtable_entry_lookup_create(fm, fmt, &kv, current_time, &created);
 
 	  if (PREDICT_FALSE(flow == NULL))
 	    {

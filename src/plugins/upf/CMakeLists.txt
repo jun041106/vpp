@@ -130,6 +130,7 @@ if(DPDK_INCLUDE_DIR AND DPDK_LIB)
     upf_http_redirect_server.c
     upf_adf.c
     flowtable_init.c
+    flowtable.c
     upf_flow_node.c
 
     API_FILES

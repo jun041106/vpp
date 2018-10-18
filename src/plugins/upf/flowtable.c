@@ -25,40 +25,25 @@
 
 vlib_node_registration_t upf_flow_node;
 
-static u64 flow_id = 0;
-
 int
-flowtable_update(u8 is_ip4, u8 ip_src[16], u8 ip_dst[16], u8 ip_upper_proto,
-		 u16 port_src, u16 port_dst, u16 lifetime, u8 offloaded, u8 infos[16])
+flowtable_update(ip46_address_t ip_src, ip46_address_t ip_dst, u8 ip_upper_proto,
+		 u16 port_src, u16 port_dst, u16 lifetime)
 {
-  flow_signature_t sig;
-  flow_entry_t * flow;
   BVT(clib_bihash_kv) kv;
   flowtable_main_t * fm = &flowtable_main;
   vlib_thread_main_t * tm = vlib_get_thread_main();
+  flow_key_t *k;
   uword cpu_index;
+  u64 hash;
 
-  if (is_ip4)
-    {
-      sig.len = sizeof(struct ip4_sig);
-      clib_memcpy(&sig.s.ip4.src, ip_src, 4);
-      clib_memcpy(&sig.s.ip4.dst, ip_dst, 4);
-      sig.s.ip4.proto = ip_upper_proto;
-      sig.s.ip4.port_src = port_src;
-      sig.s.ip4.port_dst = port_dst;
-    }
-  else
-    {
-      sig.len = sizeof(struct ip6_sig);
-      clib_memcpy(&sig.s.ip6.src, ip_src, 16);
-      clib_memcpy(&sig.s.ip6.dst, ip_dst, 16);
-      sig.s.ip6.proto = ip_upper_proto;
-      sig.s.ip6.port_src = port_src;
-      sig.s.ip6.port_dst = port_dst;
-    }
+  k = (flow_key_t *)&kv.key;
+  k->ip.src = ip_src;
+  k->ip.dst = ip_dst;
+  k->port.src = port_src;
+  k->port.dst = port_dst;
+  k->proto = ip_upper_proto;
 
-  flow = NULL;
-  kv.key = hash_signature(&sig);
+  hash = BV (clib_bihash_hash) (&kv);
 
   /* TODO: recover handoff dispatch fun to get the correct node index */
   for (cpu_index = 0; cpu_index < tm->n_vlib_mains; cpu_index++)
@@ -67,47 +52,20 @@ flowtable_update(u8 is_ip4, u8 ip_src[16], u8 ip_dst[16], u8 ip_upper_proto,
       if (fmt == NULL)
 	continue;
 
-      if (PREDICT_FALSE(BV(clib_bihash_search) (&fmt->flows_ht, &kv, &kv)))
+      if (PREDICT_TRUE(BV(clib_bihash_search_inline_with_hash)
+		       (&fmt->flows_ht, hash, &kv) == 0))
 	{
-	  continue;
-	}
-      else
-	{
-	  dlist_elt_t * ht_line;
-	  u32 index;
-	  u32 ht_line_head_index;
-
-	  flow = NULL;
-	  ht_line_head_index = (u32) kv.value;
-	  if (dlist_is_empty(fmt->ht_lines, ht_line_head_index))
-	    continue;
-
-	  ht_line = pool_elt_at_index(fmt->ht_lines, ht_line_head_index);
-	  index = ht_line->next;
-	  while (index != ht_line_head_index)
+	  flow_entry_t * flow = pool_elt_at_index(fm->flows, kv.value);
+	  if (lifetime != (u16) ~0)
 	    {
-	      dlist_elt_t * e = pool_elt_at_index(fmt->ht_lines, index);
-	      flow = pool_elt_at_index(fm->flows, e->value);
-	      if (PREDICT_TRUE(memcmp(&flow->sig, &sig, sig.len) == 0))
-		break;
-
-	      index = e->next;
+	      ASSERT(lifetime < TIMER_MAX_LIFETIME);
+	      flow->lifetime = lifetime;
 	    }
+	  return 0;
 	}
     }
 
-  if (PREDICT_FALSE(flow == NULL))
-    return -1;  /* flow not found */
-
-  if (lifetime != (u16) ~0)
-    {
-      ASSERT(lifetime < TIMER_MAX_LIFETIME);
-      flow->lifetime = lifetime;
-    }
-  flow->infos.data.offloaded = offloaded;
-  clib_memcpy(flow->infos.data.opaque, infos, sizeof(flow->infos.data.opaque));
-
-  return 0;
+  return -1;
 }
 
 always_inline void
@@ -182,18 +140,10 @@ flow_entry_free(flowtable_main_t * fm, flowtable_main_per_cpu_t * fmt, flow_entr
 always_inline void
 flowtable_entry_remove(flowtable_main_per_cpu_t * fmt, flow_entry_t * f)
 {
-  /* remove node from hashtable */
-  clib_dlist_remove(fmt->ht_lines, f->ht_index);
-  pool_put_index(fmt->ht_lines, f->ht_index);
+  BVT(clib_bihash_kv) kv;
 
-  /* if list is empty, free it and delete hashtable entry */
-  if (dlist_is_empty(fmt->ht_lines, f->ht_line_index))
-    {
-      pool_put_index(fmt->ht_lines, f->ht_line_index);
-
-      BVT(clib_bihash_kv) kv = {.key = f->sig_hash};
-      BV(clib_bihash_add_del) (&fmt->flows_ht, &kv, 0  /* is_add */);
-    }
+  clib_memcpy(kv.key, f->key.key, sizeof(kv.key));
+  BV(clib_bihash_add_del) (&fmt->flows_ht, &kv, 0  /* is_add */);
 }
 
 always_inline void
@@ -245,25 +195,9 @@ flowtable_timer_expire(flowtable_main_t * fm, flowtable_main_per_cpu_t * fmt, u3
 }
 
 static inline u16
-flowtable_lifetime_calculate(flowtable_main_t * fm,
-			     flow_signature_t const * sig,
-			     int is_ip4)
+flowtable_lifetime_calculate(flowtable_main_t * fm, flow_key_t const * key)
 {
-  u8 proto = 0;
-  u16 lifetime = fm->timer_lifetime[FT_TIMEOUT_TYPE_UNKNOWN];
-
-  if (is_ip4)
-    {
-      proto = sig->s.ip4.proto;
-      lifetime = fm->timer_lifetime[FT_TIMEOUT_TYPE_IPV4];
-    }
-  else
-    {
-      proto = sig->s.ip6.proto;
-      lifetime = fm->timer_lifetime[FT_TIMEOUT_TYPE_IPV6];
-    }
-
-  switch (proto) {
+  switch (key->proto) {
   case IP_PROTOCOL_ICMP:
     return fm->timer_lifetime[FT_TIMEOUT_TYPE_ICMP];
 
@@ -274,10 +208,11 @@ flowtable_lifetime_calculate(flowtable_main_t * fm,
     return fm->timer_lifetime[FT_TIMEOUT_TYPE_TCP];
 
   default:
-    break;
+    return ip46_address_is_ip4(&key->ip.src) ?
+      fm->timer_lifetime[FT_TIMEOUT_TYPE_IPV4] : fm->timer_lifetime[FT_TIMEOUT_TYPE_IPV6];
   }
 
-  return lifetime;
+  return fm->timer_lifetime[FT_TIMEOUT_TYPE_UNKNOWN];
 }
 
 static void
@@ -313,51 +248,14 @@ recycle_flow(flowtable_main_t * fm, flowtable_main_per_cpu_t * fmt, u32 now)
 /* TODO: replace with a more appropriate hashtable */
 flow_entry_t *
 flowtable_entry_lookup_create(flowtable_main_t * fm, flowtable_main_per_cpu_t * fmt,
-			      BVT(clib_bihash_kv) * kv, flow_signature_t const * sig,
-			      u32 const now, int * created)
+			      BVT(clib_bihash_kv) * kv, u32 const now, int * created)
 {
   flow_entry_t * f;
-  dlist_elt_t * ht_line;
   dlist_elt_t * timer_entry;
-  dlist_elt_t * flow_entry;
-  u32 ht_line_head_index;
 
-  ht_line = NULL;
-
-  if (PREDICT_FALSE(kv->key == 0))
-    return NULL;
-
-  /* get hashtable line */
-  if (PREDICT_TRUE(BV(clib_bihash_search) (&fmt->flows_ht, kv, kv) == 0))
+  if (PREDICT_FALSE(BV(clib_bihash_search_inline) (&fmt->flows_ht, kv) == 0))
     {
-      ht_line_head_index = (u32) kv->value;
-      ht_line = pool_elt_at_index(fmt->ht_lines, ht_line_head_index);
-      u32 index;
-
-      /* The list CANNOT be a singleton */
-      index = ht_line->next;
-      while (index != ht_line_head_index)
-	{
-	  dlist_elt_t * e = pool_elt_at_index(fmt->ht_lines, index);
-	  f = pool_elt_at_index(fm->flows, e->value);
-	  if (PREDICT_TRUE(memcmp(&f->sig, sig, sig->len) == 0))
-	    return f;
-
-	  index = e->next;
-	}
-
-      vlib_node_increment_counter(fm->vlib_main, upf_flow_node.index,
-				  FLOWTABLE_ERROR_COLLISION, 1);
-    }
-  else
-    {
-      /* create a new line */
-      pool_get(fmt->ht_lines, ht_line);
-
-      ht_line_head_index = ht_line - fmt->ht_lines;
-      clib_dlist_init(fmt->ht_lines, ht_line_head_index);
-      kv->value = ht_line_head_index;
-      BV(clib_bihash_add_del) (&fmt->flows_ht, kv, 1  /* is_add */);
+      return pool_elt_at_index(fm->flows, kv->value);
     }
 
   /* create new flow */
@@ -374,27 +272,21 @@ flowtable_entry_lookup_create(flowtable_main_t * fm, flowtable_main_per_cpu_t * 
     }
 
   *created = 1;
-  f->infos.data.flow_id = ++flow_id;
 
   memset(f, 0, sizeof(*f));
-  f->sig.len = sig->len;
-  clib_memcpy(&f->sig, sig, sig->len);
-  f->sig_hash = kv->key;
-  f->lifetime = flowtable_lifetime_calculate(fm, sig, is_ip4);
+  clib_memcpy(f->key.key, kv->key, sizeof(f->key.key));
+  f->lifetime = flowtable_lifetime_calculate(fm, &f->key);
   f->expire = now + f->lifetime;
 
   /* insert in timer list */
   pool_get(fmt->timers, timer_entry);
-  timer_entry->value = f - fm->flows;  /* index within the flow pool */
+  timer_entry->value = f - fm->flows;          /* index within the flow pool */
   f->timer_index = timer_entry - fmt->timers;  /* index within the timer pool */
-  timer_wheel_insert_flow(fmt, f);
+  timer_wheel_insert_flow(fm, fmt, f);
 
-  /* insert in ht line */
-  pool_get(fmt->ht_lines, flow_entry);
-  f->ht_index = flow_entry - fmt->ht_lines;  /* index within the ht line pool */
-  flow_entry->value = f - fm->flows;  /* index within the flow pool */
-  f->ht_line_index = ht_line_head_index;
-  clib_dlist_addhead(fmt->ht_lines, ht_line_head_index, f->ht_index);
+  /* insert in hash */
+  kv->value = f - fm->flows;
+  BV(clib_bihash_add_del) (&fmt->flows_ht, kv, 1  /* is_add */);
 
   return f;
 }
