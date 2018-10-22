@@ -1490,14 +1490,14 @@ static int add_ip6_sdf(struct rte_acl_ctx *ctx, const upf_pdr_t *pdr,
 }
 
 static int add_wildcard_teid(struct rules *rules, const u8 src_intf,
-			     const pfcp_f_teid_t teid, u32 pdr_id)
+			     const pfcp_f_teid_t teid, u32 pdr_idx)
 {
   gtpu_intf_tunnel_key_t key;
 
   key.src_intf = src_intf;
   key.teid = teid.teid;
 
-  hash_set (rules->wildcard_teid, key.as_u64, pdr_id);
+  hash_set (rules->wildcard_teid, key.as_u64, pdr_idx);
 
   return 0;
 }
@@ -1796,7 +1796,7 @@ static int build_sx_sdf(upf_session_t *sx)
 	{
 	  if ((pdr->pdi.fields & F_PDI_LOCAL_F_TEID) &&
 	      !(pdr->pdi.fields & F_PDI_UE_IP_ADDR))
-	    add_wildcard_teid(pending, pdr->pdi.src_intf, pdr->pdi.teid, pdr->id);
+	    add_wildcard_teid(pending, pdr->pdi.src_intf, pdr->pdi.teid, pdr - pending->pdr);
 
 	  if (pdr->pdi.src_intf != SRC_INTF_ACCESS &&
 	      !(pdr->pdi.fields & F_PDI_UE_IP_ADDR))
@@ -2118,7 +2118,7 @@ u32 process_urrs(vlib_main_t *vm, upf_session_t *sess,
       clib_spinlock_unlock (&sess->lock);
 
       if (unlikely(urr->status & URR_OVER_QUOTA))
-	next = UPF_CLASSIFY_NEXT_DROP;
+	next = UPF_PROCESS_NEXT_DROP;
 
       if (unlikely(r != URR_OK))
 	upf_pfcp_server_session_usage_report(sess);

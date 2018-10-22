@@ -48,7 +48,8 @@ typedef enum {
 
 typedef enum {
   FT_NEXT_DROP,
-  FT_NEXT_ETHERNET_INPUT,
+  FT_NEXT_CLASSIFY,
+  FT_NEXT_PROCESS,
   FT_NEXT_N_NEXT
 } flowtable_next_t;
 
@@ -106,7 +107,6 @@ typedef struct flow_entry {
   /* flow signature */
   flow_key_t key;
   u16 tcp_state;
-  u64 sig_hash;  /* used to delete hashtable entries */
 
   /* stats */
   flow_stats_t stats[FT_DIRECTION_MAX];
@@ -118,8 +118,9 @@ typedef struct flow_entry {
 
   /* UPF data */
   u32 application_id;                 /* L7 app index */
-  u32 src_intf;                       /* source interface */
   u32 pdr_id;                         /* Initiator PDR */
+  u8 src_intf;                        /* UPF source interface type */
+  u32 next;
 } flow_entry_t;
 
 /* Timers (in seconds) */
@@ -170,19 +171,12 @@ typedef struct {
   /* per cpu */
   flowtable_main_per_cpu_t * per_cpu;
 
-  /* flowtable node index */
-  u32 flowtable_index;
-
   /* convenience */
   vlib_main_t * vlib_main;
   vnet_main_t * vnet_main;
-
-  /* next-node of flowtable node, NOT pm node id */
-  u32 next_node_index;
 } flowtable_main_t;
 
 extern flowtable_main_t flowtable_main;
-extern vlib_node_registration_t flowtable_node;
 
 clib_error_t * flowtable_lifetime_update(flowtable_timeout_type_t type, u16 value);
 clib_error_t * flowtable_max_lifetime_update(u16 value);
@@ -274,19 +268,22 @@ parse_ip6_packet(ip6_header_t * ip6, uword * is_reverse, flow_key_t * key)
 }
 
 static inline void
-flow_mk_key(vlib_buffer_t * buffer, u8 is_ip4, uword * is_reverse, BVT(clib_bihash_kv) * kv)
+flow_mk_key(u32 id, vlib_buffer_t * buffer, u16 offset, u8 is_ip4,
+	    uword * is_reverse, BVT(clib_bihash_kv) * kv)
 {
   flow_key_t * key = (flow_key_t *)&kv->key;
+
+  key->session_id = id;
 
   /* compute 5 tuple key so that 2 half connections
    * get into the same flow */
   if (is_ip4)
     {
-      parse_ip4_packet(vlib_buffer_get_current(buffer), is_reverse, key);
+      parse_ip4_packet(vlib_buffer_get_current(buffer) + offset, is_reverse, key);
     }
   else
     {
-      parse_ip6_packet(vlib_buffer_get_current(buffer), is_reverse, key);
+      parse_ip6_packet(vlib_buffer_get_current(buffer) + offset, is_reverse, key);
     }
 }
 

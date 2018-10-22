@@ -22,6 +22,8 @@
 
 #include "flowtable.h"
 
+flowtable_main_t flowtable_main;
+
 clib_error_t *
 flowtable_timelife_update(flowtable_timeout_type_t type, u16 value)
 {
@@ -97,10 +99,6 @@ flowtable_init(vlib_main_t * vm)
   vlib_thread_main_t * tm = vlib_get_thread_main();
 
   fm->vlib_main = vm;
-  fm->flowtable_index = flowtable_node.index;
-
-  /* By default, forward packets to ethernet-input */
-  fm->next_node_index = FT_NEXT_ETHERNET_INPUT;
 
   /* init flow pool */
   fm->flows_max = FM_POOL_COUNT;

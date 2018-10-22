@@ -616,13 +616,13 @@ extern vlib_node_registration_t upf4_encap_node;
 extern vlib_node_registration_t upf6_encap_node;
 
 typedef enum {
-  UPF_CLASSIFY_NEXT_DROP,
-  UPF_CLASSIFY_NEXT_GTP_IP4_ENCAP,
-  UPF_CLASSIFY_NEXT_GTP_IP6_ENCAP,
-  UPF_CLASSIFY_NEXT_IP_INPUT,
-  UPF_CLASSIFY_NEXT_IP_LOCAL,
-  UPF_CLASSIFY_N_NEXT,
-} upf_classify_next_t;
+  UPF_PROCESS_NEXT_DROP,
+  UPF_PROCESS_NEXT_GTP_IP4_ENCAP,
+  UPF_PROCESS_NEXT_GTP_IP6_ENCAP,
+  UPF_PROCESS_NEXT_IP_INPUT,
+  UPF_PROCESS_NEXT_IP_LOCAL,
+  UPF_PROCESS_N_NEXT,
+} upf_process_next_t;
 
 int upf_enable_disable (upf_main_t * sm, u32 sw_if_index,
 			  int enable_disable);
