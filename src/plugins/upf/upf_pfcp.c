@@ -848,17 +848,21 @@ static int make_pending_urr(upf_session_t *sx)
 {
   struct rules *pending = sx_get_rules(sx, SX_PENDING);
   struct rules *active = sx_get_rules(sx, SX_ACTIVE);
-  upf_urr_t *urr;
 
   if (pending->urr)
     return 0;
 
   if (active->urr)
     {
+      uword ni;
+
       pending->urr = vec_dup(active->urr);
-      vec_foreach (urr, pending->urr)
+      vec_foreach_index (ni, pending->urr)
 	{
+	  upf_urr_t *urr = vec_elt_at_index(pending->urr, ni);
+
 	  urr->update_flags = 0;
+	  urr->linked_urr_id = vec_dup(vec_elt(active->urr, ni).linked_urr_id);
 	  memset(&urr->volume.measure, 0, sizeof(urr->volume.measure));
 	}
     }
@@ -871,6 +875,7 @@ static void sx_free_rules(upf_session_t *sx, int rule)
   struct rules *rules = sx_get_rules(sx, rule);
   upf_pdr_t *pdr;
   upf_far_t *far;
+  upf_urr_t *urr;
 
   vec_foreach (pdr, rules->pdr)
     vec_free(pdr->urr_ids);
@@ -883,6 +888,10 @@ static void sx_free_rules(upf_session_t *sx, int rule)
       vec_free(far->forward.rewrite);
     }
   vec_free(rules->far);
+  vec_foreach (urr, rules->urr)
+    {
+      vec_free(urr->linked_urr_id);
+    }
   vec_free(rules->urr);
   for (size_t i = 0; i < ARRAY_LEN(rules->sdf); i++)
     sx_acl_free(&rules->sdf[i]);
@@ -2314,6 +2323,15 @@ format_sx_session(u8 * s, va_list * args)
 		 urr->methods, format_flags, (u64)urr->methods, urr_method_flags,
 		 urr->triggers, format_flags, (u64)urr->triggers, urr_trigger_flags,
 		 urr->status, format_flags, (u64)urr->status, urr_status_flags);
+      if (vec_len(urr->linked_urr_id) != 0)
+	{
+	  uword j;
+
+	  s = format(s, "  Linked URR Ids: [");
+	  vec_foreach_index (j, urr->linked_urr_id)
+	    s = format(s, "%s%u", j != 0 ? "," : "", vec_elt(urr->linked_urr_id, j));
+	  s = format(s, "] @ %p\n", urr->linked_urr_id);
+	}
       s = format(s, "  Start Time: %U\n", format_time_float, 0, urr->start_time);
       if (urr->methods & SX_URR_VOLUME)
 	{

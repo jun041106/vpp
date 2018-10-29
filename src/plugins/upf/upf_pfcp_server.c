@@ -528,8 +528,10 @@ static void
 upf_pfcp_session_usage_report(upf_session_t *sx, f64 now)
 {
   pfcp_session_report_request_t req;
+  u32 * triggers = NULL;
   struct rules *active;
   upf_urr_t *urr;
+  uword ni;
 
   active = sx_get_rules(sx, SX_ACTIVE);
 
@@ -543,9 +545,11 @@ upf_pfcp_session_usage_report(upf_session_t *sx, f64 now)
 
   SET_BIT(req.grp.fields, SESSION_REPORT_REQUEST_USAGE_REPORT);
 
-  vec_foreach(urr, active->urr)
+  vec_validate(triggers, vec_len(active->urr) - 1);
+
+  vec_foreach_index(ni, active->urr)
     {
-      u32 trigger = 0;
+      urr = vec_elt_at_index (active->urr, ni);
 
 #define urr_check(V, D)					\
       urr_check_counter(				\
@@ -554,21 +558,37 @@ upf_pfcp_session_usage_report(upf_session_t *sx, f64 now)
 			V.threshold.D,			\
 			V.quota.D)
 
-      trigger = urr_check(urr->volume, ul);
-      trigger |= urr_check(urr->volume, dl);
-      trigger |= urr_check(urr->volume, total);
-
+      vec_elt(triggers, ni) = urr_check(urr->volume, ul);
+      vec_elt(triggers, ni) |= urr_check(urr->volume, dl);
+      vec_elt(triggers, ni) |= urr_check(urr->volume, total);
 #undef urr_check
 
-      if (trigger != 0)
+      if (vec_elt(triggers, ni))
 	{
-	  build_usage_report(sx, urr, trigger, now, &req.usage_report);
+	  pfcp_linked_urr_id_t * id;
+
+	  vec_foreach(id, urr->linked_urr_id)
+	    {
+	      upf_urr_t * urr = sx_get_urr_by_id(active, *id);
+	      if (!urr)
+		continue;
+
+	      vec_elt(triggers, urr - active->urr) |=
+		USAGE_REPORT_TRIGGER_LINKED_USAGE_REPORTING;
+	    }
 	}
+    }
+
+  vec_foreach_index(ni, triggers)
+    {
+      if (vec_elt(triggers, ni) != 0)
+	build_usage_report(sx, active->urr + ni, vec_elt(triggers, ni), now, &req.usage_report);
     }
 
   upf_pfcp_server_send_session_request(sx, PFCP_SESSION_REPORT_REQUEST, &req.grp);
 
   pfcp_free_msg(PFCP_SESSION_REPORT_REQUEST, &req.grp);
+  vec_free(triggers);
 }
 
 void upf_pfcp_session_stop_urr_time(urr_time_t *t)
@@ -640,9 +660,11 @@ upf_pfcp_session_urr_timer(upf_session_t *sx, f64 now, f64 cnow)
 
   pfcp_session_report_request_t req;
   upf_main_t *gtm = &upf_main;
+  u32 * triggers = NULL;
   struct rules *active;
   u8 send_report = 0;
   upf_urr_t *urr;
+  uword ni;
 
   active = sx_get_rules(sx, SX_ACTIVE);
 
@@ -652,9 +674,10 @@ upf_pfcp_session_urr_timer(upf_session_t *sx, f64 now, f64 cnow)
 
   SET_BIT(req.grp.fields, SESSION_REPORT_REQUEST_USAGE_REPORT);
 
-  vec_foreach(urr, active->urr)
+  vec_validate(triggers, vec_len(active->urr) - 1);
+  vec_foreach_index(ni, active->urr)
     {
-      u32 trigger = 0;
+      urr = vec_elt_at_index (active->urr, ni);
 
 #define urr_check(V, NOW)					\
       (((V).base != 0) && ((V).period != 0) &&			\
@@ -665,7 +688,7 @@ upf_pfcp_session_urr_timer(upf_session_t *sx, f64 now, f64 cnow)
 	  u32 si = sx - gtm->sessions;
 
 	  if (urr->triggers & REPORTING_TRIGGER_PERIODIC_REPORTING)
-	    trigger |= USAGE_REPORT_TRIGGER_PERIODIC_REPORTING;
+	    vec_elt(triggers, ni) |= USAGE_REPORT_TRIGGER_PERIODIC_REPORTING;
 
 	  urr->measurement_period.base += urr->measurement_period.period;
 
@@ -677,30 +700,55 @@ upf_pfcp_session_urr_timer(upf_session_t *sx, f64 now, f64 cnow)
       if (urr_check(urr->time_threshold, now))
 	{
 	  if (urr->triggers & REPORTING_TRIGGER_TIME_THRESHOLD)
-	    trigger |= USAGE_REPORT_TRIGGER_TIME_THRESHOLD;
+	    vec_elt(triggers, ni) |= USAGE_REPORT_TRIGGER_TIME_THRESHOLD;
 
 	  upf_pfcp_session_stop_urr_time(&urr->time_threshold);
 	}
       if (urr_check(urr->time_quota, now))
 	{
 	  if (urr->triggers & REPORTING_TRIGGER_TIME_QUOTA)
-	    trigger |= USAGE_REPORT_TRIGGER_TIME_QUOTA;
+	    vec_elt(triggers, ni) |= USAGE_REPORT_TRIGGER_TIME_QUOTA;
 
 	  upf_pfcp_session_stop_urr_time(&urr->time_quota);
 	  urr->time_quota.period = 0;
 	  urr->status |= URR_OVER_QUOTA;
 	}
 
+      if (vec_elt(triggers, ni))
+	{
+	  pfcp_linked_urr_id_t * id;
+
+	  vec_foreach(id, urr->linked_urr_id)
+	    {
+	      upf_urr_t * urr = sx_get_urr_by_id(active, *id);
+	      if (!urr)
+		continue;
+
+	      vec_elt(triggers, urr - active->urr) |=
+		USAGE_REPORT_TRIGGER_LINKED_USAGE_REPORTING;
+	    }
+	}
+    }
+
 #undef urr_check
 
-      if (trigger != 0)
+  vec_foreach_index(ni, triggers)
+    {
+      urr = vec_elt_at_index (active->urr, ni);
+
+      if (vec_elt(triggers, ni) != 0)
 	{
-	  build_usage_report(sx, urr, trigger, now, &req.usage_report);
+	  build_usage_report(sx, active->urr + ni, vec_elt(triggers, ni), now, &req.usage_report);
 	  send_report = 1;
 
-	  // clear reporting on the time based triggers, until rearmed by update
-	  urr->triggers &= ~(REPORTING_TRIGGER_TIME_THRESHOLD |
-			     REPORTING_TRIGGER_TIME_QUOTA);
+	  /* clear reporting on the time based triggers, until rearmed by update...
+	   * ... but only if a timer event caused the sendong */
+	  if (vec_elt(triggers, ni) & (REPORTING_TRIGGER_TIME_THRESHOLD |
+			      REPORTING_TRIGGER_TIME_QUOTA))
+	    {
+	      urr->triggers &= ~(REPORTING_TRIGGER_TIME_THRESHOLD |
+				 REPORTING_TRIGGER_TIME_QUOTA);
+	    }
 	}
       else if (!(urr->status & URR_AFTER_MONITORING_TIME) &&
 	       (urr->monitoring_time.base != 0) &&
@@ -726,6 +774,7 @@ upf_pfcp_session_urr_timer(upf_session_t *sx, f64 now, f64 cnow)
     upf_pfcp_server_send_session_request(sx, PFCP_SESSION_REPORT_REQUEST, &req.grp);
 
   pfcp_free_msg(PFCP_SESSION_REPORT_REQUEST, &req.grp);
+  vec_free(triggers);
 }
 
 void upf_pfcp_server_stop_timer(u32 handle)

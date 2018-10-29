@@ -1321,7 +1321,12 @@ static int handle_create_urr(upf_session_t *sess, pfcp_create_urr_t *create_urr,
       //TODO: subsequent_volume_threshold;
       //TODO: subsequent_time_threshold;
       //TODO: inactivity_detection_time;
-      //TODO: linked_urr_id;
+
+      if (ISSET_BIT(urr->grp.fields, CREATE_URR_LINKED_URR_ID))
+	{
+	  create->linked_urr_id = vec_dup(urr->linked_urr_id);
+	}
+
       //TODO: measurement_information;
       //TODO: time_quota_mechanism;
 
@@ -1419,7 +1424,13 @@ static int handle_update_urr(upf_session_t *sess, pfcp_update_urr_t *update_urr,
       //TODO: subsequent_volume_threshold;
       //TODO: subsequent_time_threshold;
       //TODO: inactivity_detection_time;
-      //TODO: linked_urr_id;
+
+      if (ISSET_BIT(urr->grp.fields, UPDATE_URR_LINKED_URR_ID))
+	{
+	  vec_free(update->linked_urr_id);
+	  update->linked_urr_id = vec_dup(urr->linked_urr_id);
+	}
+
       //TODO: measurement_information;
       //TODO: time_quota_mechanism;
     }

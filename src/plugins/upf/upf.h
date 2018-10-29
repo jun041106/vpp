@@ -349,6 +349,7 @@ typedef struct {
 #define SX_URR_EVENT  0x0004
 
   u16 triggers;
+  pfcp_linked_urr_id_t * linked_urr_id;
 
   u8 status;
 #define URR_OVER_QUOTA                  BIT(0)
