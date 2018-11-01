@@ -277,6 +277,9 @@ flowtable_entry_lookup_create(flowtable_main_t * fm, flowtable_main_per_cpu_t * 
   clib_memcpy(f->key.key, kv->key, sizeof(f->key.key));
   f->lifetime = flowtable_lifetime_calculate(fm, &f->key);
   f->expire = now + f->lifetime;
+  memset(&f->pdr_id, ~0, sizeof(f->pdr_id));
+  f->next[FT_FORWARD] = FT_NEXT_CLASSIFY;
+  f->next[FT_REVERSE] = FT_NEXT_CLASSIFY;
 
   /* insert in timer list */
   pool_get(fmt->timers, timer_entry);
@@ -345,6 +348,20 @@ timer_wheel_index_update(flowtable_main_t * fm, flowtable_main_per_cpu_t * fmt, 
       fmt->time_index = new_index;
     }
 }
+
+u8 * format_flow_key(u8 * s, va_list * args)
+{
+  flow_key_t * key = va_arg (*args, flow_key_t *);
+
+  return format(s, "proto 0x%x, %U:%u <-> %U:%u, id %llx",
+		key->proto,
+		format_ip46_address, &key->ip.src, IP46_TYPE_ANY,
+		clib_net_to_host_u16(key->port.src),
+		format_ip46_address, &key->ip.dst, IP46_TYPE_ANY,
+		clib_net_to_host_u16(key->port.dst),
+		key->session_id);
+}
+
 
 /*
  * fd.io coding-style-patch-verification: ON

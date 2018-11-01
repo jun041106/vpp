@@ -117,10 +117,10 @@ typedef struct flow_entry {
   u32 timer_index;  /* index in the timer pool */
 
   /* UPF data */
-  u32 application_id;                 /* L7 app index */
-  u32 pdr_id;                         /* Initiator PDR */
   u8 src_intf;                        /* UPF source interface type */
-  u32 next;
+  u32 application_id;                 /* L7 app index */
+  u32 pdr_id[FT_DIRECTION_MAX];       /* PDRs */
+  u32 next[FT_DIRECTION_MAX];
 } flow_entry_t;
 
 /* Timers (in seconds) */
@@ -177,6 +177,8 @@ typedef struct {
 } flowtable_main_t;
 
 extern flowtable_main_t flowtable_main;
+
+u8 * format_flow_key(u8 *, va_list *);
 
 clib_error_t * flowtable_lifetime_update(flowtable_timeout_type_t type, u16 value);
 clib_error_t * flowtable_max_lifetime_update(u16 value);
@@ -273,6 +275,8 @@ flow_mk_key(u32 id, vlib_buffer_t * buffer, u16 offset, u8 is_ip4,
 {
   flow_key_t * key = (flow_key_t *)&kv->key;
 
+  memset(key, 0, sizeof(*key));
+
   key->session_id = id;
 
   /* compute 5 tuple key so that 2 half connections
@@ -297,7 +301,7 @@ flow_tcp_update_lifetime(flow_entry_t * f, tcp_header_t * hdr)
   old_state = f->tcp_state;
   new_state = tcp_trans[old_state][tcp_event(hdr)];
 
-  if (old_state != new_state)
+  if (new_state && old_state != new_state)
     {
       f->tcp_state = new_state;
       f->lifetime = tcp_lifetime[new_state];

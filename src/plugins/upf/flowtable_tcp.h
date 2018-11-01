@@ -44,7 +44,6 @@ typedef enum tcp_event {
 /* flow lifetime in seconds */
 static const int tcp_lifetime[TCP_STATE_MAX] =
   {
-    [TCP_STATE_START]       = 60,
     [TCP_STATE_SYN]         = 15,
     [TCP_STATE_SYNACK]      = 60,
     [TCP_STATE_ESTABLISHED] = 299,

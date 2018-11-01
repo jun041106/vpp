@@ -92,9 +92,9 @@ static int upf_adf_create_update_db(upf_adf_app_t * app)
      rule = pool_elt_at_index(app->rules, index);
 
      vec_add(regex, ".*\\Q", 4);
-     vec_add(regex, rule->host, vec_len(rule->host));
+     vec_append(regex, rule->host);
      vec_add(regex, "\\E.*\\Q", 6);
-     vec_add(regex, rule->path, vec_len(rule->path));
+     vec_append(regex, rule->path);
      vec_add(regex, "\\E.*", 4);
      vec_add1(regex, 0);
 
@@ -165,7 +165,7 @@ upf_adf_lookup(u32 db_index, u8 * str, uint16_t length)
   return 0;
 }
 
-int
+static int
 upf_adf_remove(u32 db_index)
 {
   upf_adf_entry_t *entry = NULL;
@@ -954,19 +954,15 @@ foreach_upf_flows (BVT (clib_bihash_kv) * kvp, void * arg)
   else
     app_name = format (0, "%s", "None");
 
-  vlib_cli_output (vm, "proto 0x%x, %U(%u) <-> %U(%u), "
-		   "UL pkt %u, DL pkt %u, "
+  vlib_cli_output (vm, "%U, UL pkt %u, DL pkt %u, "
 		   "Src Intf %u, Forward PDR %u, Reverse PDR %u, "
 		   "app %v, lifetime %u",
-		   flow->key.proto,
-		   format_ip46_address, &flow->key.ip.src, IP46_TYPE_ANY,
-		   clib_net_to_host_u16(flow->key.port.src),
-		   format_ip46_address, &flow->key.ip.dst, IP46_TYPE_ANY,
-		   clib_net_to_host_u16(flow->key.port.dst),
+		   format_flow_key, &flow->key,
 		   flow->stats[0].pkts,
 		   flow->stats[1].pkts,
 		   flow->src_intf,
-		   flow->pdr_id,
+		   flow->pdr_id[FT_FORWARD],
+		   flow->pdr_id[FT_REVERSE],
 		   app_name,
 		   flow->lifetime);
 

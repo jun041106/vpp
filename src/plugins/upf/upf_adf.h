@@ -30,7 +30,6 @@
 #endif
 
 int upf_adf_lookup(u32 db_index, u8 * str, uint16_t length);
-int upf_adf_remove(u32 db_index);
 int upf_app_add_del (upf_main_t * sm, u8 * name, int add);
 int upf_rule_add_del (upf_main_t * sm, u8 * name, u32 id,
 		      int add, upf_rule_args_t * args);
@@ -39,225 +38,161 @@ void foreach_upf_flows (BVT (clib_bihash_kv) * kvp, void * arg);
 u32 upf_adf_get_adr_db(u32 application_id);
 void upf_adf_put_adr_db(u32 db_index);
 
-#define MIN(x,y) (((x)<(y))?(x):(y))
+/* perfect hash over the HTTP keywords:
+ *   GET
+ *   PUT
+ *   HEAD
+ *   POST
+ *   COPY
+ *   MOVE
+ *   LOCK
+ *   MKCOL
+ *   TRACE
+ *   PATCH
+ *   DELETE
+ *   UNLOCK
+ *   CONNECT
+ *   OPTIONS
+ *   PROPPATCH
+ */
+#if CLIB_ARCH_IS_BIG_ENDIAN
+#define char_to_u32(A,B,C,D)				\
+  (((A) << 24) | ((B) << 16) | ((C) <<  8) | (D))
+#define char_to_u64(A,B,C,D,E,F,G,H)			\
+  (((u64)(A) << 56) | ((u64)(B) << 48) |		\
+   ((u64)(C) << 40) | ((u64)(D) << 32) |		\
+   ((u64)(E) << 24) | ((u64)(F) << 16) |		\
+   ((u64)(G) <<  8) | (u64)(H))
+#else
+#define char_to_u32(A,B,C,D)				\
+  (((D) << 24) | ((C) << 16) | ((B) <<  8) | (A))
+#define char_to_u64(A,B,C,D,E,F,G,H)			\
+  (((u64)(H) << 56) | ((u64)(G) << 48) |		\
+   ((u64)(F) << 40) | ((u64)(E) << 32) |		\
+   ((u64)(D) << 24) | ((u64)(C) << 16) |		\
+   ((u64)(B) <<  8) | (u64)(A))
+#endif
 
-always_inline int
-upf_adf_parse_tcp_payload(tcp_header_t * tcp, u32 db_id)
+#define char_mask_64_5 char_to_u64(0xff, 0xff, 0xff, 0xff, 0xff, 0, 0, 0)
+#define char_mask_64_6 char_to_u64(0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0, 0)
+#define char_mask_64_7 char_to_u64(0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0)
+
+always_inline int is_http_request(u8 ** payload, word * len)
 {
-  u8 *http = NULL;
-  u8 *version = NULL;
-  u8 *host = NULL;
-  u8 *host_end = NULL;
-  u16 uri_length = 0;
-  u16 host_length = 0;
-  u8 *url = NULL;
-  int res = 0;
+  u32 c0 = *(u32 *)*payload;
+  u64 d0 = *(u64 *)*payload;
 
-  http = (u8*)tcp + tcp_header_bytes(tcp);
-
-  if ((http[0] != 'G') ||
-      (http[1] != 'E') ||
-      (http[2] != 'T'))
-    {
-      return -1;
-    }
-
-  http += sizeof("GET");
-
-  version = (u8*)strchr((const char*)http, ' ');
-  if (version == NULL)
-    return -1;
-
-  uri_length = version - http;
-
-  host = (u8*)strstr((const char*)http, "Host:");
-  if (host == NULL)
-    return -1;
-
-  host += sizeof("Host:");
-
-  host_end = (u8*)strchr((const char*)host, '\r');
-  if (host_end == NULL)
-    return -1;
-
-  host_length = host_end - host;
-
-  vec_add(url, "http://", sizeof("http://"));
-  vec_add(url, host, host_length);
-  vec_add(url, http, uri_length);
-
-  adf_debug("URL: %v", url);
-
-  res = upf_adf_lookup(db_id, url, vec_len(url));
-
-  vec_free(url);
-
-  return res;
-}
-
-always_inline int
-upf_adf_parse_ip4_packet(ip4_header_t * ip4, u32 db_id)
-{
-  int tcp_payload_len = 0;
-  tcp_header_t *tcp = NULL;
-
-  if (db_id == ~0)
-    return -1;
-
-  if (ip4->protocol != IP_PROTOCOL_TCP)
-    return -1;
-
-  tcp = (tcp_header_t *) ip4_next_header(ip4);
-
-  tcp_payload_len = clib_net_to_host_u16(ip4->length) -
-		    sizeof(ip4_header_t) - tcp_header_bytes(tcp);
-
-  if (tcp_payload_len < 8)
-    return -1;
-
-  return upf_adf_parse_tcp_payload(tcp, db_id);
-}
-
-always_inline int
-upf_adf_parse_ip6_packet(ip6_header_t * ip6, u32 db_id)
-{
-  int tcp_payload_len = 0;
-  tcp_header_t *tcp = NULL;
-
-  if (db_id == ~0)
-    return -1;
-
-  if (ip6->protocol != IP_PROTOCOL_TCP)
-    return -1;
-
-  tcp = (tcp_header_t *) ip6_next_header(ip6);
-
-  tcp_payload_len = clib_net_to_host_u16(ip6->payload_length) -
-		    tcp_header_bytes(tcp);
-
-  if (tcp_payload_len < 8)
-    return -1;
-
-  return upf_adf_parse_tcp_payload(tcp, db_id);
-}
-
-always_inline upf_pdr_t *
-upf_get_highest_adf_pdr (struct rules * active, int direction)
-{
-  upf_pdr_t *pdr = NULL;
-  upf_pdr_t *pdr_iter = NULL;
-  int iter_direction = 0;
-
-  if (vec_len(active->pdr) == 0)
-    return NULL;
-
-  vec_foreach (pdr_iter, active->pdr)
-    {
-      if (!(pdr->pdi.fields & F_PDI_APPLICATION_ID))
-	continue;
-
-      iter_direction = (pdr_iter->pdi.src_intf == SRC_INTF_ACCESS) ? UL_SDF : DL_SDF;
-      if (iter_direction != direction)
-	continue;
-
-      if (pdr == NULL)
-	{
-	  pdr = pdr_iter;
-	  continue;
-	}
-
-      if (pdr_iter->precedence < pdr->precedence)
-	pdr = pdr_iter;
-    }
-
-  return pdr;
-}
-
-always_inline int
-upf_check_http_req (u8 * pl, int is_ip4)
-{
-  int tcp_payload_len = 0;
-  tcp_header_t *tcp = NULL;
-  u8 *http = NULL;
-
-  if (is_ip4)
-    {
-      ip4_header_t *ip4 = (ip4_header_t *)pl;
-      if (ip4->protocol != IP_PROTOCOL_TCP)
-	return 0;
-
-      tcp = (tcp_header_t *) ip4_next_header(ip4);
-      tcp_payload_len = clib_net_to_host_u16(ip4->length) -
-			sizeof(ip4_header_t) - tcp_header_bytes(tcp);
-    }
-  else
-    {
-      ip6_header_t *ip6 = (ip6_header_t *)pl;
-      if (ip6->protocol != IP_PROTOCOL_TCP)
-	return 0;
-
-      tcp = (tcp_header_t *) ip6_next_header(ip6);
-      tcp_payload_len = clib_net_to_host_u16(ip6->payload_length) -
-			tcp_header_bytes(tcp);
-    }
-
-  if (tcp_payload_len < 8)
+  if (*len < 10)
     return 0;
 
-  http = (u8*)tcp + tcp_header_bytes(tcp);
-
-  if ((http[0] != 'G') ||
-      (http[1] != 'E') ||
-      (http[2] != 'T'))
+  if (c0 == char_to_u32('G', 'E', 'T', ' ') ||
+      c0 == char_to_u32('P', 'U', 'T', ' '))
     {
+      *payload += 4;
+      *len -= 4;
+      return 1;
+    }
+  else if ((c0 == char_to_u32('H', 'E', 'A', 'D') ||
+	    c0 == char_to_u32('P', 'O', 'S', 'T') ||
+	    c0 == char_to_u32('C', 'O', 'P', 'Y') ||
+	    c0 == char_to_u32('M', 'O', 'V', 'E') ||
+	    c0 == char_to_u32('L', 'O', 'C', 'K')) &&
+	   *payload[4] == ' ')
+    {
+      *payload += 5;
+      *len -= 5;
+      return 1;
+    }
+  else if (((d0 & char_mask_64_6) == char_to_u64('M', 'K', 'C', 'O', 'L', ' ', 0, 0)) ||
+	   ((d0 & char_mask_64_6) == char_to_u64('T', 'R', 'A', 'C', 'E', ' ', 0, 0)) ||
+	   ((d0 & char_mask_64_6) == char_to_u64('P', 'A', 'T', 'C', 'H', ' ', 0, 0)))
+    {
+      *payload += 6;
+      *len -= 6;
+      return 1;
+    }
+  else if (((d0 & char_mask_64_7) == char_to_u64('D', 'E', 'L', 'E', 'T', 'E', ' ', 0)) ||
+	   ((d0 & char_mask_64_7) == char_to_u64('U', 'N', 'L', 'O', 'C', 'K', ' ', 0)))
+    {
+      *payload += 7;
+      *len -= 7;
+      return 1;
+    }
+  else if ((d0 == char_to_u64('C', 'O', 'N', 'N', 'E', 'C', 'T', ' ')) ||
+	   (d0 == char_to_u64('O', 'P', 'T', 'I', 'O', 'N', 'S', ' ')))
+    {
+      *payload += 8;
+      *len -= 8;
+      return 1;
+    }
+  if (c0 == char_to_u32('P', 'R', 'O', 'P'))
+    {
+      u64 d1 = *(u64 *)(*payload + 4);
+
+      if ((d1 & char_mask_64_5) == char_to_u64('F', 'I', 'N', 'D', ' ', 0, 0, 0))
+	{
+	  *payload += 9;
+	  *len -= 9;
+	  return 1;
+	}
+      else if ((d1 & char_mask_64_6) == char_to_u64('P', 'A', 'T', 'C', 'H', ' ', 0, 0))
+	{
+	  *payload += 10;
+	  *len -= 10;
+	  return 1;
+	}
+    }
+
+  return 0;
+}
+
+always_inline int
+is_host_header(u8 ** s, word * len)
+{
+  u8 * eol;
+  u8 * c;
+
+  eol = memchr(*s, '\n', *len);
+  if (!eol)
+    {
+      *s += *len;
+      *len = 0;
       return 0;
     }
 
+  if ((eol - *s) < 5)
+    goto out_skip;
+
+  u64 d0 = *(u64 *)(*s);
+
+  /* upper case 1st 4 characters of header */
+  d0 &= char_to_u64(0xdf, 0xdf, 0xdf, 0xdf, 0xff, 0, 0, 0);
+  if (d0 != char_to_u64('H', 'O', 'S', 'T', ':', 0, 0, 0))
+    goto out_skip;
+
+  *s += 5;
+  *len -= 5;
+
+  /* find first non OWS */
+  for (; *len > 0 && **s <= ' '; (*len)--, (*s)++)
+    ;
+  /* find last non OWS */
+  for (c = *s ;
+       *len > 0 && *c > ' '; (*len)--, c++)
+    ;
+
+  if (len <= 0)
+    return 0;
+
+  *len = c - *s;
   return 1;
-}
 
-always_inline void
-upf_update_flow_application_id (flow_entry_t * flow, upf_pdr_t * pdr,
-			   u8 * pl, int is_ip4)
-{
-  int r;
+ out_skip:
+  eol++;
+  *len -= eol - *s;
+  *s = eol;
 
-  if (!flow)
-    return;
-
-  if (flow->application_id != ~0)
-    return;
-
-  if (!(pdr->pdi.fields & F_PDI_APPLICATION_ID))
-    return;
-
-  r = (is_ip4) ?
-    upf_adf_parse_ip4_packet((ip4_header_t *)pl, pdr->pdi.adr.db_id) :
-    upf_adf_parse_ip6_packet((ip6_header_t *)pl, pdr->pdi.adr.db_id);
-
-  if (r == 0)
-    flow->application_id = pdr->pdi.adr.application_id;
-}
-
-always_inline upf_pdr_t *
-upf_get_adf_pdr_by_name (struct rules * active, u8 src_intf, u32 application_id)
-{
-  upf_pdr_t *pdr;
-
-  vec_foreach (pdr, active->pdr)
-    {
-      if (!(pdr->pdi.fields & F_PDI_APPLICATION_ID))
-	continue;
-
-      if (pdr->pdi.src_intf != src_intf)
-	continue;
-
-      if (pdr->pdi.adr.application_id == application_id)
-	return pdr;
-    }
-
-  /* not found */
-  return NULL;
+  return 0;
 }
 
 #endif /* __included_upf_adf_h__ */

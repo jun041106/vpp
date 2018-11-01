@@ -1715,7 +1715,7 @@ static void rules_add_v6_teid(struct rules * r, const ip6_address_t * addr, u32 
     ? 0 :								\
     (ip46_address_is_ip4(&(acl)->dst_address.address) ? SX_SDF_IPV4 : SX_SDF_IPV6)
 
-static int build_sx_sdf(upf_session_t *sx)
+static int build_sx_rules(upf_session_t *sx)
 {
   struct rules *pending = sx_get_rules(sx, SX_PENDING);
   uint64_t cp_seid = sx->cp_seid;
@@ -1772,6 +1772,9 @@ static int build_sx_sdf(upf_session_t *sx)
 	pending->flags |= sdf_dst_address_type(&pdr->pdi.acl);
       }
 
+    if (pdr->pdi.fields & F_PDI_APPLICATION_ID)
+      pending->flags |= SX_ADR;
+
     if (pdr->pdi.fields & F_PDI_LOCAL_F_TEID)
       {
 	if (pdr->pdi.teid.flags & F_TEID_V4)
@@ -1791,6 +1794,9 @@ static int build_sx_sdf(upf_session_t *sx)
     {
       int direction = (pdr->pdi.src_intf == SRC_INTF_ACCESS) ? UL_SDF : DL_SDF;
       upf_acl_ctx_t *ctx = &pending->sdf[direction];
+
+      if ((pdr->pdi.fields & F_PDI_APPLICATION_ID))
+	continue;
 
       if (!(pdr->pdi.fields & F_PDI_SDF_FILTER))
 	{
@@ -1844,7 +1850,7 @@ int sx_update_apply(upf_session_t *sx)
 
   if (pending_pdr)
     {
-      if (build_sx_sdf(sx) != 0)
+      if (build_sx_rules(sx) != 0)
 	return -1;
     }
   else
