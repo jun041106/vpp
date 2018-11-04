@@ -350,7 +350,7 @@ upf_classify (vlib_main_t * vm, vlib_node_runtime_t * node,
 #define IS_UL(_pdr, _far)			\
 	  ((_pdr)->pdi.src_intf == SRC_INTF_ACCESS || (_far)->forward.dst_intf == DST_INTF_CORE)
 
-	      clib_warning("pdr: %d, far: %d\n", pdr->id, far->id);
+	      gtp_debug("pdr: %d, far: %d\n", pdr->id, far->id);
 	      next = process_urrs(vm, sess, active, pdr, b,
 				  IS_DL(pdr, far), IS_UL(pdr, far), next);
 

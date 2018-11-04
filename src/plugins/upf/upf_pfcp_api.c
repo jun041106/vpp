@@ -737,9 +737,9 @@ static int handle_create_pdr(upf_session_t *sess, pfcp_create_pdr_t *create_pdr,
 	      pdr->pdi.network_instance : NULL);
       if (!nwi)
 	{
-	  fformat(stderr, "PDR: %d, PDI for unknown network instance\n", pdr->pdr_id);
+	  gtp_debug( "PDR: %d, PDI for unknown network instance\n", pdr->pdr_id);
 	  if (ISSET_BIT(pdr->pdi.grp.fields, PDI_NETWORK_INSTANCE))
-		  fformat(stderr, "NWI: %v (%d)", pdr->pdi.network_instance,
+		  gtp_debug( "NWI: %v (%d)", pdr->pdi.network_instance,
 			  vec_len(pdr->pdi.network_instance));
 	  failed_rule_id->id = pdr->pdr_id;
 	  break;
@@ -753,7 +753,7 @@ static int handle_create_pdr(upf_session_t *sess, pfcp_create_pdr_t *create_pdr,
 	      nwi->intf_sw_if_index[src_to_intf(pdr->pdi.source_interface)];
       if (create->pdi.src_sw_if_index == (u32)~0)
 	{
-	  fformat(stderr, "PDR: %d, PDI Source Interface %d has not been configured\n",
+	  gtp_debug( "PDR: %d, PDI Source Interface %d has not been configured\n",
 		  pdr->pdr_id, pdr->pdi.source_interface);
 	  failed_rule_id->id = pdr->pdr_id;
 	  break;
@@ -766,7 +766,7 @@ static int handle_create_pdr(upf_session_t *sess, pfcp_create_pdr_t *create_pdr,
 	  /* TODO validate TEID and mask
 	  if (nwi->teid != (pdr->pdi.f_teid.teid & nwi->mask))
 	    {
-	      fformat(stderr, "PDR: %d, TEID not within configure partition\n", pdr->pdr_id);
+	      gtp_debug( "PDR: %d, TEID not within configure partition\n", pdr->pdr_id);
 	      failed_rule_id->id = pdr->pdr_id;
 	      break;
 	    }
@@ -810,7 +810,7 @@ static int handle_create_pdr(upf_session_t *sess, pfcp_create_pdr_t *create_pdr,
 
       if ((r = sx_create_pdr(sess, create)) != 0)
 	{
-	  fformat(stderr, "Failed to add PDR %d\n", pdr->pdr_id);
+	  gtp_debug( "Failed to add PDR %d\n", pdr->pdr_id);
 	  failed_rule_id->id = pdr->pdr_id;
 	  break;
 	}
@@ -845,7 +845,7 @@ static int handle_update_pdr(upf_session_t *sess, pfcp_update_pdr_t *update_pdr,
       update = sx_get_pdr(sess, SX_PENDING, pdr->pdr_id);
       if (!update)
 	{
-	  fformat(stderr, "Sx Session %"PRIu64", update PDR Id %d not found.\n",
+	  gtp_debug( "Sx Session %"PRIu64", update PDR Id %d not found.\n",
 		  sess->cp_seid, pdr->pdr_id);
 	  failed_rule_id->id = pdr->pdr_id;
 	  r = -1;
@@ -857,7 +857,7 @@ static int handle_update_pdr(upf_session_t *sess, pfcp_update_pdr_t *update_pdr,
 	  nwi = lookup_nwi(pdr->pdi.network_instance);
 	  if (!nwi)
 	    {
-	      fformat(stderr, "PDR: %d, PDI for unknown network instance\n", pdr->pdr_id);
+	      gtp_debug( "PDR: %d, PDI for unknown network instance\n", pdr->pdr_id);
 	      failed_rule_id->id = pdr->pdr_id;
 	      break;
 	    }
@@ -871,7 +871,7 @@ static int handle_update_pdr(upf_session_t *sess, pfcp_update_pdr_t *update_pdr,
 	      nwi->intf_sw_if_index[src_to_intf(pdr->pdi.source_interface)];
       if (update->pdi.src_sw_if_index == (u32)~0)
 	{
-	  fformat(stderr, "PDR: %d, PDI Source Interface %d has not been configured\n",
+	  gtp_debug( "PDR: %d, PDI Source Interface %d has not been configured\n",
 		  pdr->pdr_id, pdr->pdi.source_interface);
 	  failed_rule_id->id = pdr->pdr_id;
 	  break;
@@ -944,7 +944,7 @@ static int handle_remove_pdr(upf_session_t *sess, pfcp_remove_pdr_t *remove_pdr,
     {
       if ((r = sx_delete_pdr(sess, pdr->pdr_id)) != 0)
 	{
-	  fformat(stderr, "Failed to add PDR %d\n", pdr->pdr_id);
+	  gtp_debug( "Failed to add PDR %d\n", pdr->pdr_id);
 	  failed_rule_id->id = pdr->pdr_id;
 	  break;
 	}
@@ -1058,7 +1058,7 @@ static int handle_create_far(upf_session_t *sess, pfcp_create_far_t *create_far,
 			   far->forwarding_parameters.network_instance : NULL);
 	  if (!nwi)
 	    {
-	      fformat(stderr, "FAR: %d, Parameter with unknown network instance\n",
+	      gtp_debug( "FAR: %d, Parameter with unknown network instance\n",
 		      far->far_id);
 	      failed_rule_id->id = far->far_id;
 	      break;
@@ -1069,7 +1069,7 @@ static int handle_create_far(upf_session_t *sess, pfcp_create_far_t *create_far,
 	    nwi->intf_sw_if_index[dst_to_intf(far->forwarding_parameters.destination_interface)];
 	  if (create->forward.dst_sw_if_index == (u32)~0)
 	    {
-	      fformat(stderr, "FAR: %d, Destination Interface %d has not been configured\n",
+	      gtp_debug( "FAR: %d, Destination Interface %d has not been configured\n",
 		      far->far_id, far->forwarding_parameters.destination_interface);
 	      failed_rule_id->id = far->far_id;
 	      break;
@@ -1102,7 +1102,7 @@ static int handle_create_far(upf_session_t *sess, pfcp_create_far_t *create_far,
 
       if ((r = sx_create_far(sess, create)) != 0)
 	{
-	  fformat(stderr, "Failed to add FAR %d\n", far->far_id);
+	  gtp_debug( "Failed to add FAR %d\n", far->far_id);
 	  failed_rule_id->id = far->far_id;
 	  break;
 	}
@@ -1136,7 +1136,7 @@ static int handle_update_far(upf_session_t *sess, pfcp_update_far_t *update_far,
       update = sx_get_far(sess, SX_PENDING, far->far_id);
       if (!update)
 	{
-	  fformat(stderr, "Sx Session %"PRIu64", update FAR Id %d not found.\n",
+	  gtp_debug( "Sx Session %"PRIu64", update FAR Id %d not found.\n",
 		  sess->cp_seid, far->far_id);
 	  failed_rule_id->id = far->far_id;
 	  r = -1;
@@ -1156,7 +1156,7 @@ static int handle_update_far(upf_session_t *sess, pfcp_update_far_t *update_far,
 	      nwi = lookup_nwi(far->update_forwarding_parameters.network_instance);
 	      if (!nwi)
 		{
-		  fformat(stderr, "FAR: %d, Update Parameter with unknown network instance\n",
+		  gtp_debug( "FAR: %d, Update Parameter with unknown network instance\n",
 			  far->far_id);
 		  failed_rule_id->id = far->far_id;
 		  break;
@@ -1171,7 +1171,7 @@ static int handle_update_far(upf_session_t *sess, pfcp_update_far_t *update_far,
 	    [dst_to_intf(far->update_forwarding_parameters.destination_interface)];
 	  if (update->forward.dst_sw_if_index == (u32)~0)
 	    {
-	      fformat(stderr, "FAR: %d, Destination Interface %d has not been configured\n",
+	      gtp_debug( "FAR: %d, Destination Interface %d has not been configured\n",
 		      far->far_id, far->update_forwarding_parameters.destination_interface);
 	      failed_rule_id->id = far->far_id;
 	      break;
@@ -1232,7 +1232,7 @@ static int handle_remove_far(upf_session_t *sess, pfcp_remove_far_t *remove_far,
     {
       if ((r = sx_delete_far(sess, far->far_id)) != 0)
 	{
-	  fformat(stderr, "Failed to add FAR %d\n", far->far_id);
+	  gtp_debug( "Failed to add FAR %d\n", far->far_id);
 	  failed_rule_id->id = far->far_id;
 	  break;
 	}
@@ -1332,7 +1332,7 @@ static int handle_create_urr(upf_session_t *sess, pfcp_create_urr_t *create_urr,
 
       if ((r = sx_create_urr(sess, create)) != 0)
 	{
-	  fformat(stderr, "Failed to add URR %d\n", urr->urr_id);
+	  gtp_debug( "Failed to add URR %d\n", urr->urr_id);
 	  failed_rule_id->id = urr->urr_id;
 	  break;
 	}
@@ -1365,7 +1365,7 @@ static int handle_update_urr(upf_session_t *sess, pfcp_update_urr_t *update_urr,
       update = sx_get_urr(sess, SX_PENDING, urr->urr_id);
       if (!update)
 	{
-	  fformat(stderr, "Sx Session %"PRIu64", update URR Id %d not found.\n",
+	  gtp_debug("Sx Session %"PRIu64", update URR Id %d not found.\n",
 		  sess->cp_seid, urr->urr_id);
 	  failed_rule_id->id = urr->urr_id;
 	  r = -1;
@@ -1459,7 +1459,7 @@ static int handle_remove_urr(upf_session_t *sess, pfcp_remove_urr_t *remove_urr,
     {
       if ((r = sx_delete_urr(sess, urr->urr_id)) != 0)
 	{
-	  fformat(stderr, "Failed to add URR %d\n", urr->urr_id);
+	  gtp_debug("Failed to add URR %d\n", urr->urr_id);
 	  failed_rule_id->id = urr->urr_id;
 	  break;
 	}
@@ -1674,17 +1674,17 @@ handle_session_establishment_request(sx_msg_t * req, pfcp_session_establishment_
 			     &resp.failed_rule_id)) != 0)
     goto out_send_resp;
 
-  fformat(stderr, "%U", format_sx_session, sess, SX_PENDING);
+  gtp_debug("%U", format_sx_session, sess, SX_PENDING);
 
   r = sx_update_apply(sess);
-  fformat(stderr, "Appy: %d\n", r);
+  gtp_debug( "Appy: %d\n", r);
 
   sx_update_finish(sess);
 
-  fformat(stderr, "-------------------------------------\n");
+  gtp_debug( "-------------------------------------\n");
   sx_session_dump_tbls();
 
-  fformat(stderr, "-------------------------------------\n");
+  gtp_debug( "-------------------------------------\n");
 
  out_send_resp:
   if (r == 0)
@@ -1725,7 +1725,7 @@ handle_session_modification_request(sx_msg_t * req, pfcp_session_modification_re
 
   if (!(sess = sx_lookup(be64toh(req->hdr->session_hdr.seid))))
     {
-      fformat(stderr, "Sx Session %"PRIu64" not found.\n", be64toh(req->hdr->session_hdr.seid));
+      gtp_debug( "Sx Session %"PRIu64" not found.\n", be64toh(req->hdr->session_hdr.seid));
       resp.response.cause = PFCP_CAUSE_SESSION_CONTEXT_NOT_FOUND;
 
       r = -1;
@@ -1841,7 +1841,7 @@ handle_session_modification_request(sx_msg_t * req, pfcp_session_modification_re
  out_update_finish:
   sx_update_finish(sess);
 
-  fformat(stderr, "%U", format_sx_session, sess, SX_ACTIVE);
+  gtp_debug( "%U", format_sx_session, sess, SX_ACTIVE);
 
  out_send_resp:
   if (r == 0)
@@ -1875,7 +1875,7 @@ handle_session_deletion_request(sx_msg_t * req, pfcp_session_deletion_request_t 
 
   if (!(sess = sx_lookup(be64toh(req->hdr->session_hdr.seid))))
     {
-      fformat(stderr, "Sx Session %"PRIu64" not found.\n", be64toh(req->hdr->session_hdr.seid));
+      gtp_debug( "Sx Session %"PRIu64" not found.\n", be64toh(req->hdr->session_hdr.seid));
       resp.response.cause = PFCP_CAUSE_SESSION_CONTEXT_NOT_FOUND;
 
       r = -1;
@@ -1886,7 +1886,7 @@ handle_session_deletion_request(sx_msg_t * req, pfcp_session_deletion_request_t 
 
   if ((r = sx_disable_session(sess)) != 0)
     {
-      fformat(stderr, "Sx Session %"PRIu64" could no be disabled.\n",
+      gtp_debug( "Sx Session %"PRIu64" could no be disabled.\n",
 	      be64toh(req->hdr->session_hdr.seid));
       goto out_send_resp;
     }

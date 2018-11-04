@@ -443,7 +443,7 @@ void sx_release_association(upf_node_assoc_t *n)
       break;
     }
 
-  clib_warning("sx_release_association idx: %u");
+  gtp_debug("sx_release_association idx: %u");
 
   while (idx != ~0)
     {
@@ -545,7 +545,7 @@ upf_session_t *sx_create_session(upf_node_assoc_t *assoc, int sx_fib_index,
   u32 sw_if_index = ~0;
   upf_session_t *sx;
 
-  clib_warning("CP F-SEID: 0x%016" PRIx64 " @ %U\n"
+  gtp_debug("CP F-SEID: 0x%016" PRIx64 " @ %U\n"
 	       "UP F-SEID: 0x%016" PRIx64 " @ %U\n",
 	       cp_seid, format_ip46_address, cp_address, IP46_TYPE_ANY,
 	       cp_seid, format_ip46_address, up_address, IP46_TYPE_ANY);
@@ -1152,6 +1152,7 @@ static void sx_add_del_v6_teid(const void *teid, void *si, int is_add)
   clib_bihash_add_del_24_8(&gtm->v6_tunnel_by_key, &kv, is_add);
 }
 
+#if CLIB_DEBUG > 0
 /* Format an IP4 address. */
 static u8 *format_ip4_address_host (u8 * s, va_list * args)
 {
@@ -1233,6 +1234,7 @@ format_acl6 (u8 * s, va_list * args)
 
   return s;
 }
+#endif
 
 static void rte_acl_set_port(struct rte_acl_field * field, const ipfilter_port_t * port)
 {
@@ -1347,7 +1349,7 @@ static int add_ip4_sdf(struct rte_acl_ctx *ctx, const upf_pdr_t *pdr,
       break;
     }
 
-  fformat(stderr, "PDR %d, IPv4 %s SDF (%p): %U\n", pdr->id,
+  gtp_debug("PDR %d, IPv4 %s SDF (%p): %U\n", pdr->id,
 	  (pdr->pdi.src_intf == SRC_INTF_ACCESS) ? "UL" : "DL",
 	  ctx, format_acl4, &r);
   if (rte_acl_add_rules(ctx, (const struct rte_acl_rule *)&r, 1) < 0)
@@ -1471,7 +1473,7 @@ static int add_ip6_sdf(struct rte_acl_ctx *ctx, const upf_pdr_t *pdr,
       break;
     }
 
-  fformat(stderr, "PDR %d, IPv6 %s SDF (%p): %U\n", pdr->id,
+  gtp_debug("PDR %d, IPv6 %s SDF (%p): %U\n", pdr->id,
 	  (pdr->pdi.src_intf == SRC_INTF_ACCESS) ? "UL" : "DL",
 	  ctx, format_acl6, &r);
   if (rte_acl_add_rules(ctx, (const struct rte_acl_rule *)&r, 1) < 0)
@@ -1520,7 +1522,7 @@ static int add_wildcard_ip4_sdf(struct rte_acl_ctx *ctx, const upf_pdr_t *pdr,
       break;
     }
 
-  fformat(stderr, "PDR %d, IPv4 %s wildcard SDF (%p): %U\n", pdr->id,
+  gtp_debug("PDR %d, IPv4 %s wildcard SDF (%p): %U\n", pdr->id,
 	  (pdr->pdi.src_intf == SRC_INTF_ACCESS) ? "UL" : "DL",
 	  ctx, format_acl4, &r);
   if (rte_acl_add_rules(ctx, (const struct rte_acl_rule *)&r, 1) < 0)
@@ -1562,9 +1564,10 @@ static int add_wildcard_ip6_sdf(struct rte_acl_ctx *ctx, const upf_pdr_t *pdr,
       break;
     }
 
-  fformat(stderr, "PDR %d, IPv6 %s wildcard SDF (%p): %U\n", pdr->id,
+  gtp_debug("PDR %d, IPv6 %s wildcard SDF (%p): %U\n", pdr->id,
 	  (pdr->pdi.src_intf == SRC_INTF_ACCESS) ? "UL" : "DL",
 	  ctx, format_acl6, &r);
+
   if (rte_acl_add_rules(ctx, (const struct rte_acl_rule *)&r, 1) < 0)
     rte_exit(EXIT_FAILURE, "IP6 add rules failed\n");
 
@@ -1715,7 +1718,9 @@ static int build_sx_sdf(upf_session_t *sx)
   pending->flags &= ~(SX_SDF_IPV4 | SX_SDF_IPV6);
 
   vec_foreach (pdr, pending->pdr) {
+#if 0 // FIXME debug-logging	  
     printf("PDR Scan: %d\n", pdr->id);
+#endif
 
     /*
      * From 3GPP TS 29.244 version 14.3.0, Table 7.5.2.2-2
@@ -2072,7 +2077,7 @@ u32 process_urrs(vlib_main_t *vm, upf_session_t *sess,
 {
   u16 *urr_id;
 
-  clib_warning("DL: %d, UL: %d\n", is_dl, is_ul);
+  gtp_debug("DL: %d, UL: %d\n", is_dl, is_ul);
 
   vec_foreach (urr_id, pdr->urr_ids)
     {

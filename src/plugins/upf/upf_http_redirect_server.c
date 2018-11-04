@@ -26,6 +26,14 @@
 #include "upf_pfcp_api.h"
 #include "upf_http_redirect_server.h"
 
+#if CLIB_DEBUG > 0
+#define upf_debug clib_warning
+#else
+#define upf_debug(...)				\
+  do { } while (0)
+#endif
+
+
 typedef enum
 {
   EVENT_WAKEUP = 1,
@@ -259,7 +267,7 @@ http_redirect_server_session_disconnect_callback (stream_session_t * s)
 static void
 http_redirect_server_session_reset_callback (stream_session_t * s)
 {
-  clib_warning ("called.. ");
+  upf_debug ("called.. ");
   stream_session_cleanup (s);
 }
 
@@ -267,14 +275,14 @@ static int
 http_redirect_server_session_connected_callback (u32 app_index, u32 api_context,
 					stream_session_t * s, u8 is_fail)
 {
-  clib_warning ("called...");
+  upf_debug ("called...");
   return -1;
 }
 
 static int
 http_redirect_server_add_segment_callback (u32 client_index, const ssvm_private_t * sp)
 {
-  clib_warning ("called...");
+  upf_debug ("called...");
   return -1;
 }
 
