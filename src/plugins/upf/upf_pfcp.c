@@ -1727,14 +1727,14 @@ sx_acl_build (struct rules *rules, int direction)
 	{
 	  // TODO: ctx without rules will fail, find some other way to handle that
 	  gtp_debug ("RTE ACL %s IPv4 build failed, no need to worry!",
-		     direction == UL_SDF ? "UL" : "DL");
+		     direction == UPF_UL ? "UL" : "DL");
 	  rte_acl_free (ctx->ip4);
 	  ctx->ip4 = NULL;
 	}
       else
 	{
 	  gtp_debug ("RTE ACL %s IPv4 build SUCCEEDED!",
-		     direction == UL_SDF ? "UL" : "DL");
+		     direction == UPF_UL ? "UL" : "DL");
 	  rte_acl_dump (ctx->ip4);
 	}
     }
@@ -1752,7 +1752,7 @@ sx_acl_build (struct rules *rules, int direction)
 	{
 	  // TODO: ctx without rules will fail, find some other way to handle that
 	  gtp_debug ("RTE ACL %s IPv6 build failed, no need to worry!",
-		     direction == UL_SDF ? "UL" : "DL");
+		     direction == UPF_UL ? "UL" : "DL");
 	  rte_acl_free (ctx->ip6);
 	  ctx->ip6 = NULL;
 	}
@@ -1760,7 +1760,7 @@ sx_acl_build (struct rules *rules, int direction)
 	{
 	  rte_acl_dump (ctx->ip6);
 	  gtp_debug ("RTE ACL %s IPv6 build SUCCEEDED!",
-		     direction == UL_SDF ? "UL" : "DL");
+		     direction == UPF_UL ? "UL" : "DL");
 	}
     }
   return 0;
@@ -1881,12 +1881,12 @@ build_sx_rules (upf_session_t * sx)
   if (vec_len (pending->pdr) == 0)
     return 0;
 
-  sx_acl_create (cp_seid, pending, UL_SDF);
-  sx_acl_create (cp_seid, pending, DL_SDF);
+  sx_acl_create (cp_seid, pending, UPF_UL);
+  sx_acl_create (cp_seid, pending, UPF_DL);
 
   vec_foreach (pdr, pending->pdr)
   {
-    int direction = (pdr->pdi.src_intf == SRC_INTF_ACCESS) ? UL_SDF : DL_SDF;
+    int direction = (pdr->pdi.src_intf == SRC_INTF_ACCESS) ? UPF_UL : UPF_DL;
     upf_acl_ctx_t *ctx = &pending->sdf[direction];
 
     if ((pdr->pdi.fields & F_PDI_APPLICATION_ID))
@@ -1919,8 +1919,8 @@ build_sx_rules (upf_session_t * sx)
 	return -1;
   }
 
-  sx_acl_build (pending, UL_SDF);
-  sx_acl_build (pending, DL_SDF);
+  sx_acl_build (pending, UPF_UL);
+  sx_acl_build (pending, UPF_DL);
 
   return 0;
 }

@@ -244,6 +244,13 @@ struct rte_acl_ctx
 #define INTF_LI		4
 #define INTF_NUM	(INTF_LI + 1)
 
+enum
+{
+  UPF_UL = 0,
+  UPF_DL,
+  UPF_DIRECTION_MAX
+};
+
 typedef struct
 {
   u32 application_id;
@@ -409,13 +416,6 @@ typedef struct
   struct rte_acl_ctx *ip6;
 } upf_acl_ctx_t;
 
-enum
-{
-  UL_SDF = 0,
-  DL_SDF,
-  MAX_SDF
-};
-
 typedef struct
 {
   /* Required for pool_get_aligned  */
@@ -450,7 +450,7 @@ typedef struct
 #define SX_SDF_IPV6    BIT(1)
 #define SX_ADR         BIT(2)
 
-    upf_acl_ctx_t sdf[MAX_SDF];
+    upf_acl_ctx_t sdf[UPF_DIRECTION_MAX];
 
     ip46_address_fib_t *vrf_ip;
     gtpu4_tunnel_key_t *v4_teid;

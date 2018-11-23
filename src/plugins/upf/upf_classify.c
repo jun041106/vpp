@@ -267,7 +267,7 @@ upf_acl_classify (vlib_main_t * vm, vlib_buffer_t * b, flow_entry_t * flow,
   u8 direction;
   u8 *pl;
 
-  direction = vnet_buffer (b)->gtpu.src_intf == INTF_ACCESS ? UL_SDF : DL_SDF;
+  direction = vnet_buffer (b)->gtpu.src_intf == INTF_ACCESS ? UPF_UL : UPF_DL;
   pl = vlib_buffer_get_current (b) + vnet_buffer (b)->gtpu.data_offset;
 
   acl = is_ip4 ? active->sdf[direction].ip4 : active->sdf[direction].ip6;
