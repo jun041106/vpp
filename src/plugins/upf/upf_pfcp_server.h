@@ -25,19 +25,26 @@
 #define PFCP_HB_INTERVAL 10
 #define PFCP_SERVER_HB_TIMER 0
 #define PFCP_SERVER_T1       1
+#define PFCP_SERVER_RESPONSE 2
 
 typedef struct
 {
   /* Required for pool_get_aligned  */
   CLIB_CACHE_LINE_ALIGN_MARK (cacheline0);
 
-  u32 fib_index;
+  union {
+    struct {
+      u32 seq_no;
+      u32 fib_index;
 
-  struct
-  {
-    ip46_address_t address;
-    u16 port;
-  } rmt;
+      struct
+      {
+	ip46_address_t address;
+	u16 port;
+      } rmt;
+    };
+    u64 request_key[4];
+  };
 
   struct
   {
@@ -47,7 +54,6 @@ typedef struct
 
   u32 pfcp_endpoint;
   u32 node;
-  u32 seq_no;
 
   u32 timer;
   u32 n1;
@@ -76,6 +82,7 @@ typedef struct
     TWT (tw_timer_wheel) timer;
   sx_msg_t *msg_pool;
   uword *request_q;
+  uword *response_q;
 
   vlib_main_t *vlib_main;
 } sx_server_main_t;
@@ -99,7 +106,6 @@ void upf_pfcp_server_stop_timer (u32 handle);
 int upf_pfcp_send_request (upf_session_t * sx, u8 type,
 			   struct pfcp_group *grp);
 
-sx_msg_t *upf_pfcp_make_response (sx_msg_t * req, size_t len);
 int upf_pfcp_send_response (sx_msg_t * req, u64 cp_seid, u8 type,
 			    struct pfcp_group *grp);
 

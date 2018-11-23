@@ -36,6 +36,8 @@
 #include "upf_pfcp_api.h"
 #include "upf_pfcp_server.h"
 
+#define RESPONSE_TIMEOUT 30
+
 #if CLIB_DEBUG > 0
 #define gtp_debug clib_warning
 #else
@@ -51,6 +53,9 @@ typedef enum
 } sx_process_event_t;
 
 static vlib_node_registration_t sx_api_process_node;
+
+static void upf_pfcp_make_response (sx_msg_t * resp, sx_msg_t * req, size_t len);
+static void restart_response_timer (sx_msg_t * msg);
 
 sx_server_main_t sx_server_main;
 
@@ -232,19 +237,21 @@ upf_pfcp_server_rx_msg (sx_msg_t * msg)
 
   if (msg->hdr->version != 1)
     {
-      sx_msg_t *resp = NULL;
+      sx_msg_t resp;
 
       gtp_debug ("PFCP: msg version invalid: %d.", msg->hdr->version);
 
-      resp = upf_pfcp_make_response (msg, sizeof (pfcp_header_t));
+      upf_pfcp_make_response (&resp, msg, sizeof (pfcp_header_t));
 
-      resp->hdr->version = 1;
-      resp->hdr->type = PFCP_VERSION_NOT_SUPPORTED_RESPONSE;
-      resp->hdr->length =
+      resp.hdr->version = 1;
+      resp.hdr->type = PFCP_VERSION_NOT_SUPPORTED_RESPONSE;
+      resp.hdr->length =
 	clib_host_to_net_u16 (offsetof (pfcp_header_t, msg_hdr.ies) - 4);
-      _vec_len (resp->data) = offsetof (pfcp_header_t, msg_hdr.ies);
+      _vec_len (resp.data) = offsetof (pfcp_header_t, msg_hdr.ies);
 
-      upf_pfcp_send_data (resp);
+      upf_pfcp_send_data (&resp);
+      vec_free(resp.data);
+
       return 0;
     }
 
@@ -276,9 +283,24 @@ upf_pfcp_server_rx_msg (sx_msg_t * msg)
     case PFCP_SESSION_MODIFICATION_REQUEST:
     case PFCP_SESSION_DELETION_REQUEST:
     case PFCP_SESSION_REPORT_REQUEST:
-      /* TODO: duplicate request detection, resent last reply */
-      upf_pfcp_handle_msg (msg);
-      break;
+      {
+	uword *p = NULL;
+
+	p = hash_get_mem (sxsm->response_q, msg->request_key);
+	if (!p)
+	  {
+	    upf_pfcp_handle_msg (msg);
+	  }
+	else
+	  {
+	    sx_msg_t *resp = pool_elt_at_index (sxsm->msg_pool, p[0]);
+
+	    clib_warning ("resend...\n");
+	    upf_pfcp_send_data (resp);
+	    restart_response_timer (resp);
+	  }
+	break;
+      }
 
     case PFCP_HEARTBEAT_RESPONSE:
     case PFCP_PFD_MANAGEMENT_RESPONSE:
@@ -467,30 +489,62 @@ upf_pfcp_server_send_node_request (upf_node_assoc_t * n, u8 type,
     }
 }
 
-sx_msg_t *
-upf_pfcp_make_response (sx_msg_t * req, size_t len)
+static void
+response_expired (u32 id)
 {
-  sx_msg_t *resp;
+  sx_server_main_t *sxsm = &sx_server_main;
+  sx_msg_t *msg = pool_elt_at_index (sxsm->msg_pool, id);
 
-  resp = clib_mem_alloc_no_fail (sizeof (sx_msg_t));
-  memset (resp, 0, sizeof (sx_msg_t));
 
+  hash_unset_mem (sxsm->request_q, msg->request_key);
+  sx_msg_free (sxsm, msg);
+}
+
+static void
+restart_response_timer (sx_msg_t * msg)
+{
+  sx_server_main_t *sxsm = &sx_server_main;
+  u32 id = msg - sxsm->msg_pool;
+
+  if (msg->timer != ~0)
+    upf_pfcp_server_stop_timer (msg->timer);
+  msg->timer = upf_pfcp_server_start_timer (PFCP_SERVER_RESPONSE, id, RESPONSE_TIMEOUT);
+}
+
+static void
+enqueue_response (sx_msg_t * msg)
+{
+  sx_server_main_t *sxsm = &sx_server_main;
+  u32 id = msg - sxsm->msg_pool;
+
+  hash_set_mem (sxsm->response_q, msg->request_key, id);
+  msg->timer = upf_pfcp_server_start_timer (PFCP_SERVER_RESPONSE, id, RESPONSE_TIMEOUT);
+}
+
+static void
+upf_pfcp_make_response (sx_msg_t * resp, sx_msg_t * req, size_t len)
+{
+  memset (resp, 0, sizeof (*resp));
+
+  resp->timer = ~0;
+  resp->seq_no = req->seq_no;
   resp->fib_index = req->fib_index;
   resp->lcl = req->lcl;
   resp->rmt = req->rmt;
   vec_alloc (resp->data, len);
-
-  return resp;
 }
 
 int
 upf_pfcp_send_response (sx_msg_t * req, u64 cp_seid, u8 type,
 			struct pfcp_group *grp)
 {
+  sx_server_main_t *sxsm = &sx_server_main;
   sx_msg_t *resp;
   int r = 0;
 
-  resp = upf_pfcp_make_response (req, 2048);
+  pool_get_aligned (sxsm->msg_pool, resp,
+		    CLIB_CACHE_LINE_BYTES);
+  upf_pfcp_make_response (resp, req, 2048);
 
   resp->hdr->version = req->hdr->version;
   resp->hdr->s_flag = req->hdr->s_flag;
@@ -513,13 +567,16 @@ upf_pfcp_send_response (sx_msg_t * req, u64 cp_seid, u8 type,
     }
 
   r = pfcp_encode_msg (type, grp, &resp->data);
-  if (r != 0)
+  if (r != 0) {
+    pool_put (sxsm->msg_pool, resp);
     goto out_free;
+  }
 
   /* vector resp might have changed */
   resp->hdr->length = clib_host_to_net_u16 (_vec_len (resp->data) - 4);
 
   upf_pfcp_send_data (resp);
+  enqueue_response (resp);
 
 out_free:
   pfcp_free_msg (type, grp);
@@ -944,6 +1001,10 @@ sx_process (vlib_main_t * vm, vlib_node_runtime_t * rt, vlib_frame_t * f)
 	      request_t1_expired (expired[i] & 0x00FFFFFF);
 	      break;
 
+	    case 0x80 | PFCP_SERVER_RESPONSE:
+	      response_expired (expired[i] & 0x00FFFFFF);
+	      break;
+
 	    default:
 	      clib_warning ("timeout for unknown id: %u", expired[i] >> 24);
 	      break;
@@ -1051,6 +1112,7 @@ sx_server_main_init (vlib_main_t * vm)
 
   sx->vlib_main = vm;
   sx->start_time = time (NULL);
+  sx->response_q = hash_create_mem (0, sizeof (u64) * 4, sizeof (uword));
 
   TW (tw_timer_wheel_init) (&sx->timer, NULL,
 			    10e-3 /* 10ms timer interval */ , ~0);
