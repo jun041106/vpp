@@ -897,12 +897,16 @@ make_pending_urr (upf_session_t * sx)
 
   if (active->urr)
     {
+      clib_spinlock_lock (&sx->lock);
+
       pending->urr = vec_dup (active->urr);
       vec_foreach (urr, pending->urr)
       {
 	urr->update_flags = 0;
 	memset (&urr->volume.measure, 0, sizeof (urr->volume.measure));
       }
+
+      clib_spinlock_unlock (&sx->lock);
     }
 
   return 0;
@@ -2192,6 +2196,8 @@ process_urrs (vlib_main_t * vm, upf_session_t * sess,
 
   clib_warning ("DL: %d, UL: %d\n", is_dl, is_ul);
 
+  clib_spinlock_lock (&sess->lock);
+
   vec_foreach (urr_id, pdr->urr_ids)
   {
     upf_urr_t *urr = sx_get_urr_by_id (r, *urr_id);
@@ -2199,8 +2205,6 @@ process_urrs (vlib_main_t * vm, upf_session_t * sess,
 
     if (!urr)
       continue;
-
-    clib_spinlock_lock (&sess->lock);
 
     if ((urr->methods & SX_URR_VOLUME) && !(urr->status & URR_OVER_QUOTA))
       {
@@ -2229,14 +2233,14 @@ process_urrs (vlib_main_t * vm, upf_session_t * sess,
 	  urr->status |= URR_OVER_QUOTA;
       }
 
-    clib_spinlock_unlock (&sess->lock);
-
     if (unlikely (urr->status & URR_OVER_QUOTA))
       next = UPF_PROCESS_NEXT_DROP;
-
-    if (unlikely (r != URR_OK))
-      upf_pfcp_server_session_usage_report (sess);
   }
+
+  clib_spinlock_unlock (&sess->lock);
+
+  if (unlikely (r != URR_OK))
+    upf_pfcp_server_session_usage_report (sess);
 
   return next;
 }
