@@ -2206,7 +2206,7 @@ process_urrs (vlib_main_t * vm, upf_session_t * sess,
     if (!urr)
       continue;
 
-    if ((urr->methods & SX_URR_VOLUME) && !(urr->status & URR_OVER_QUOTA))
+    if ((urr->methods & SX_URR_VOLUME))
       {
 #define urr_incr_and_check(V, D, L)					\
 	  urr_increment_and_check_counter(&V.measure.packets.D,		\
