@@ -9,7 +9,7 @@ RUN cd /src/vpp && \
 
 FROM ubuntu:bionic
 WORKDIR /
-COPY --from=build-env /src/vpp/build-root/vpp_18*.deb \
+COPY --from=build-env /src/vpp/build-root/vpp_1[89]*.deb \
 		      /src/vpp/build-root/vpp-plugins*.deb \
 		      /src/vpp/build-root/vpp-dev*.deb \
 		      /src/vpp/build-root/vpp-lib*.deb \
