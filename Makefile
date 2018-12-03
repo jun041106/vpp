@@ -72,6 +72,8 @@ ifeq ($(OS_VERSION_ID),14.04)
 	DEB_DEPENDS += openjdk-8-jdk-headless
 	DEB_DEPENDS += libssl-dev
 else ifeq ($(filter 18.04 18.10 19.04,$(OS_VERSION_ID)),$(OS_VERSION_ID))
+	DEB_DEPENDS += default-jdk-headless
+	DEB_DEPENDS += libssl-dev
 	DEB_DEPENDS += libhyperscan-dev
 else ifeq ($(OS_ID)-$(OS_VERSION_ID),debian-8)
 	DEB_DEPENDS += openjdk-8-jdk-headless
