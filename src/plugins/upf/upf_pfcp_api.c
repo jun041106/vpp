@@ -774,6 +774,8 @@ handle_create_pdr (upf_session_t * sess, pfcp_create_pdr_t * create_pdr,
 
     create = clib_mem_alloc_no_fail (sizeof (*create));
     memset (create, 0, sizeof (*create));
+    create->pdi.adr.application_id = ~0;
+    create->pdi.adr.db_id = ~0;
 
     nwi = lookup_nwi (ISSET_BIT (pdr->pdi.grp.fields, PDI_NETWORK_INSTANCE) ?
 		      pdr->pdi.network_instance : NULL);

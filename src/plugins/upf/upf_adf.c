@@ -189,6 +189,9 @@ upf_adf_get_adr_db (u32 application_id)
   upf_main_t *sm = &upf_main;
   upf_adf_app_t *app;
 
+  if (application_id == ~0)
+    return ~0;
+
   app = pool_elt_at_index (sm->upf_apps, application_id);
   if (app->db_index != ~0 && !pool_is_free_index (upf_adf_db, app->db_index))
     {
