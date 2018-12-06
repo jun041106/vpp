@@ -388,19 +388,17 @@ upf_pfcp_send_request (upf_session_t * sx, u8 type, struct pfcp_group *grp)
   sx_msg_t *msg;
   int r = -1;
 
-  msg = clib_mem_alloc_no_fail (sizeof (*msg));
-  if (msg)
-    {
-      if ((r = encode_sx_session_msg (sx, type, grp, msg)) != 0)
-	{
-	  clib_mem_free (msg);
-	  goto out_free;
-	}
+  msg = clib_mem_alloc_aligned_no_fail (sizeof (*msg), CLIB_CACHE_LINE_BYTES);
+  memset (msg, 0, sizeof (*msg));
 
-      gtp_debug ("sending NOTIFY event %p", msg);
-      vlib_process_signal_event_mt (vm, sx_api_process_node.index, EVENT_TX,
-				    (uword) msg);
+  if ((r = encode_sx_session_msg (sx, type, grp, msg)) != 0)
+    {
+      clib_mem_free (msg);
+      goto out_free;
     }
+
+  gtp_debug ("sending NOTIFY event %p", msg);
+  vlib_process_signal_event_mt (vm, sx_api_process_node.index, EVENT_TX, (uword) msg);
 
 out_free:
   pfcp_free_msg (type, grp);
@@ -1048,7 +1046,7 @@ upf_pfcp_handle_input (vlib_main_t * vm, vlib_buffer_t * b, int is_ip4)
   uword *p;
 
   /* signal Sx process to handle data */
-  msg = clib_mem_alloc_no_fail (sizeof (*msg));
+  msg = clib_mem_alloc_aligned_no_fail (sizeof (*msg), CLIB_CACHE_LINE_BYTES);
   memset (msg, 0, sizeof (*msg));
   msg->fib_index = vnet_buffer (b)->ip.fib_index;
 
