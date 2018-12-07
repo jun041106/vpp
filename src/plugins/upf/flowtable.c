@@ -289,6 +289,7 @@ flowtable_entry_lookup_create (flowtable_main_t * fm,
   f->lifetime = flowtable_lifetime_calculate (fm, &f->key);
   f->expire = now + f->lifetime;
   memset (&f->pdr_id, ~0, sizeof (f->pdr_id));
+  f->application_id = ~0;
   f->next[FT_FORWARD] = FT_NEXT_CLASSIFY;
   f->next[FT_REVERSE] = FT_NEXT_CLASSIFY;
 
