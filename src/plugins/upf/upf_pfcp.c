@@ -467,7 +467,7 @@ sx_release_association (upf_node_assoc_t * n)
       break;
     }
 
-  clib_warning ("sx_release_association idx: %u");
+  gtp_debug ("sx_release_association idx: %u");
 
   while (idx != ~0)
     {
@@ -576,7 +576,7 @@ sx_create_session (upf_node_assoc_t * assoc, int sx_fib_index,
   u32 sw_if_index = ~0;
   upf_session_t *sx;
 
-  clib_warning ("CP F-SEID: 0x%016" PRIx64 " @ %U\n"
+  gtp_debug ("CP F-SEID: 0x%016" PRIx64 " @ %U\n"
 		"UP F-SEID: 0x%016" PRIx64 " @ %U\n",
 		cp_seid, format_ip46_address, cp_address, IP46_TYPE_ANY,
 		cp_seid, format_ip46_address, up_address, IP46_TYPE_ANY);
@@ -2313,7 +2313,7 @@ process_urrs (vlib_main_t * vm, upf_session_t * sess,
 {
   u16 *urr_id;
 
-  clib_warning ("DL: %d, UL: %d\n", is_dl, is_ul);
+  gtp_debug ("DL: %d, UL: %d\n", is_dl, is_ul);
 
   clib_spinlock_lock (&sess->lock);
 
@@ -2376,7 +2376,7 @@ process_qers (vlib_main_t * vm, upf_session_t * sess,
   u32 *qer_id;
   u32 len;
 
-  clib_warning ("DL: %d, UL: %d\n", is_dl, is_ul);
+  gtp_debug ("DL: %d, UL: %d\n", is_dl, is_ul);
 
   /* must be UL or DL, not both and not none */
   if ((is_ul + is_dl) != 1)
@@ -2391,7 +2391,7 @@ process_qers (vlib_main_t * vm, upf_session_t * sess,
   {
     upf_qer_t *qer = sx_get_qer_by_id (r, *qer_id);
     upf_qer_policer_t *pol;
-    u32 col;
+    u32 col __attribute__ ((unused));
 
     if (!qer)
       continue;
@@ -2407,7 +2407,7 @@ process_qers (vlib_main_t * vm, upf_session_t * sess,
 
     pol = pool_elt_at_index(gtm->qer_policers, qer->policer.value);
     col = vnet_police_packet (&pol->policer[direction], len, POLICE_CONFORM, time_in_policer_periods);
-    clib_warning ("QER color: %d\n", col);
+    gtp_debug ("QER color: %d\n", col);
   }
 
   return next;
