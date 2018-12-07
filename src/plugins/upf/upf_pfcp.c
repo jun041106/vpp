@@ -2307,10 +2307,11 @@ urr_increment_and_check_counter (u64 * packets, u64 * bytes, u64 * consumed,
 
 u32
 process_urrs (vlib_main_t * vm, upf_session_t * sess,
-	      struct rules * r,
+	      struct rules * active,
 	      upf_pdr_t * pdr, vlib_buffer_t * b,
 	      u8 is_dl, u8 is_ul, u32 next)
 {
+    int r = URR_OK;
   u16 *urr_id;
 
   gtp_debug ("DL: %d, UL: %d\n", is_dl, is_ul);
@@ -2319,8 +2320,7 @@ process_urrs (vlib_main_t * vm, upf_session_t * sess,
 
   vec_foreach (urr_id, pdr->urr_ids)
   {
-    upf_urr_t *urr = sx_get_urr_by_id (r, *urr_id);
-    int r = URR_OK;
+    upf_urr_t *urr = sx_get_urr_by_id (active, *urr_id);
 
     if (!urr)
       continue;
