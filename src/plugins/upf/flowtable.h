@@ -116,6 +116,7 @@ typedef struct flow_entry
 
   /* flow signature */
   flow_key_t key;
+  u8 is_reverse;
   u16 tcp_state;
 
   /* stats */
@@ -127,10 +128,9 @@ typedef struct flow_entry
   u32 timer_index;		/* index in the timer pool */
 
   /* UPF data */
-  u8 src_intf;			/* UPF source interface type */
   u32 application_id;		/* L7 app index */
-  u32 pdr_id[FT_DIRECTION_MAX];	/* PDRs */
-  u32 next[FT_DIRECTION_MAX];
+  u32 pdr_id[2];		/* PDRs */
+  u32 next[2];
 } flow_entry_t;
 
 /* Timers (in seconds) */
@@ -216,7 +216,8 @@ flowtable_update (ip46_address_t ip_src, ip46_address_t ip_dst,
 flow_entry_t *flowtable_entry_lookup_create (flowtable_main_t * fm,
 					     flowtable_main_per_cpu_t * fmt,
 					     BVT (clib_bihash_kv) * kv,
-					     u32 const now, int *created);
+					     u32 const now, u8 is_reverse,
+					     int *created);
 
 void
 timer_wheel_index_update (flowtable_main_t * fm,

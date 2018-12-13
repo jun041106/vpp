@@ -17,9 +17,6 @@
 #define _LGPL_SOURCE		/* LGPL v3.0 is compatible with Apache 2.0 */
 #include <urcu-qsbr.h>		/* QSBR RCU flavor */
 
-#include <rte_config.h>
-#include <rte_common.h>
-
 #include <inttypes.h>
 
 #include <vppinfra/error.h>

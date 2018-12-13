@@ -69,16 +69,14 @@ format_get_flowinfo (u8 * s, va_list * args)
 }
 
 always_inline u32
-load_gtpu_flow_info (flowtable_main_t * fm,
-		     vlib_buffer_t * b, flow_entry_t * flow)
+load_gtpu_flow_info (flowtable_main_t * fm, vlib_buffer_t * b,
+		     flow_entry_t * flow, uword is_reverse)
 {
-  u8 flow_direction = (vnet_buffer (b)->gtpu.src_intf == flow->src_intf)
-    ? FT_FORWARD : FT_REVERSE;
-
+  vnet_buffer (b)->gtpu.is_reverse = is_reverse;
   vnet_buffer (b)->gtpu.flow_id = flow - fm->flows;
-  vnet_buffer (b)->gtpu.pdr_idx = flow->pdr_id[flow_direction];
+  vnet_buffer (b)->gtpu.pdr_idx = flow->pdr_id[is_reverse];
 
-  return flow->next[flow_direction];
+  return flow->next[is_reverse];
 }
 
 static uword
@@ -158,7 +156,7 @@ upf_flow_process (vlib_main_t * vm, vlib_node_runtime_t * node,
 
 	  /* lookup/create flow */
 	  flow0 =
-	    flowtable_entry_lookup_create (fm, fmt, &kv0, current_time,
+	    flowtable_entry_lookup_create (fm, fmt, &kv0, current_time, is_reverse0,
 					   &created0);
 	  if (PREDICT_FALSE (flow0 == NULL))
 	    {
@@ -166,7 +164,7 @@ upf_flow_process (vlib_main_t * vm, vlib_node_runtime_t * node,
 	    }
 
 	  flow1 =
-	    flowtable_entry_lookup_create (fm, fmt, &kv1, current_time,
+	    flowtable_entry_lookup_create (fm, fmt, &kv1, current_time, is_reverse1,
 					   &created1);
 	  if (PREDICT_FALSE (flow1 == NULL))
 	    {
@@ -192,18 +190,9 @@ upf_flow_process (vlib_main_t * vm, vlib_node_runtime_t * node,
 	  flow1->stats[is_reverse1].pkts++;
 	  flow1->stats[is_reverse1].bytes += b1->current_length;
 
-	  if (created0)
-	    {
-	      flow0->src_intf = vnet_buffer (b0)->gtpu.src_intf;
-	    }
-	  if (created1)
-	    {
-	      flow1->src_intf = vnet_buffer (b1)->gtpu.src_intf;
-	    }
-
 	  /* fill buffer with flow data */
-	  next0 = load_gtpu_flow_info (fm, b0, flow0);
-	  next1 = load_gtpu_flow_info (fm, b1, flow1);
+	  next0 = load_gtpu_flow_info (fm, b0, flow0, is_reverse0);
+	  next1 = load_gtpu_flow_info (fm, b1, flow1, is_reverse1);
 
 	  /* flowtable counters */
 	  CPT_THRU += 2;
@@ -261,7 +250,7 @@ upf_flow_process (vlib_main_t * vm, vlib_node_runtime_t * node,
 		       vnet_buffer (b0)->gtpu.data_offset, is_ip4,
 		       &is_reverse, &kv);
 	  flow =
-	    flowtable_entry_lookup_create (fm, fmt, &kv, current_time,
+	    flowtable_entry_lookup_create (fm, fmt, &kv, current_time, is_reverse,
 					   &created);
 
 	  if (PREDICT_FALSE (flow == NULL))
@@ -281,13 +270,8 @@ upf_flow_process (vlib_main_t * vm, vlib_node_runtime_t * node,
 	  flow->stats[is_reverse].pkts++;
 	  flow->stats[is_reverse].bytes += b0->current_length;
 
-	  if (created)
-	    {
-	      flow->src_intf = vnet_buffer (b0)->gtpu.src_intf;
-	    }
-
 	  /* fill opaque buffer with flow data */
-	  next0 = load_gtpu_flow_info (fm, b0, flow);
+	  next0 = load_gtpu_flow_info (fm, b0, flow, is_reverse);
 
 	  /* flowtable counters */
 	  CPT_THRU++;

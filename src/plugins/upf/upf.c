@@ -19,13 +19,11 @@
 #define _LGPL_SOURCE		/* LGPL v3.0 is compatible with Apache 2.0 */
 #include <urcu-qsbr.h>		/* QSBR RCU flavor */
 
-#include <rte_config.h>
-#include <rte_common.h>
-#include <rte_eal.h>
-
 #include <vnet/vnet.h>
 #include <vnet/plugin/plugin.h>
 #include <vpp/app/version.h>
+#include <vnet/ip/ip6_hop_by_hop.h>
+
 #include <upf/upf.h>
 #include <upf/upf_pfcp.h>
 #include <upf/pfcp.h>
@@ -287,7 +285,7 @@ VLIB_CLI_COMMAND (upf_pfcp_show_endpoint_command, static) =
 /* *INDENT-ON* */
 
 int
-vnet_upf_nwi_add_del (u8 * name, u8 add)
+vnet_upf_nwi_add_del (u8 * name, u32 vrf, u8 add)
 {
   upf_main_t *gtm = &upf_main;
   upf_nwi_t *nwi;
@@ -301,12 +299,8 @@ vnet_upf_nwi_add_del (u8 * name, u8 add)
 	return VNET_API_ERROR_VALUE_EXIST;
 
       pool_get (gtm->nwis, nwi);
-      memset (nwi, 0, sizeof (*nwi));
-
       nwi->name = vec_dup (name);
-
-      for (int i = 0; i < ARRAY_LEN (nwi->intf_sw_if_index); i++)
-	nwi->intf_sw_if_index[i] = ~0;
+      nwi->vrf = vrf;
 
       hash_set_mem (gtm->nwi_index_by_name, nwi->name, nwi - gtm->nwis);
     }
@@ -370,7 +364,8 @@ upf_nwi_add_del_command_fn (vlib_main_t * vm,
   unformat_input_t _line_input, *line_input = &_line_input;
   clib_error_t *error = NULL;
   u8 *name = NULL;
-  u8 *label = NULL;
+  u8 *s;
+  u32 vrf = 0;
   u8 add = 1;
   int rv;
 
@@ -383,9 +378,12 @@ upf_nwi_add_del_command_fn (vlib_main_t * vm,
 	add = 0;
       else if (unformat (line_input, "add"))
 	add = 1;
-      else if (unformat (line_input, "name %_%v%_", &name))
-	;
-      else if (unformat (line_input, "label %_%v%_", &label))
+      else if (unformat (line_input, "name %_%v%_", &s))
+	{
+	  name = upf_name_to_labels (s);
+	  vec_free(s);
+	}
+      else if (unformat (line_input, "vrf %u", &vrf))
 	;
       else
 	{
@@ -394,13 +392,10 @@ upf_nwi_add_del_command_fn (vlib_main_t * vm,
 	}
     }
 
-  if (!name && !label)
+  if (!name)
     return clib_error_return (0, "name or label must be specified!");
 
-  if (!name)
-    name = upf_name_to_labels (label);
-
-  rv = vnet_upf_nwi_add_del (name, add);
+  rv = vnet_upf_nwi_add_del (name, vrf, add);
 
   switch (rv)
     {
@@ -422,7 +417,6 @@ upf_nwi_add_del_command_fn (vlib_main_t * vm,
 
 done:
   vec_free (name);
-  vec_free (label);
   unformat_free (line_input);
   return error;
 }
@@ -430,12 +424,75 @@ done:
 /* *INDENT-OFF* */
 VLIB_CLI_COMMAND (upf_nwi_add_del_command, static) =
 {
-  .path = "upf nwi create",
+  .path = "upf nwi name",
   .short_help =
-  "upf nwi create [name <name> | dns <label>]",
+  "upf nwi name <name> [vrf <table-id>] [del]",
   .function = upf_nwi_add_del_command_fn,
 };
 /* *INDENT-ON* */
+
+/* ========================= BEGIN =================================================== */
+
+static clib_error_t *
+upf_show_nwi_command_fn (vlib_main_t * vm,
+			 unformat_input_t * main_input,
+			 vlib_cli_command_t * cmd)
+{
+  unformat_input_t _line_input, *line_input = &_line_input;
+  upf_main_t *gtm = &upf_main;
+  clib_error_t *error = NULL;
+  upf_nwi_t *nwi;
+  u8 *name = NULL;
+  u8 *s;
+
+  if (unformat_user (main_input, unformat_line_input, line_input))
+    {
+      while (unformat_check_input (line_input) != UNFORMAT_END_OF_INPUT)
+	{
+	  if (unformat (line_input, "name %_%v%_", &s))
+	    {
+	      name = upf_name_to_labels (s);
+	      vec_free (s);
+	    }
+	  else
+	    {
+	      error = unformat_parse_error (line_input);
+	      unformat_free (line_input);
+	      goto done;
+	    }
+	}
+
+      unformat_free (line_input);
+    }
+
+  /* *INDENT-OFF* */
+  pool_foreach (nwi, gtm->nwis,
+  ({
+    if (name && !vec_is_equal(name, nwi->name))
+      continue;
+
+    vlib_cli_output (vm, "%U, vrf: %u\n",
+		     format_network_instance, nwi->name, nwi->vrf);
+  }));
+  /* *INDENT-ON* */
+
+done:
+  vec_free (name);
+  return error;
+}
+
+/* *INDENT-OFF* */
+VLIB_CLI_COMMAND (upf_show_nwi_command, static) =
+{
+  .path = "show upf nwi",
+  .short_help =
+  "show upf nwi",
+  .function = upf_show_nwi_command_fn,
+};
+/* *INDENT-ON* */
+
+/* =================================== END ========================================= */
+
 
 #if 0
 static void
@@ -505,67 +562,72 @@ vtep_if_address_add_del (u32 sw_if_index, u8 add)
 #endif
 
 int
-vnet_upf_nwi_set_addr (u8 * name, ip46_address_t * ip, u32 teid, u32 mask,
+vnet_upf_upip_add_del (ip4_address_t * ip4, ip6_address_t * ip6,
+		       u8 * name, u8 intf, u32 teid, u32 mask,
 		       u8 add)
 {
   upf_main_t *gtm = &upf_main;
-  upf_nwi_ip_res_t *ip_res;
-  upf_nwi_t *nwi;
+  upf_upip_res_t *ip_res;
+  upf_upip_res_t res = {
+    .ip4 = *ip4,
+    .ip6 = *ip6,
+    .nwi = ~0,
+    .intf = intf,
+    .teid = teid,
+    .mask = mask
+  };
   uword *p;
 
-  p = hash_get_mem (gtm->nwi_index_by_name, name);
-  if (!p)
-    return VNET_API_ERROR_NO_SUCH_ENTRY;
+  if (name)
+    {
+      p = hash_get_mem (gtm->nwi_index_by_name, name);
+      if (!p)
+	return VNET_API_ERROR_NO_SUCH_ENTRY;
 
-  nwi = pool_elt_at_index (gtm->nwis, p[0]);
-  if (!nwi->ip_res_index_by_ip)
-    nwi->ip_res_index_by_ip =
-      hash_create_mem (0, sizeof (ip46_address_t), sizeof (uword));
+      res.nwi = p[0];
+    }
 
-  p = hash_get_mem (nwi->ip_res_index_by_ip, ip);
+  p = hash_get_mem (gtm->upip_res_index, &res);
 
   if (add)
     {
       if (p)
 	return VNET_API_ERROR_VALUE_EXIST;
 
-      pool_get (nwi->ip_res, ip_res);
-      memset (ip_res, 0, sizeof (*ip_res));
+      pool_get (gtm->upip_res, ip_res);
+      memcpy(ip_res, &res, sizeof(res));
 
-      ip_res->ip = *ip;
-      ip_res->teid = teid & mask;
-      ip_res->mask = mask;
-
-      hash_set_mem_alloc (&nwi->ip_res_index_by_ip, &ip_res->ip,
-			  ip_res - nwi->ip_res);
+      hash_set_mem (gtm->upip_res_index, ip_res, ip_res - gtm->upip_res);
     }
   else
     {
       if (!p)
 	return VNET_API_ERROR_NO_SUCH_ENTRY;
 
-      ip_res = pool_elt_at_index (nwi->ip_res, p[0]);
-      hash_unset_mem_free (&nwi->ip_res_index_by_ip, &ip_res->ip);
-      pool_put (nwi->ip_res, ip_res);
+      ip_res = pool_elt_at_index (gtm->upip_res, p[0]);
+      hash_unset_mem (gtm->upip_res_index, ip_res);
+      pool_put (gtm->upip_res, ip_res);
     }
 
   return 0;
 }
 
 clib_error_t *
-upf_nwi_set_addr_command_fn (vlib_main_t * vm,
-			     unformat_input_t * main_input,
-			     vlib_cli_command_t * cmd)
+upf_gtpu_endpoint_add_del_command_fn (vlib_main_t * vm,
+				      unformat_input_t * main_input,
+				      vlib_cli_command_t * cmd)
 {
   unformat_input_t _line_input, *line_input = &_line_input;
-  clib_error_t *error = NULL;
-  u32 addr_set = 0;
-  ip46_address_t ip;
   u32 teid = 0, mask = 0, teidri = 0;
+  clib_error_t *error = NULL;
+  ip6_address_t ip6 = { {0} };
+  ip4_address_t ip4 = {0};
+  u8 ip_set = 0;
   u8 *name = NULL;
-  u8 *label = NULL;
+  u8 intf = ~0;
   u8 add = 1;
   int rv;
+  u8 *s;
 
   if (!unformat_user (main_input, unformat_line_input, line_input))
     return 0;
@@ -576,14 +638,30 @@ upf_nwi_set_addr_command_fn (vlib_main_t * vm,
 	add = 0;
       else if (unformat (line_input, "add"))
 	add = 1;
-      else if (unformat (line_input, "name %_%v%_", &name))
-	;
-      else if (unformat (line_input, "label %_%v%_", &label))
-	;
-      else
-	if (unformat
-	    (line_input, "%U", unformat_ip46_address, &ip, IP46_TYPE_ANY))
-	addr_set = 1;
+      else if (unformat
+	       (line_input, "ip %U", unformat_ip4_address, &ip4))
+	ip_set |= 1;
+      else if (unformat
+	       (line_input, "ip6 %U", unformat_ip6_address, &ip6))
+	ip_set |= 2;
+      else if (unformat (line_input, "nwi %_%v%_", &s))
+	{
+	  name = upf_name_to_labels (s);
+	  vec_free (s);
+	}
+      else if (unformat (line_input, "intf access"))
+	intf = INTF_ACCESS;
+      else if (unformat (line_input, "intf core"))
+	intf = INTF_CORE;
+      else if (unformat (line_input, "intf sgi"))
+	/*
+	 * WTF: the specification does permit that,
+	 *      but what does that mean in terms
+	 *      of the UPIP IE?
+	 */
+	intf = INTF_SGI_LAN;
+      else if (unformat (line_input, "intf cp"))
+	intf = INTF_CP;
       else if (unformat (line_input, "teid %u/%u", &teid, &teidri))
 	{
 	  if (teidri > 7)
@@ -615,175 +693,13 @@ upf_nwi_set_addr_command_fn (vlib_main_t * vm,
 	}
     }
 
-  if (!addr_set)
+  if (!ip_set)
     {
-      error = clib_error_return (0, "No IP address provided");
-      goto done;
-    }
-  if (!name && !label)
-    {
-      error = clib_error_return (0, "name or label must be specified");
+      error = clib_error_return (0, "ip or ip6 need to be set");
       goto done;
     }
 
-  if (!name)
-    name = upf_name_to_labels (label);
-
-  rv = vnet_upf_nwi_set_addr (name, &ip, teid, mask, add);
-
-  switch (rv)
-    {
-    case 0:
-      break;
-
-    case VNET_API_ERROR_VALUE_EXIST:
-      error = clib_error_return (0, "IP resource already exists...");
-      break;
-
-    case VNET_API_ERROR_NO_SUCH_ENTRY:
-      error =
-	clib_error_return (0,
-			   "network instance or IP resource does not exist...");
-      break;
-
-    default:
-      error = clib_error_return (0, "vnet_upf_nwi_set_addr returned %d", rv);
-      break;
-    }
-
-done:
-  vec_free (name);
-  vec_free (label);
-  unformat_free (line_input);
-  return error;
-}
-
-/* *INDENT-OFF* */
-VLIB_CLI_COMMAND (upf_nwi_set_addr_command, static) =
-{
-  .path = "upf nwi set gtpu address",
-  .short_help =
-  "upf nwi set gtpu address [name <name> | dns <label>] <address> [teid <teid>/<mask>] [del]",
-  .function = upf_nwi_set_addr_command_fn,
-};
-/* *INDENT-ON* */
-
-int
-vnet_upf_nwi_set_intf_role (u8 * name, u8 intf, u32 sw_if_index, u8 add)
-{
-  upf_main_t *gtm = &upf_main;
-  upf_nwi_t *nwi;
-  u32 nwi_index;
-  uword *p;
-
-  if (intf >= INTF_NUM)
-    return VNET_API_ERROR_NO_SUCH_ENTRY;
-
-  p = hash_get_mem (gtm->nwi_index_by_name, name);
-  if (!p)
-    return VNET_API_ERROR_NO_SUCH_ENTRY;
-
-  nwi_index = p[0];
-  nwi = pool_elt_at_index (gtm->nwis, nwi_index);
-
-  if (add)
-    {
-      if (sw_if_index < vec_len (gtm->nwi_index_by_sw_if_index) &&
-	  gtm->nwi_index_by_sw_if_index[sw_if_index] != ~0)
-	return VNET_API_ERROR_VALUE_EXIST;
-
-      vec_validate_init_empty (gtm->nwi_index_by_sw_if_index, sw_if_index,
-			       ~0);
-      vec_validate_init_empty (gtm->intf_type_by_sw_if_index, sw_if_index,
-			       ~0);
-      gtm->nwi_index_by_sw_if_index[sw_if_index] = nwi_index;
-      gtm->intf_type_by_sw_if_index[sw_if_index] = intf;
-      nwi->intf_sw_if_index[intf] = sw_if_index;
-    }
-  else
-    {
-      if (sw_if_index > vec_len (gtm->nwi_index_by_sw_if_index) ||
-	  gtm->nwi_index_by_sw_if_index[sw_if_index] != nwi_index)
-	return VNET_API_ERROR_NO_SUCH_ENTRY;
-
-      gtm->nwi_index_by_sw_if_index[sw_if_index] = ~0;
-      gtm->intf_type_by_sw_if_index[sw_if_index] = ~0;
-      nwi->intf_sw_if_index[intf] = ~0;
-    }
-
-  return 0;
-}
-
-clib_error_t *
-upf_nwi_set_intf_role_command_fn (vlib_main_t * vm,
-				  unformat_input_t * main_input,
-				  vlib_cli_command_t * cmd)
-{
-  unformat_input_t _line_input, *line_input = &_line_input;
-  vnet_main_t *vnm = vnet_get_main ();
-  clib_error_t *error = NULL;
-  u8 *name = NULL;
-  u8 *label = NULL;
-  u8 intf = ~0;
-  u32 sw_if_index = ~0;
-  u8 add = 1;
-  int rv;
-
-  if (!unformat_user (main_input, unformat_line_input, line_input))
-    return 0;
-
-  while (unformat_check_input (line_input) != UNFORMAT_END_OF_INPUT)
-    {
-      if (unformat (line_input, "del"))
-	add = 0;
-      else if (unformat (line_input, "add"))
-	add = 1;
-      else if (unformat (line_input, "name %_%v%_", &name))
-	;
-      else if (unformat (line_input, "label %_%v%_", &label))
-	;
-      else if (unformat (line_input, "interface %U",
-			 unformat_vnet_sw_interface, vnm, &sw_if_index))
-	;
-      else if (unformat (line_input, "sw_if_index %d", &sw_if_index))
-	;
-      else if (unformat (line_input, "access"))
-	intf = INTF_ACCESS;
-      else if (unformat (line_input, "core"))
-	intf = INTF_CORE;
-      else if (unformat (line_input, "sgi"))
-	intf = INTF_SGI_LAN;
-      else if (unformat (line_input, "cp"))
-	intf = INTF_CP;
-      else if (unformat (line_input, "li"))
-	intf = INTF_LI;
-      else
-	{
-	  error = unformat_parse_error (line_input);
-	  goto done;
-	}
-    }
-
-  if (intf == (u8) ~ 0)
-    {
-      error = clib_error_return (0, "Interface type not specified");
-      goto done;
-    }
-  if (sw_if_index == ~0)
-    {
-      error = clib_error_return (0, "Interface or sw_if_index not specified");
-      goto done;
-    }
-  if (!name && !label)
-    {
-      error = clib_error_return (0, "name or label must be specified");
-      goto done;
-    }
-
-  if (!name)
-    name = upf_name_to_labels (label);
-
-  rv = vnet_upf_nwi_set_intf_role (name, intf, sw_if_index, add);
+  rv = vnet_upf_upip_add_del (&ip4, &ip6, name, intf, teid, mask, add);
 
   switch (rv)
     {
@@ -791,7 +707,7 @@ upf_nwi_set_intf_role_command_fn (vlib_main_t * vm,
       break;
 
     case VNET_API_ERROR_NO_SUCH_ENTRY:
-      error = clib_error_return (0, "network instance does not exist...");
+      error = clib_error_return (0, "network instance or entry does not exist...");
       break;
 
     default:
@@ -802,42 +718,42 @@ upf_nwi_set_intf_role_command_fn (vlib_main_t * vm,
 
 done:
   vec_free (name);
-  vec_free (label);
   unformat_free (line_input);
   return error;
 }
 
 /* *INDENT-OFF* */
-VLIB_CLI_COMMAND (upf_nwi_set_intf_role_command, static) =
+VLIB_CLI_COMMAND (upf_gtpu_endpoint_command, static) =
 {
-  .path = "upf nwi set interface type",
+  .path = "upf gtpu endpoint",
   .short_help =
-  "upf nwi set interface type [name <name> | dns <label>] [access | core | sgi | cp] [interface <interface> | sw_if_index <inde>] [del]",
-  .function = upf_nwi_set_intf_role_command_fn,
+  "upf gtpu endpoint [ip <v4 address>] [ip6 <v6 address>] [nwi <name>]"
+  " [src access | core | sgi | cp] [teid <teid>/<mask>] [del]",
+  .function = upf_gtpu_endpoint_add_del_command_fn,
 };
 /* *INDENT-ON* */
 
+/* ========================= BEGIN =================================================== */
+
 static clib_error_t *
-upf_show_nwi_command_fn (vlib_main_t * vm,
-			 unformat_input_t * main_input,
-			 vlib_cli_command_t * cmd)
+upf_show_gtpu_endpoint_command_fn (vlib_main_t * vm,
+				   unformat_input_t * main_input,
+				   vlib_cli_command_t * cmd)
 {
-  unformat_input_t _line_input, *line_input = &_line_input;
-  vnet_main_t *vnm = vnet_get_main ();
   upf_main_t *gtm = &upf_main;
   clib_error_t *error = NULL;
-  upf_nwi_t *nwi;
-  u8 *label = NULL;
-  u8 *name = NULL;
+  upf_upip_res_t *res;
 
+  /* TBD....
   if (unformat_user (main_input, unformat_line_input, line_input))
     {
       while (unformat_check_input (line_input) != UNFORMAT_END_OF_INPUT)
 	{
-	  if (unformat (line_input, "name %_%v%_", &name))
-	    ;
-	  else if (unformat (line_input, "label %_%v%_", &label))
-	    ;
+	  if (unformat (line_input, "name %_%v%_", &s))
+	    {
+	      name = upf_name_to_labels (s);
+	      vec_free (s);
+	    }
 	  else
 	    {
 	      error = unformat_parse_error (line_input);
@@ -848,58 +764,49 @@ upf_show_nwi_command_fn (vlib_main_t * vm,
 
       unformat_free (line_input);
     }
-
-  if (!name && label)
-    name = upf_name_to_labels (label);
+  */
 
   /* *INDENT-OFF* */
-  pool_foreach (nwi, gtm->nwis,
+  pool_foreach (res, gtm->upip_res,
   ({
-    upf_nwi_ip_res_t * ip_res;
+    vlib_cli_output (vm, "[%d]:", res - gtm->upip_res);
 
-    if (name && !vec_is_equal(name, nwi->name))
-      continue;
+    if (!is_zero_ip4_address (&res->ip4))
+      vlib_cli_output (vm, " IP4: %U", format_ip4_address, &res->ip4);
+    if (!is_zero_ip6_address (&res->ip6))
+      vlib_cli_output (vm, " IP6: %U", format_ip6_address, &res->ip6);
 
-    vlib_cli_output (vm, "%U", format_network_instance, nwi->name);
-    vlib_cli_output (vm, "  Access: %U", format_vnet_sw_if_index_name,
-		     vnm, nwi->intf_sw_if_index[INTF_ACCESS]);
-    vlib_cli_output (vm, "  Core: %U", format_vnet_sw_if_index_name,
-		     vnm, nwi->intf_sw_if_index[INTF_CORE]);
-    vlib_cli_output (vm, "  SGi LAN: %U", format_vnet_sw_if_index_name,
-		     vnm, nwi->intf_sw_if_index[INTF_SGI_LAN]);
-    vlib_cli_output (vm, "  CP: %U", format_vnet_sw_if_index_name,
-		     vnm, nwi->intf_sw_if_index[INTF_CP]);
-    vlib_cli_output (vm, "  LI: %U", format_vnet_sw_if_index_name,
-		     vnm, nwi->intf_sw_if_index[INTF_LI]);
+    if (res->nwi != ~0)
+      {
+	upf_nwi_t *nwi = pool_elt_at_index(gtm->nwis, res->nwi);
 
-    vlib_cli_output (vm, "  IPs: %d", pool_elts(nwi->ip_res));
+	vlib_cli_output (vm, ", nwi: %U", format_network_instance, nwi->name);
+      }
 
-    pool_foreach (ip_res, nwi->ip_res,
-    ({
-      vlib_cli_output (vm, "  [%d]: IP: %U, teid: 0x%08x/%d (0x%08x)",
-		       ip_res - nwi->ip_res,
-		       format_ip46_address, &ip_res->ip, IP46_TYPE_ANY,
-		       ip_res->teid, __builtin_popcount(ip_res->mask),
-		       ip_res->mask);
-    }));
+    if (res->intf != ~0)
+      vlib_cli_output (vm, ", Intf: %u", res->intf);
+
+    vlib_cli_output (vm, ", 0x%08x/%d (0x%08x)",
+		     res->teid, __builtin_popcount(res->mask),
+		     res->mask);
   }));
   /* *INDENT-ON* */
 
-done:
-  vec_free (name);
-  vec_free (label);
+  //done:
   return error;
 }
 
 /* *INDENT-OFF* */
-VLIB_CLI_COMMAND (upf_show_nwi_command, static) =
+VLIB_CLI_COMMAND (upf_show_gtpu_endpoint_command, static) =
 {
-  .path = "show upf nwi",
+  .path = "show upf gtpu endpoint",
   .short_help =
-  "show upf nwi",
-  .function = upf_show_nwi_command_fn,
+  "show upf gtpu endpoint",
+  .function = upf_show_gtpu_endpoint_command_fn,
 };
 /* *INDENT-ON* */
+
+/* =================================== END ========================================= */
 
 void
 upf_flows_out_cb (BVT (clib_bihash_kv) * kvp, void *arg)
@@ -1141,17 +1048,10 @@ static clib_error_t *
 upf_init (vlib_main_t * vm)
 {
   upf_main_t *sm = &upf_main;
-  char *argv[] = { "upf", "--no-huge", "--no-pci", NULL };
   clib_error_t *error;
-  int ret;
 
   sm->vnet_main = vnet_get_main ();
   sm->vlib_main = vm;
-
-  ret = rte_eal_init (3, argv);
-  if (ret < 0)
-    return clib_error_return (0, "rte_eal_init returned %d", ret);
-  rte_log_set_global_level (RTE_LOG_DEBUG);
 
   if ((error =
        vlib_call_init_function (vm, upf_http_redirect_server_main_init)))
@@ -1162,6 +1062,9 @@ upf_init (vlib_main_t * vm)
 
   sm->nwi_index_by_name =
     hash_create_vec ( /* initial length */ 32, sizeof (u8), sizeof (uword));
+
+  sm->upip_res_index =
+    hash_create_mem (0, sizeof (upf_upip_res_t), sizeof (uword));
 
   /* initialize the IP/TEID hash's */
   clib_bihash_init_8_8 (&sm->v4_tunnel_by_key,

@@ -310,10 +310,6 @@ gtpu_input (vlib_main_t * vm,
 	  next0 = ((ip4_0->ip_version_and_header_length & 0xF0) == 0x40) ?
 	    GTPU_INPUT_NEXT_IP4_CLASSIFY : GTPU_INPUT_NEXT_IP6_CLASSIFY;
 
-	  vnet_buffer (b0)->gtpu.src_intf =
-	    gtm->intf_type_by_sw_if_index[vnet_buffer (b0)->
-					  sw_if_index[VLIB_RX]];
-
 	  sw_if_index0 = t0->sw_if_index;
 	  len0 = vlib_buffer_length_in_chain (vm, b0) - hdr_len0;
 
@@ -480,10 +476,6 @@ gtpu_input (vlib_main_t * vm,
 	  ip4_1 = vlib_buffer_get_current (b1) + hdr_len1;
 	  next1 = ((ip4_1->ip_version_and_header_length & 0xF0) == 0x40) ?
 	    GTPU_INPUT_NEXT_IP4_CLASSIFY : GTPU_INPUT_NEXT_IP6_CLASSIFY;
-
-	  vnet_buffer (b1)->gtpu.src_intf =
-	    gtm->intf_type_by_sw_if_index[vnet_buffer (b1)->
-					  sw_if_index[VLIB_RX]];
 
 	  sw_if_index1 = t1->sw_if_index;
 	  len1 = vlib_buffer_length_in_chain (vm, b1) - hdr_len1;
@@ -701,10 +693,6 @@ gtpu_input (vlib_main_t * vm,
 	  ip4_0 = vlib_buffer_get_current (b0) + hdr_len0;
 	  next0 = ((ip4_0->ip_version_and_header_length & 0xF0) == 0x40) ?
 	    GTPU_INPUT_NEXT_IP4_CLASSIFY : GTPU_INPUT_NEXT_IP6_CLASSIFY;
-
-	  vnet_buffer (b0)->gtpu.src_intf =
-	    gtm->intf_type_by_sw_if_index[vnet_buffer (b0)->
-					  sw_if_index[VLIB_RX]];
 
 	  sw_if_index0 = t0->sw_if_index;
 	  len0 = vlib_buffer_length_in_chain (vm, b0) - hdr_len0;

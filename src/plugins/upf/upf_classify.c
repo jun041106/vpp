@@ -17,9 +17,7 @@
 #define _LGPL_SOURCE		/* LGPL v3.0 is compatible with Apache 2.0 */
 #include <urcu-qsbr.h>		/* QSBR RCU flavor */
 
-#include <rte_config.h>
-#include <rte_common.h>
-#include <rte_acl.h>
+#include <inttypes.h>
 
 #include <vppinfra/error.h>
 #include <vppinfra/hash.h>
@@ -206,9 +204,6 @@ upf_application_detection (vlib_main_t * vm, vlib_buffer_t * b,
     if (pdr->precedence >= adr->precedence)
       continue;
 
-    if (vnet_buffer (b)->gtpu.src_intf != pdr->pdi.src_intf)
-      continue;
-
     clib_warning ("Scanning %p, db_id %u\n", pdr, pdr->pdi.adr.db_id);
     if (upf_adf_lookup (pdr->pdi.adr.db_id, url, vec_len (url)) == 0)
       adr = pdr;
@@ -223,7 +218,7 @@ upf_application_detection (vlib_main_t * vm, vlib_buffer_t * b,
   vec_free (url);
 
 out_next_process:
-  flow->next[FT_FORWARD] = FT_NEXT_PROCESS;
+  flow->next[vnet_buffer (b)->gtpu.is_reverse] = FT_NEXT_PROCESS;
   return;
 }
 
@@ -242,7 +237,6 @@ upf_get_application_rule (vlib_main_t * vm, vlib_buffer_t * b,
   {
     if ((pdr->pdi.fields & F_PDI_APPLICATION_ID)
 	&& (pdr->precedence < adr->precedence)
-	&& (vnet_buffer (b)->gtpu.src_intf == pdr->pdi.src_intf)
 	&& (pdr->pdi.adr.application_id == flow->application_id))
       adr = pdr;
   }
@@ -256,89 +250,125 @@ upf_get_application_rule (vlib_main_t * vm, vlib_buffer_t * b,
   flow->next[FT_REVERSE] = FT_NEXT_PROCESS;
 }
 
+always_inline int
+ip4_address_is_equal (const ip4_address_t * a, const ip4_address_t * b)
+{
+  return a->as_u32 == b->as_u32;
+}
+
+always_inline int
+ip4_address_is_equal_masked (const ip4_address_t * a,
+			     const ip4_address_t * b,
+			     const ip4_address_t * mask)
+{
+  return (a->as_u32 & mask->as_u32) == (b->as_u32 & mask->as_u32);
+}
+
+always_inline int
+upf_acl_classify_one (vlib_main_t * vm, u32 teid, u8 * data, u8 is_ip4, upf_acl_t *acl)
+{
+  udp_header_t *proto_hdr;
+
+  if (teid != 0 && acl->match_teid && teid != acl->teid)
+    return 0;
+
+  if (is_ip4)
+    {
+      ip4_header_t *ip4h = (ip4_header_t *)data;
+
+      switch (acl->match_ue_ip)
+	{
+	case UPF_ACL_UL:
+	  if (ip4_address_is_equal(&acl->ue_ip.ip4, &ip4h->src_address))
+	    return 0;
+	  break;
+	case UPF_ACL_DL:
+	  if (ip4_address_is_equal(&acl->ue_ip.ip4, &ip4h->dst_address))
+	    return 0;
+	  break;
+	default:
+	  break;
+	}
+
+      if ((ip4h->protocol & acl->mask.protocol) != acl->match.protocol)
+	return 0;
+
+      if (!ip4_address_is_equal_masked(&ip4h->src_address,
+				      &acl->match.src_address.ip4,
+				      &acl->mask.src_address.ip4) ||
+	  !ip4_address_is_equal_masked(&ip4h->dst_address,
+				       &acl->match.dst_address.ip4,
+				       &acl->mask.dst_address.ip4))
+	return 0;
+
+      proto_hdr = (udp_header_t *) ip4_next_header(ip4h);
+    }
+  else
+    {
+      ip6_header_t *ip6h = (ip6_header_t *)data;
+
+      switch (acl->match_ue_ip)
+	{
+	case UPF_ACL_UL:
+	  if (ip6_address_is_equal(&acl->ue_ip.ip6, &ip6h->src_address))
+	    return 0;
+	  break;
+	case UPF_ACL_DL:
+	  if (ip6_address_is_equal(&acl->ue_ip.ip6, &ip6h->dst_address))
+	    return 0;
+	  break;
+	}
+
+      if ((ip6h->protocol & acl->mask.protocol) != acl->match.protocol)
+	return 0;
+
+      if (!ip6_address_is_equal_masked(&ip6h->src_address,
+				      &acl->match.src_address.ip6,
+				      &acl->mask.src_address.ip6) ||
+	  !ip6_address_is_equal_masked(&ip6h->dst_address,
+				       &acl->match.dst_address.ip6,
+				       &acl->mask.dst_address.ip6))
+	return 0;
+
+      proto_hdr = (udp_header_t *) ip6_next_header(ip6h);
+    }
+
+  if (clib_net_to_host_u16(proto_hdr->src_port) < acl->mask.src_port  ||
+      clib_net_to_host_u16(proto_hdr->src_port) > acl->match.src_port ||
+      clib_net_to_host_u16(proto_hdr->dst_port) < acl->mask.dst_port  ||
+      clib_net_to_host_u16(proto_hdr->dst_port) > acl->match.dst_port)
+    return 0;
+
+  return 1;
+}
+
 always_inline u32
 upf_acl_classify (vlib_main_t * vm, vlib_buffer_t * b, flow_entry_t * flow,
 		  struct rules *active, u8 is_ip4)
 {
   u32 next = UPF_CLASSIFY_NEXT_DROP;
-  struct rte_acl_ctx *acl;
-  uint32_t results[1];
-  const u8 *data[4];
-  u8 direction;
+  u16 precedence = ~0;
+  upf_acl_t *acl, *acl_vec;
+  u32 teid;
   u8 *pl;
 
-  direction = vnet_buffer (b)->gtpu.src_intf == INTF_ACCESS ? UPF_UL : UPF_DL;
+  teid = vnet_buffer (b)->gtpu.teid;
   pl = vlib_buffer_get_current (b) + vnet_buffer (b)->gtpu.data_offset;
+  vnet_buffer (b)->gtpu.pdr_idx = ~0;
 
-  acl = is_ip4 ? active->sdf[direction].ip4 : active->sdf[direction].ip6;
-  if (acl == NULL)
-    {
-      gtpu_intf_tunnel_key_t key;
-      uword *p;
+  acl_vec = is_ip4 ? active->v4_acls : active->v6_acls;
+  vec_foreach (acl, acl_vec)
+  {
+    if (acl->precedence < precedence &&
+	upf_acl_classify_one (vm, teid, pl, is_ip4, acl))
+      {
+	precedence = acl->precedence;
+	vnet_buffer (b)->gtpu.pdr_idx = acl->pdr_idx;
+	next = UPF_CLASSIFY_NEXT_PROCESS;
 
-      key.src_intf = vnet_buffer (b)->gtpu.src_intf;
-      key.teid = vnet_buffer (b)->gtpu.teid;
-
-      p = hash_get (active->wildcard_teid, key.as_u64);
-      if (PREDICT_TRUE (p != NULL))
-	{
-	  vnet_buffer (b)->gtpu.pdr_idx = p[0];
-	  next = UPF_CLASSIFY_NEXT_PROCESS;
-	}
-    }
-  else
-    {
-      u32 save, *teid;
-
-      data[0] = pl;
-
-      /* append TEID to data */
-      teid =
-	(u32 *) (pl +
-		 (is_ip4 ? sizeof (ip4_header_t) : sizeof (ip6_header_t)) +
-		 sizeof (udp_header_t));
-      save = *teid;
-      *teid = vnet_buffer (b)->gtpu.teid;
-
-      if (is_ip4)
-	{
-#if CLIB_DEBUG > 0
-	  ip4_header_t *ip4 = (ip4_header_t *) pl;
-#endif
-
-	  rte_acl_classify (acl, data, results, 1, 1);
-	  if (PREDICT_TRUE (results[0] != 0))
-	    {
-	      vnet_buffer (b)->gtpu.pdr_idx = results[0] - 1;
-	      next = UPF_CLASSIFY_NEXT_PROCESS;
-	    }
-
-	  gtp_debug ("Ctx: %p, src: %U, dst %U, r: %d\n",
-		     acl,
-		     format_ip4_address, &ip4->src_address,
-		     format_ip4_address, &ip4->dst_address, results[0]);
-	}
-      else
-	{
-#if CLIB_DEBUG > 0
-	  ip6_header_t *ip6 = (ip6_header_t *) pl;
-#endif
-
-	  rte_acl_classify (acl, data, results, 1, 1);
-	  if (PREDICT_TRUE (results[0] != 0))
-	    {
-	      vnet_buffer (b)->gtpu.pdr_idx = results[0] - 1;
-	      next = UPF_CLASSIFY_NEXT_PROCESS;
-	    }
-
-	  gtp_debug ("Ctx: %p, src: %U, dst %U, r: %d\n",
-		     acl,
-		     format_ip6_address, &ip6->src_address,
-		     format_ip6_address, &ip6->dst_address, results[0]);
-	}
-
-      *teid = save;
-    }
+	gtp_debug ("match PDR: %u\n", acl->pdr_idx);
+      }
+  }
 
   return next;
 }
@@ -374,7 +404,7 @@ upf_classify (vlib_main_t * vm, vlib_node_runtime_t * node,
       u32 n_left_to_next;
       vlib_buffer_t *b;
       flow_entry_t *flow;
-      u8 flow_direction;
+      u8 is_forward, is_reverse;
       u32 bi;
 
       vlib_get_next_frame (vm, node, next_index, to_next, n_left_to_next);
@@ -400,25 +430,24 @@ upf_classify (vlib_main_t * vm, vlib_node_runtime_t * node,
 	  flow = pool_elt_at_index (fm->flows, vnet_buffer (b)->gtpu.flow_id);
 	  ASSERT (flow != NULL);
 
-	  flow_direction =
-	    vnet_buffer (b)->gtpu.src_intf ==
-	    flow->src_intf ? FT_FORWARD : FT_REVERSE;
-	  vnet_buffer (b)->gtpu.pdr_idx = flow->pdr_id[flow_direction];
+	  is_reverse = vnet_buffer (b)->gtpu.is_reverse;
+	  is_forward = (is_reverse == flow->is_reverse) ? 1 : 0;
+	  vnet_buffer (b)->gtpu.pdr_idx = flow->pdr_id[is_reverse];
 
 	  if (vnet_buffer (b)->gtpu.pdr_idx == ~0)
 	    next = upf_acl_classify (vm, b, flow, active, is_ip4);
-	  else if (flow_direction == FT_FORWARD)
+	  else if (is_forward)
 	    upf_application_detection (vm, b, flow, active, is_ip4);
-	  else if (flow_direction == FT_REVERSE && flow->application_id != ~0)
+	  else if (!is_forward && flow->application_id != ~0)
 	    upf_get_application_rule (vm, b, flow, active, is_ip4);
 	  else if (flow->stats[0].bytes > 4096 && flow->stats[1].bytes > 4096)
 	    {
 	      /* stop flow classification after 4k in each direction */
-	      flow->next[flow_direction] = FT_NEXT_PROCESS;
+	      flow->next[0] = flow->next[1] = FT_NEXT_PROCESS;
 	    }
 
 	  if (vnet_buffer (b)->gtpu.pdr_idx != ~0)
-	    flow->pdr_id[flow_direction] = vnet_buffer (b)->gtpu.pdr_idx;
+	    flow->pdr_id[is_reverse] = vnet_buffer (b)->gtpu.pdr_idx;
 
 	  len = vlib_buffer_length_in_chain (vm, b);
 	  stats_n_packets += 1;

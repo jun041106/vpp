@@ -34,6 +34,7 @@
 #include <vppinfra/types.h>
 #include <vppinfra/vec.h>
 #include <vppinfra/format.h>
+#include <vnet/ip/ip6_hop_by_hop.h>
 
 #include "pfcp.h"
 #include "upf_pfcp.h"
@@ -242,6 +243,12 @@ unformat_ipfilter (unformat_input_t * i, acl_rule_t * acl)
       step++;
     }
 
+  acl->type = IPFILTER_WILDCARD;
+  if (!(ipfilter_address_cmp_const (&acl->src_address, ACL_FROM_ANY) == 0))
+    acl->type = ip46_address_is_ip4(&acl->src_address.address) ? IPFILTER_IPV4 : IPFILTER_IPV6;
+  if (!(ipfilter_address_cmp_const (&acl->dst_address, ACL_TO_ASSIGNED) == 0))
+    acl->type = ip46_address_is_ip4(&acl->dst_address.address) ? IPFILTER_IPV4 : IPFILTER_IPV6;
+
   return 1;
 }
 
@@ -331,45 +338,51 @@ format_ipfilter (u8 * s, va_list * args)
 /* message helpers */
 
 static void
-  build_user_plane_ip_resource_information
-  (pfcp_user_plane_ip_resource_information_t ** upip)
+build_user_plane_ip_resource_information(pfcp_user_plane_ip_resource_information_t ** upip)
 {
   upf_main_t *gtm = &upf_main;
-  upf_nwi_t *nwi;
+  upf_upip_res_t * res;
 
   /* *INDENT-OFF* */
-  pool_foreach (nwi, gtm->nwis,
-    ({
-      upf_nwi_ip_res_t * ip_res;
 
-      pool_foreach (ip_res, nwi->ip_res,
-	({
-	  pfcp_user_plane_ip_resource_information_t *r;
+  pool_foreach (res, gtm->upip_res,
+  ({
+    pfcp_user_plane_ip_resource_information_t *r;
 
-	  vec_alloc(*upip, 1);
-	  r = vec_end(*upip);
+    vec_alloc(*upip, 1);
+    r = vec_end(*upip);
 
-	  r->network_instance = vec_dup(nwi->name);
-	  if (ip_res->mask != 0)
-	    {
-	      r->teid_range_indication = __builtin_popcount(ip_res->mask);
-	      r->teid_range = (ip_res->teid >> 24);
-	    }
+    if (res->nwi != ~0)
+      {
+	upf_nwi_t *nwi = pool_elt_at_index(gtm->nwis, res->nwi);
 
-	  if (ip46_address_is_ip4 (&ip_res->ip))
-	    {
-	      r->flags |= USER_PLANE_IP_RESOURCE_INFORMATION_V4;
-	      r->ip4 = ip_res->ip.ip4;
-	    }
-	  else
-	    {
-	      r->flags |= USER_PLANE_IP_RESOURCE_INFORMATION_V6;
-	      r->ip6 = ip_res->ip.ip6;
-	    }
+	r->flags |= USER_PLANE_IP_RESOURCE_INFORMATION_ASSOCNI;
+	r->network_instance = vec_dup(nwi->name);
+      }
 
-	  _vec_len(*upip)++;
-	}));
-    }));
+    r->flags |= (res->intf != ~0) ? USER_PLANE_IP_RESOURCE_INFORMATION_ASSOCSI : 0;
+    r->source_intf = res->intf;
+
+    if (res->mask != 0)
+      {
+	r->teid_range_indication = __builtin_popcount(res->mask);
+	r->teid_range = (res->teid >> 24);
+      }
+
+    if (!is_zero_ip4_address (&res->ip4))
+      {
+	r->flags |= USER_PLANE_IP_RESOURCE_INFORMATION_V4;
+	r->ip4 = res->ip4;
+      }
+
+    if (!is_zero_ip6_address (&res->ip6))
+      {
+	r->flags |= USER_PLANE_IP_RESOURCE_INFORMATION_V6;
+	r->ip6 = res->ip6;
+      }
+
+    _vec_len(*upip)++;
+  }));
   /* *INDENT-ON* */
 }
 
@@ -695,65 +708,18 @@ static upf_nwi_t *
 lookup_nwi (u8 * name)
 {
   upf_main_t *gtm = &upf_main;
-  upf_nwi_t *nwi;
   uword *p;
+
+  assert(name);
 
   if (pool_elts (gtm->nwis) == 0)
     return NULL;
-
-  if (!name)
-    {
-      /* *INDENT-OFF* */
-      pool_foreach (nwi, gtm->nwis,
-      ({
-	/* return first network instance */
-	return nwi;
-      }));
-      /* *INDENT-ON* */
-      return NULL;
-    }
 
   p = hash_get_mem (gtm->nwi_index_by_name, name);
   if (!p)
     return NULL;
 
   return pool_elt_at_index (gtm->nwis, p[0]);
-}
-
-static u8
-src_to_intf (u8 src)
-{
-  switch (src)
-    {
-    case SRC_INTF_ACCESS:
-      return INTF_ACCESS;
-    case SRC_INTF_CORE:
-      return INTF_CORE;
-    case SRC_INTF_SGI_LAN:
-      return INTF_SGI_LAN;
-    case SRC_INTF_CP:
-      return INTF_CP;
-    }
-  return 0;
-}
-
-static u8
-dst_to_intf (u8 dst)
-{
-  switch (dst)
-    {
-    case DST_INTF_ACCESS:
-      return INTF_ACCESS;
-    case DST_INTF_CORE:
-      return INTF_CORE;
-    case DST_INTF_SGI_LAN:
-      return INTF_SGI_LAN;
-    case DST_INTF_CP:
-      return INTF_CP;
-    case DST_INTF_LI:
-      return INTF_LI;
-    }
-  return 0;
 }
 
 static int
@@ -770,40 +736,33 @@ handle_create_pdr (upf_session_t * sess, pfcp_create_pdr_t * create_pdr,
   vec_foreach (pdr, create_pdr)
   {
     upf_pdr_t *create;
-    upf_nwi_t *nwi;
 
     create = clib_mem_alloc_no_fail (sizeof (*create));
     memset (create, 0, sizeof (*create));
+    create->pdi.nwi = ~0;
     create->pdi.adr.application_id = ~0;
     create->pdi.adr.db_id = ~0;
-
-    nwi = lookup_nwi (ISSET_BIT (pdr->pdi.grp.fields, PDI_NETWORK_INSTANCE) ?
-		      pdr->pdi.network_instance : NULL);
-    if (!nwi)
-      {
-	gtp_debug ("PDR: %d, PDI for unknown network instance\n",
-		   pdr->pdr_id);
-	if (ISSET_BIT (pdr->pdi.grp.fields, PDI_NETWORK_INSTANCE))
-	  gtp_debug ("NWI: %v (%d)", pdr->pdi.network_instance,
-		     vec_len (pdr->pdi.network_instance));
-	failed_rule_id->id = pdr->pdr_id;
-	break;
-      }
 
     create->id = pdr->pdr_id;
     create->precedence = pdr->precedence;
 
-    create->pdi.nwi = nwi - gtm->nwis;
-    create->pdi.src_sw_if_index =
-      nwi->intf_sw_if_index[src_to_intf (pdr->pdi.source_interface)];
-    if (create->pdi.src_sw_if_index == (u32) ~ 0)
+    if (ISSET_BIT (pdr->pdi.grp.fields, PDI_NETWORK_INSTANCE))
       {
-	gtp_debug
-	  ("PDR: %d, PDI Source Interface %d has not been configured\n",
-	   pdr->pdr_id, pdr->pdi.source_interface);
-	failed_rule_id->id = pdr->pdr_id;
-	break;
+	upf_nwi_t *nwi = lookup_nwi (pdr->pdi.network_instance);
+	if (!nwi)
+	  {
+	    gtp_debug ("PDR: %d, PDI for unknown network instance\n",
+		       pdr->pdr_id);
+	    if (ISSET_BIT (pdr->pdi.grp.fields, PDI_NETWORK_INSTANCE))
+	      gtp_debug ("NWI: %v (%d)", pdr->pdi.network_instance,
+			 vec_len (pdr->pdi.network_instance));
+	    failed_rule_id->id = pdr->pdr_id;
+	    break;
+	  }
+
+	create->pdi.nwi = nwi - gtm->nwis;
       }
+
     create->pdi.src_intf = pdr->pdi.source_interface;
 
     if (ISSET_BIT (pdr->pdi.grp.fields, PDI_F_TEID))
@@ -926,7 +885,6 @@ handle_update_pdr (upf_session_t * sess, pfcp_update_pdr_t * update_pdr,
   vec_foreach (pdr, update_pdr)
   {
     upf_pdr_t *update;
-    upf_nwi_t *nwi;
 
     update = sx_get_pdr (sess, SX_PENDING, pdr->pdr_id);
     if (!update)
@@ -940,30 +898,23 @@ handle_update_pdr (upf_session_t * sess, pfcp_update_pdr_t * update_pdr,
 
     if (ISSET_BIT (pdr->pdi.grp.fields, PDI_NETWORK_INSTANCE))
       {
-	nwi = lookup_nwi (pdr->pdi.network_instance);
-	if (!nwi)
+	if (vec_len(pdr->pdi.network_instance) != 0)
 	  {
-	    gtp_debug ("PDR: %d, PDI for unknown network instance\n",
-		       pdr->pdr_id);
-	    failed_rule_id->id = pdr->pdr_id;
-	    break;
+	    upf_nwi_t *nwi = lookup_nwi (pdr->pdi.network_instance);
+	    if (!nwi)
+	      {
+		gtp_debug ("PDR: %d, PDI for unknown network instance\n",
+			   pdr->pdr_id);
+		failed_rule_id->id = pdr->pdr_id;
+		break;
+	      }
+	    update->pdi.nwi = nwi - gtm->nwis;
 	  }
-	update->pdi.nwi = nwi - gtm->nwis;
+	else
+	  update->pdi.nwi = ~0;
       }
-    else
-      nwi = pool_elt_at_index (gtm->nwis, update->pdi.nwi);
 
     update->precedence = pdr->precedence;
-    update->pdi.src_sw_if_index =
-      nwi->intf_sw_if_index[src_to_intf (pdr->pdi.source_interface)];
-    if (update->pdi.src_sw_if_index == (u32) ~ 0)
-      {
-	gtp_debug
-	  ("PDR: %d, PDI Source Interface %d has not been configured\n",
-	   pdr->pdr_id, pdr->pdi.source_interface);
-	failed_rule_id->id = pdr->pdr_id;
-	break;
-      }
     update->pdi.src_intf = pdr->pdi.source_interface;
 
     if (ISSET_BIT (pdr->pdi.grp.fields, PDI_F_TEID))
@@ -1176,6 +1127,7 @@ handle_create_far (upf_session_t * sess, pfcp_create_far_t * create_far,
 
     create = clib_mem_alloc_no_fail (sizeof (*create));
     memset (create, 0, sizeof (*create));
+    create->forward.nwi = ~0;
 
     create->id = far->far_id;
     create->apply_action = far->apply_action;
@@ -1183,32 +1135,22 @@ handle_create_far (upf_session_t * sess, pfcp_create_far_t * create_far,
     if ((create->apply_action & FAR_FORWARD) &&
 	far->grp.fields & CREATE_FAR_FORWARDING_PARAMETERS)
       {
-	upf_nwi_t *nwi;
 
-	nwi = lookup_nwi (ISSET_BIT (far->forwarding_parameters.grp.fields,
-				     FORWARDING_PARAMETERS_NETWORK_INSTANCE) ?
-			  far->forwarding_parameters.network_instance : NULL);
-	if (!nwi)
+	if (ISSET_BIT (far->forwarding_parameters.grp.fields,
+		       FORWARDING_PARAMETERS_NETWORK_INSTANCE))
 	  {
-	    gtp_debug ("FAR: %d, Parameter with unknown network instance\n",
-		       far->far_id);
-	    failed_rule_id->id = far->far_id;
-	    break;
+	    upf_nwi_t *nwi = lookup_nwi (far->forwarding_parameters.network_instance);
+	    if (!nwi)
+	      {
+		gtp_debug ("FAR: %d, Parameter with unknown network instance\n",
+			   far->far_id);
+		failed_rule_id->id = far->far_id;
+		break;
+	      }
+
+	    create->forward.nwi = nwi - gtm->nwis;
 	  }
 
-	create->forward.nwi = nwi - gtm->nwis;
-	create->forward.dst_sw_if_index =
-	  nwi->intf_sw_if_index[dst_to_intf
-				(far->forwarding_parameters.
-				 destination_interface)];
-	if (create->forward.dst_sw_if_index == (u32) ~ 0)
-	  {
-	    gtp_debug
-	      ("FAR: %d, Destination Interface %d has not been configured\n",
-	       far->far_id, far->forwarding_parameters.destination_interface);
-	    failed_rule_id->id = far->far_id;
-	    break;
-	  }
 	create->forward.dst_intf =
 	  far->forwarding_parameters.destination_interface;
 
@@ -1285,39 +1227,27 @@ handle_update_far (upf_session_t * sess, pfcp_update_far_t * update_far,
     if ((update->apply_action & FAR_FORWARD) &&
 	far->grp.fields & UPDATE_FAR_UPDATE_FORWARDING_PARAMETERS)
       {
-	upf_nwi_t *nwi;
-
 	if (ISSET_BIT (far->update_forwarding_parameters.grp.fields,
 		       UPDATE_FORWARDING_PARAMETERS_NETWORK_INSTANCE))
 	  {
-	    nwi =
-	      lookup_nwi (far->update_forwarding_parameters.network_instance);
-	    if (!nwi)
+	    if (vec_len(far->update_forwarding_parameters.network_instance) != 0)
 	      {
-		gtp_debug
-		  ("FAR: %d, Update Parameter with unknown network instance\n",
-		   far->far_id);
-		failed_rule_id->id = far->far_id;
-		break;
+		upf_nwi_t *nwi =
+		  lookup_nwi (far->update_forwarding_parameters.network_instance);
+		if (!nwi)
+		  {
+		    gtp_debug
+		      ("FAR: %d, Update Parameter with unknown network instance\n",
+		       far->far_id);
+		    failed_rule_id->id = far->far_id;
+		    break;
+		  }
+		update->forward.nwi = nwi - gtm->nwis;
 	      }
-	    update->forward.nwi = nwi - gtm->nwis;
+	    else
+	      update->forward.nwi = ~0;
 	  }
-	else
-	  nwi = pool_elt_at_index (gtm->nwis, update->forward.nwi);
 
-	update->forward.dst_sw_if_index =
-	  nwi->intf_sw_if_index
-	  [dst_to_intf
-	   (far->update_forwarding_parameters.destination_interface)];
-	if (update->forward.dst_sw_if_index == (u32) ~ 0)
-	  {
-	    gtp_debug
-	      ("FAR: %d, Destination Interface %d has not been configured\n",
-	       far->far_id,
-	       far->update_forwarding_parameters.destination_interface);
-	    failed_rule_id->id = far->far_id;
-	    break;
-	  }
 	update->forward.dst_intf =
 	  far->update_forwarding_parameters.destination_interface;
 

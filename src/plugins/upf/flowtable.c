@@ -258,7 +258,7 @@ flow_entry_t *
 flowtable_entry_lookup_create (flowtable_main_t * fm,
 			       flowtable_main_per_cpu_t * fmt,
 			       BVT (clib_bihash_kv) * kv, u32 const now,
-			       int *created)
+			       u8 is_reverse, int *created)
 {
   flow_entry_t *f;
   dlist_elt_t *timer_entry;
@@ -286,12 +286,13 @@ flowtable_entry_lookup_create (flowtable_main_t * fm,
 
   memset (f, 0, sizeof (*f));
   clib_memcpy (f->key.key, kv->key, sizeof (f->key.key));
+  f->is_reverse = is_reverse;
   f->lifetime = flowtable_lifetime_calculate (fm, &f->key);
   f->expire = now + f->lifetime;
   memset (&f->pdr_id, ~0, sizeof (f->pdr_id));
   f->application_id = ~0;
-  f->next[FT_FORWARD] = FT_NEXT_CLASSIFY;
-  f->next[FT_REVERSE] = FT_NEXT_CLASSIFY;
+  f->next[0] = FT_NEXT_CLASSIFY;
+  f->next[1] = FT_NEXT_CLASSIFY;
 
   /* insert in timer list */
   pool_get (fmt->timers, timer_entry);
@@ -385,6 +386,7 @@ u8 *
 format_flow (u8 * s, va_list * args)
 {
   flow_entry_t *flow = va_arg (*args, flow_entry_t *);
+  int is_reverse = flow->is_reverse;
   upf_main_t *sm = &upf_main;
   u8 *app_name = NULL;
 
@@ -398,14 +400,13 @@ format_flow (u8 * s, va_list * args)
     app_name = format (0, "%s", "None");
 
   return format (s, "%U, UL pkt %u, DL pkt %u, "
-		 "Src Intf %u, Forward PDR %u, Reverse PDR %u, "
+		 "Forward PDR %u, Reverse PDR %u, "
 		 "app %v, lifetime %u",
 		 format_flow_key, &flow->key,
-		 flow->stats[0].pkts,
-		 flow->stats[1].pkts,
-		 flow->src_intf,
-		 flow->pdr_id[FT_FORWARD],
-		 flow->pdr_id[FT_REVERSE], app_name, flow->lifetime);
+		 flow->stats[is_reverse].pkts,
+		 flow->stats[is_reverse ^ 1].pkts,
+		 flow->pdr_id[is_reverse],
+		 flow->pdr_id[is_reverse ^ 1], app_name, flow->lifetime);
 }
 
 static clib_error_t *

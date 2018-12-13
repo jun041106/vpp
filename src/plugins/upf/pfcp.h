@@ -729,10 +729,17 @@ typedef struct
 #define USER_PLANE_IP_RESOURCE_INFORMATION_V4		BIT(0)
 #define USER_PLANE_IP_RESOURCE_INFORMATION_V6		BIT(1)
 #define USER_PLANE_IP_RESOURCE_INFORMATION_ASSOCNI	BIT(5)
+#define USER_PLANE_IP_RESOURCE_INFORMATION_ASSOCSI	BIT(6)
+#define USER_PLANE_IP_RESOURCE_INFORMATION_MASK	\
+  (USER_PLANE_IP_RESOURCE_INFORMATION_V4 |	\
+   USER_PLANE_IP_RESOURCE_INFORMATION_V6 |	\
+   USER_PLANE_IP_RESOURCE_INFORMATION_ASSOCNI |	\
+   USER_PLANE_IP_RESOURCE_INFORMATION_ASSOCSI)
 
-  pfcp_network_instance_t network_instance;
   u8 teid_range_indication;
   u8 teid_range;
+  u8 source_intf;
+  pfcp_network_instance_t network_instance;
   ip4_address_t ip4;
   ip6_address_t ip6;
 } pfcp_user_plane_ip_resource_information_t;

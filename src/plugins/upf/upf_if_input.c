@@ -17,10 +17,6 @@
 #define _LGPL_SOURCE		/* LGPL v3.0 is compatible with Apache 2.0 */
 #include <urcu-qsbr.h>		/* QSBR RCU flavor */
 
-#include <rte_config.h>
-#include <rte_common.h>
-#include <rte_acl.h>
-
 #include <vppinfra/error.h>
 #include <vppinfra/hash.h>
 #include <vnet/vnet.h>
@@ -108,7 +104,6 @@ upf_if_input (vlib_main_t * vm, vlib_node_runtime_t * node,
   u32 sw_if_index = 0;
   u32 next = 0;
   u32 sidx = 0;
-  u8 intf_type = ~0;
   u32 len;
   ip4_header_t *ip4;
 
@@ -138,16 +133,12 @@ upf_if_input (vlib_main_t * vm, vlib_node_runtime_t * node,
 	  /* Get next node index and adj index from tunnel next_dpo */
 	  sw_if_index = vnet_buffer (b)->sw_if_index[VLIB_TX];
 	  sidx = gtm->session_index_by_sw_if_index[sw_if_index];
-	  intf_type =
-	    gtm->intf_type_by_sw_if_index[vnet_buffer (b)->
-					  sw_if_index[VLIB_RX]];
 
 	  gtp_debug ("HW If: %p, Session %d",
 		     vnet_get_sup_hw_interface (vnm, sw_if_index), sidx);
 
 	  vnet_buffer (b)->gtpu.session_index = sidx;
 	  vnet_buffer (b)->gtpu.data_offset = 0;
-	  vnet_buffer (b)->gtpu.src_intf = intf_type;
 	  vnet_buffer (b)->gtpu.teid = 0;
 	  ip4 = (ip4_header_t *) vlib_buffer_get_current (b);
 

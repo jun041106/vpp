@@ -3143,7 +3143,7 @@ decode_user_plane_ip_resource_information (u8 * data, u16 length, void *p)
     return PFCP_CAUSE_INVALID_LENGTH;
 
   flags = get_u8 (data);
-  v->flags = flags & 0x03;
+  v->flags = flags & USER_PLANE_IP_RESOURCE_INFORMATION_MASK;
   length--;
 
   v->teid_range_indication = (flags >> 2) & 0x07;
@@ -3178,6 +3178,9 @@ decode_user_plane_ip_resource_information (u8 * data, u16 length, void *p)
       vec_add (v->network_instance, data, length);
     }
 
+  if (flags & USER_PLANE_IP_RESOURCE_INFORMATION_ASSOCSI)
+      v->source_intf = get_u8(data) & 0x0f;
+
   return 0;
 }
 
@@ -3187,7 +3190,7 @@ encode_user_plane_ip_resource_information (void *p, u8 ** vec)
   pfcp_user_plane_ip_resource_information_t *v = p;
   u8 flags;
 
-  flags = v->flags;
+  flags = v->flags & USER_PLANE_IP_RESOURCE_INFORMATION_MASK;
   flags |= (v->teid_range_indication & 0x07) << 2;
   flags |=
     v->network_instance ? USER_PLANE_IP_RESOURCE_INFORMATION_ASSOCNI : 0;
@@ -3205,6 +3208,9 @@ encode_user_plane_ip_resource_information (void *p, u8 ** vec)
 
   if (v->network_instance)
     vec_append (*vec, v->network_instance);
+
+  if (v->flags & USER_PLANE_IP_RESOURCE_INFORMATION_ASSOCSI)
+    put_u8(*vec, v->source_intf & 0x0f);
 
   return 0;
 }

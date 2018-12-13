@@ -196,6 +196,12 @@ typedef struct
 typedef struct
 {
   enum
+    {
+      IPFILTER_WILDCARD = 0,
+      IPFILTER_IPV4,
+      IPFILTER_IPV6,
+    } type;
+  enum
   {
     ACL_PERMIT,
     ACL_DENY
@@ -211,6 +217,9 @@ typedef struct
   ipfilter_port_t src_port;
   ipfilter_port_t dst_port;
 } acl_rule_t;
+
+#define IPFILTER_RULE_FIELD_SRC 0
+#define IPFILTER_RULE_FIELD_DST 1
 
 #define ACL_FROM_ANY				\
   (ipfilter_address_t){				\
@@ -234,10 +243,6 @@ typedef struct
    ((ip)->address.as_u64[0] == (u64)~0) &&	\
    ((ip)->mask == (u8)~0))
 
-struct rte_acl_ctx
-{
-};
-
 #define INTF_ACCESS	0
 #define INTF_CORE	1
 #define INTF_SGI_LAN	2
@@ -250,13 +255,44 @@ enum
   UPF_UL = 0,
   UPF_DL,
   UPF_DIRECTION_MAX
-};
+} upf_direction_t;
 
 typedef struct
 {
   u32 application_id;
   u32 db_id;
 } adr_rule_t;
+
+typedef union
+{
+  u8 protocol;
+  ip46_address_t src_address;
+  ip46_address_t dst_address;
+  u16 src_port;
+  u16 dst_port;
+} upf_acl_5tuple_t;
+
+typedef struct
+{
+  u32 pdr_idx;
+  u32 precedence;
+
+  int match_teid:1;
+  int match_ue_ip:3;
+  int match_sdf:1;
+
+  u32 teid;              // TEID
+  ip46_address_t ue_ip;  // UE-IP
+
+  /* SDF */
+  upf_acl_5tuple_t mask;
+  upf_acl_5tuple_t match;
+} upf_acl_t;
+
+#define UPF_ACL_FIELD_SRC 0
+#define UPF_ACL_FIELD_DST 1
+#define UPF_ACL_UL 1
+#define UPF_ACL_DL 2
 
 /* Packet Detection Information */
 typedef struct
@@ -267,7 +303,6 @@ typedef struct
 #define SRC_INTF_SGI_LAN	2
 #define SRC_INTF_CP		3
 #define SRC_INTF_NUM		(SRC_INTF_CP + 1)
-  u32 src_sw_if_index;
   uword nwi;
 
   u32 fields;
@@ -439,12 +474,6 @@ typedef struct
 
 typedef struct
 {
-  struct rte_acl_ctx *ip4;
-  struct rte_acl_ctx *ip6;
-} upf_acl_ctx_t;
-
-typedef struct
-{
   /* Required for pool_get_aligned  */
   CLIB_CACHE_LINE_ALIGN_MARK (cacheline0);
 
@@ -474,17 +503,16 @@ typedef struct
     upf_urr_t *urr;
     upf_qer_t *qer;
     uint32_t flags;
-#define SX_SDF_IPV4    BIT(0)
-#define SX_SDF_IPV6    BIT(1)
-#define SX_ADR         BIT(2)
+#define SX_SDF_IPV4       BIT(0)
+#define SX_SDF_IPV6       BIT(1)
+#define SX_ADR            BIT(2)
 
-    upf_acl_ctx_t sdf[UPF_DIRECTION_MAX];
+    upf_acl_t *v4_acls;
+    upf_acl_t *v6_acls;
 
     ip46_address_fib_t *vrf_ip;
     gtpu4_tunnel_key_t *v4_teid;
     gtpu6_tunnel_key_t *v6_teid;
-
-    uword *wildcard_teid;
 
     u16 *send_end_marker;
   } rules[2];
@@ -550,18 +578,18 @@ typedef struct
 
 typedef struct
 {
-  ip46_address_t ip;
+  ip4_address_t ip4;
+  ip6_address_t ip6;
+  u32 nwi;
+  u8 intf;
   u32 teid;
   u32 mask;
-} upf_nwi_ip_res_t;
+} upf_upip_res_t;
 
 typedef struct
 {
   u8 *name;
-
-  u32 intf_sw_if_index[INTF_NUM];
-  upf_nwi_ip_res_t *ip_res;
-  uword *ip_res_index_by_ip;
+  u32 vrf;
 } upf_nwi_t;
 
 typedef struct
@@ -616,8 +644,10 @@ typedef struct
   /* vector of network instances */
   upf_nwi_t *nwis;
   uword *nwi_index_by_name;
-  uword *nwi_index_by_sw_if_index;
-  u8 *intf_type_by_sw_if_index;
+
+  /* pool of network instances */
+  upf_upip_res_t *upip_res;
+  uword *upip_res_index;
 
   /* vector of encap tunnel instances */
   upf_session_t *sessions;

@@ -17,10 +17,6 @@
 #define _LGPL_SOURCE		/* LGPL v3.0 is compatible with Apache 2.0 */
 #include <urcu-qsbr.h>		/* QSBR RCU flavor */
 
-#include <rte_config.h>
-#include <rte_common.h>
-#include <rte_acl.h>
-
 #include <stdio.h>
 #include <setjmp.h>
 #include <signal.h>
@@ -56,214 +52,9 @@ upf_main_t upf_main;
 #define SESS_MODIFY 1
 #define SESS_DEL 2
 
-#define OFF_ETHHEAD     (sizeof(struct ether_hdr))
-#define OFF_IPV42PROTO (offsetof(struct ipv4_hdr, next_proto_id))
-#define OFF_IPV62PROTO (offsetof(struct ipv6_hdr, proto))
-#define MBUF_IPV4_2PROTO(m)     \
-	rte_pktmbuf_mtod_offset((m), uint8_t *, OFF_ETHHEAD + OFF_IPV42PROTO)
-#define MBUF_IPV6_2PROTO(m)     \
-	rte_pktmbuf_mtod_offset((m), uint8_t *, OFF_ETHHEAD + OFF_IPV62PROTO)
-
 static void sx_add_del_vrf_ip (const void *vrf_ip, void *si, int is_add);
 static void sx_add_del_v4_teid (const void *teid, void *si, int is_add);
 static void sx_add_del_v6_teid (const void *teid, void *si, int is_add);
-static void sx_acl_free (upf_acl_ctx_t * ctx);
-
-/* DPDK ACL defines */
-
-enum
-{
-  PROTO_FIELD_IPV4,
-  SRC_FIELD_IPV4,
-  DST_FIELD_IPV4,
-  SRCP_FIELD_IPV4,
-  DSTP_FIELD_IPV4,
-  GTP_TEID_IPV4
-};
-
-enum
-{
-  RTE_ACL_IPV4VLAN_PROTO,
-  RTE_ACL_IPV4VLAN_VLAN,
-  RTE_ACL_IPV4VLAN_SRC,
-  RTE_ACL_IPV4VLAN_DST,
-  RTE_ACL_IPV4VLAN_PORTS,
-  RTE_ACL_IPV4_GTP_TEID
-};
-
-/* *INDENT-OFF* */
-struct rte_acl_field_def ipv4_defs[] = {
-  [PROTO_FIELD_IPV4] =
-  {
-    .type = RTE_ACL_FIELD_TYPE_BITMASK,
-    .size = sizeof(uint8_t),
-    .field_index = PROTO_FIELD_IPV4,
-    .input_index = RTE_ACL_IPV4VLAN_PROTO,
-    .offset = offsetof(ip4_header_t, protocol),
-  },
-  [SRC_FIELD_IPV4] =
-  {
-    .type = RTE_ACL_FIELD_TYPE_MASK,
-    .size = sizeof(uint32_t),
-    .field_index = SRC_FIELD_IPV4,
-    .input_index = RTE_ACL_IPV4VLAN_SRC,
-    .offset = offsetof(ip4_header_t, src_address),
-  },
-  [DST_FIELD_IPV4] =
-  {
-    .type = RTE_ACL_FIELD_TYPE_MASK,
-    .size = sizeof(uint32_t),
-    .field_index = DST_FIELD_IPV4,
-    .input_index = RTE_ACL_IPV4VLAN_DST,
-    .offset = offsetof(ip4_header_t, dst_address),
-  },
-  [SRCP_FIELD_IPV4] =
-  {
-    .type = RTE_ACL_FIELD_TYPE_RANGE,
-    .size = sizeof(uint16_t),
-    .field_index = SRCP_FIELD_IPV4,
-    .input_index = RTE_ACL_IPV4VLAN_PORTS,
-    .offset = sizeof(ip4_header_t),
-  },
-  [DSTP_FIELD_IPV4] =
-  {
-    .type = RTE_ACL_FIELD_TYPE_RANGE,
-    .size = sizeof(uint16_t),
-    .field_index = DSTP_FIELD_IPV4,
-    .input_index = RTE_ACL_IPV4VLAN_PORTS,
-    .offset = sizeof(ip4_header_t) + sizeof(uint16_t),
-  },
-  [GTP_TEID_IPV4] =
-  {
-    .type = RTE_ACL_FIELD_TYPE_BITMASK,
-    .size = sizeof(u32),
-    .field_index = GTP_TEID_IPV4,
-    .input_index = RTE_ACL_IPV4_GTP_TEID,
-    .offset = sizeof(ip4_header_t) + sizeof(udp_header_t),
-  }
-};
-/* *INDENT-ON* */
-
-RTE_ACL_RULE_DEF (acl4_rule, RTE_DIM (ipv4_defs));
-
-enum
-{
-  PROTO_FIELD_IPV6,
-  SRC1_FIELD_IPV6,
-  SRC2_FIELD_IPV6,
-  SRC3_FIELD_IPV6,
-  SRC4_FIELD_IPV6,
-  DST1_FIELD_IPV6,
-  DST2_FIELD_IPV6,
-  DST3_FIELD_IPV6,
-  DST4_FIELD_IPV6,
-  SRCP_FIELD_IPV6,
-  DSTP_FIELD_IPV6,
-  GTP_TEID_IPV6
-};
-
-/* *INDENT-OFF* */
-struct rte_acl_field_def ipv6_defs[] = {
-  [PROTO_FIELD_IPV6] =
-  {
-    .type = RTE_ACL_FIELD_TYPE_BITMASK,
-    .size = sizeof(uint8_t),
-    .field_index = PROTO_FIELD_IPV6,
-    .input_index = PROTO_FIELD_IPV6,
-    .offset = offsetof(ip6_header_t, protocol),
-  },
-  [SRC1_FIELD_IPV6] =
-  {
-    .type = RTE_ACL_FIELD_TYPE_MASK,
-    .size = sizeof(uint32_t),
-    .field_index = SRC1_FIELD_IPV6,
-    .input_index = SRC1_FIELD_IPV6,
-    .offset = offsetof(ip6_header_t, src_address.as_u32[0]),
-  },
-  [SRC2_FIELD_IPV6] =
-  {
-    .type = RTE_ACL_FIELD_TYPE_MASK,
-    .size = sizeof(uint32_t),
-    .field_index = SRC2_FIELD_IPV6,
-    .input_index = SRC2_FIELD_IPV6,
-    .offset = offsetof(ip6_header_t, src_address.as_u32[1]),
-  },
-  [SRC3_FIELD_IPV6] =
-  {
-    .type = RTE_ACL_FIELD_TYPE_MASK,
-    .size = sizeof(uint32_t),
-    .field_index = SRC3_FIELD_IPV6,
-    .input_index = SRC3_FIELD_IPV6,
-    .offset = offsetof(ip6_header_t, src_address.as_u32[2]),
-  },
-  [SRC4_FIELD_IPV6] =
-  {
-    .type = RTE_ACL_FIELD_TYPE_MASK,
-    .size = sizeof(uint32_t),
-    .field_index = SRC4_FIELD_IPV6,
-    .input_index = SRC4_FIELD_IPV6,
-    .offset = offsetof(ip6_header_t, src_address.as_u32[3]),
-  },
-  [DST1_FIELD_IPV6] =
-  {
-    .type = RTE_ACL_FIELD_TYPE_MASK,
-    .size = sizeof(uint32_t),
-    .field_index = DST1_FIELD_IPV6,
-    .input_index = DST1_FIELD_IPV6,
-    .offset = offsetof(ip6_header_t, dst_address.as_u32[0]),
-  },
-  [DST2_FIELD_IPV6] =
-  {
-    .type = RTE_ACL_FIELD_TYPE_MASK,
-    .size = sizeof(uint32_t),
-    .field_index = DST2_FIELD_IPV6,
-    .input_index = DST2_FIELD_IPV6,
-    .offset = offsetof(ip6_header_t, dst_address.as_u32[1]),
-  },
-  [DST3_FIELD_IPV6] =
-  {
-    .type = RTE_ACL_FIELD_TYPE_MASK,
-    .size = sizeof(uint32_t),
-    .field_index = DST3_FIELD_IPV6,
-    .input_index = DST3_FIELD_IPV6,
-    .offset = offsetof(ip6_header_t, dst_address.as_u32[2]),
-  },
-  [DST4_FIELD_IPV6] =
-  {
-    .type = RTE_ACL_FIELD_TYPE_MASK,
-    .size = sizeof(uint32_t),
-    .field_index = DST4_FIELD_IPV6,
-    .input_index = DST4_FIELD_IPV6,
-    .offset = offsetof(ip6_header_t, dst_address.as_u32[3]),
-  },
-  [SRCP_FIELD_IPV6] =
-  {
-    .type = RTE_ACL_FIELD_TYPE_RANGE,
-    .size = sizeof(uint16_t),
-    .field_index = SRCP_FIELD_IPV6,
-    .input_index = SRCP_FIELD_IPV6,
-    .offset = sizeof(ip6_header_t),
-  },
-  [DSTP_FIELD_IPV6] =
-  {
-    .type = RTE_ACL_FIELD_TYPE_RANGE,
-    .size = sizeof(uint16_t),
-    .field_index = DSTP_FIELD_IPV6,
-    .input_index = SRCP_FIELD_IPV6,
-    .offset = sizeof(ip6_header_t) + sizeof(uint16_t),
-  },
-  [GTP_TEID_IPV6] =
-  {
-    .type = RTE_ACL_FIELD_TYPE_BITMASK,
-    .size = sizeof(u32),
-    .field_index = GTP_TEID_IPV6,
-    .input_index = GTP_TEID_IPV6,
-    .offset = sizeof(ip6_header_t) + sizeof(udp_header_t),
-  }
-};
-/* *INDENT-ON* */
-
-RTE_ACL_RULE_DEF (acl6_rule, RTE_DIM (ipv6_defs));
 
 #define vec_bsearch(k, v, compar)				\
 	bsearch((k), (v), vec_len((v)), sizeof((v)[0]), compar)
@@ -1038,13 +829,11 @@ sx_free_rules (upf_session_t * sx, int rule)
     detach_qer_policer(qer);
   }
   vec_free (rules->qer);
-  for (size_t i = 0; i < ARRAY_LEN (rules->sdf); i++)
-    sx_acl_free (&rules->sdf[i]);
   vec_free (rules->vrf_ip);
   vec_free (rules->v4_teid);
   vec_free (rules->v6_teid);
-
-  hash_free (rules->wildcard_teid);
+  vec_free (rules->v4_acls);
+  vec_free (rules->v6_acls);
 
   memset (rules, 0, sizeof (*rules));
 }
@@ -1306,575 +1095,154 @@ sx_add_del_v6_teid (const void *teid, void *si, int is_add)
   clib_bihash_add_del_24_8 (&gtm->v6_tunnel_by_key, &kv, is_add);
 }
 
-#if CLIB_DEBUG > 0
-
-/* Format an IP4 address. */
-static u8 *
-format_ip4_address_host (u8 * s, va_list * args)
+/* Maybe should be moved into the core somewhere */
+always_inline void
+ip4_address_mask_from_width (ip4_address_t * a, u32 width)
 {
-  u32 *a = va_arg (*args, u32 *);
-  ip4_address_t ip4;
-
-  ip4.as_u32 = clib_host_to_net_u32 (*a);
-  return format (s, "%d.%d.%d.%d", ip4.as_u8[0], ip4.as_u8[1], ip4.as_u8[2],
-		 ip4.as_u8[3]);
-}
-
-static u8 *
-format_acl4 (u8 * s, va_list * args)
-{
-  struct acl4_rule *rule = va_arg (*args, struct acl4_rule *);
-
-  s =
-    format (s,
-	    "%U/%d %U/%d %hu : %hu %hu : %hu 0x%hhx/0x%hhx 0x%08x/0x%08x 0x%x-0x%x-0x%x",
-	    format_ip4_address_host, &rule->field[SRC_FIELD_IPV4].value.u32,
-	    rule->field[SRC_FIELD_IPV4].mask_range.u32,
-	    format_ip4_address_host, &rule->field[DST_FIELD_IPV4].value.u32,
-	    rule->field[DST_FIELD_IPV4].mask_range.u32,
-	    rule->field[SRCP_FIELD_IPV4].value.u16,
-	    rule->field[SRCP_FIELD_IPV4].mask_range.u16,
-	    rule->field[DSTP_FIELD_IPV4].value.u16,
-	    rule->field[DSTP_FIELD_IPV4].mask_range.u16,
-	    rule->field[PROTO_FIELD_IPV4].value.u8,
-	    rule->field[PROTO_FIELD_IPV4].mask_range.u8,
-	    rule->field[GTP_TEID_IPV4].value.u32,
-	    rule->field[GTP_TEID_IPV4].mask_range.u32,
-	    rule->data.category_mask, rule->data.priority,
-	    rule->data.userdata);
-
-  return s;
-}
-
-static u8 *
-format_acl_ip6_address (u8 * s, va_list * args)
-{
-  struct rte_acl_field *field = va_arg (*args, struct rte_acl_field *);
-  ip6_address_t addr;
-
-  for (int i = 0; i < 4; i++)
-    addr.as_u32[i] = clib_host_to_net_u32 (field[i].value.u32);
-
-  return format (s, "%U", format_ip6_address, &addr);
-}
-
-static u8 *
-format_acl6 (u8 * s, va_list * args)
-{
-  struct acl6_rule *rule = va_arg (*args, struct acl6_rule *);
-
-  s = format (s, "%U/%u ",
-	      format_acl_ip6_address, &rule->field[SRC1_FIELD_IPV6],
-	      rule->field[SRC1_FIELD_IPV6].mask_range.u32
-	      + rule->field[SRC2_FIELD_IPV6].mask_range.u32
-	      + rule->field[SRC3_FIELD_IPV6].mask_range.u32
-	      + rule->field[SRC4_FIELD_IPV6].mask_range.u32);
-
-  s = format (s, "%U/%u ",
-	      format_acl_ip6_address, &rule->field[DST1_FIELD_IPV6],
-	      rule->field[DST1_FIELD_IPV6].mask_range.u32
-	      + rule->field[DST2_FIELD_IPV6].mask_range.u32
-	      + rule->field[DST3_FIELD_IPV6].mask_range.u32
-	      + rule->field[DST4_FIELD_IPV6].mask_range.u32);
-
-  s =
-    format (s,
-	    "%hu : %hu %hu : %hu 0x%hhx/0x%hhx 0x%08x/0x%08x 0x%x-0x%x-0x%x",
-	    rule->field[SRCP_FIELD_IPV6].value.u16,
-	    rule->field[SRCP_FIELD_IPV6].mask_range.u16,
-	    rule->field[DSTP_FIELD_IPV6].value.u16,
-	    rule->field[DSTP_FIELD_IPV6].mask_range.u16,
-	    rule->field[PROTO_FIELD_IPV6].value.u8,
-	    rule->field[PROTO_FIELD_IPV6].mask_range.u8,
-	    rule->field[GTP_TEID_IPV6].value.u32,
-	    rule->field[GTP_TEID_IPV6].mask_range.u32,
-	    rule->data.category_mask, rule->data.priority,
-	    rule->data.userdata);
-
-  return s;
-}
-
-#endif
-
-static void
-rte_acl_set_port (struct rte_acl_field *field, const ipfilter_port_t * port)
-{
-  field->value.u16 = port->min;
-  field->mask_range.u16 = port->max;
-}
-
-static void
-rte_acl_set_proto (struct rte_acl_field *field, u8 proto, u8 mask)
-{
-  field->value.u8 = proto;
-  field->mask_range.u8 = mask;
-}
-
-static void
-acl_set_ue_ip4 (struct acl4_rule *ip4, int field, const upf_pdr_t * pdr)
-{
-  if ((pdr->pdi.fields & F_PDI_UE_IP_ADDR) &&
-      pdr->pdi.ue_addr.flags & IE_UE_IP_ADDRESS_V4)
+  int i, byte, bit, bitnum;
+  ASSERT (width <= 32);
+  clib_memset (a, 0, sizeof (a[0]));
+  for (i = 0; i < width; i++)
     {
-      ip4->field[field].value.u32 =
-	clib_net_to_host_u32 (pdr->pdi.ue_addr.ip4.as_u32);
-      ip4->field[field].mask_range.u32 = 32;
+      bitnum = (7 - (i & 7));
+      byte = i / 8;
+      bit = 1 << bitnum;
+      a->as_u8[byte] |= bit;
     }
+}
+
+always_inline void
+compile_teid (const upf_pdr_t * pdr, upf_acl_t *acl)
+{
+  if (!(pdr->pdi.fields & F_PDI_LOCAL_F_TEID))
+    return;
+
+  acl->match_teid = 1;
+  acl->teid = pdr->pdi.teid.teid;
+}
+
+static void
+compile_ue_ip (int is_ip4, const upf_pdr_t * pdr, upf_acl_t *acl)
+{
+  if (!(pdr->pdi.fields & F_PDI_UE_IP_ADDR))
+    return;
+
+  if (is_ip4 && pdr->pdi.ue_addr.flags & IE_UE_IP_ADDRESS_V4)
+    {
+      acl->match_ue_ip =
+	(pdr->pdi.src_intf == SRC_INTF_ACCESS) ? UPF_ACL_UL : UPF_ACL_DL;
+      acl->ue_ip.ip4 = pdr->pdi.ue_addr.ip4;
+    }
+  else if (!is_ip4 && pdr->pdi.ue_addr.flags & IE_UE_IP_ADDRESS_V6)
+    {
+      acl->match_ue_ip =
+	(pdr->pdi.src_intf == SRC_INTF_ACCESS) ? UPF_ACL_UL : UPF_ACL_DL;
+      acl->ue_ip.ip6 = pdr->pdi.ue_addr.ip6;
+    }
+}
+
+static void
+acl_set_ue_ip (ip46_address_t *ip, ip46_address_t *mask, int is_ip4, const upf_pdr_t * pdr)
+{
+  if (!(pdr->pdi.fields & F_PDI_UE_IP_ADDR))
+    return;
+
+  if (is_ip4 && pdr->pdi.ue_addr.flags & IE_UE_IP_ADDRESS_V4)
+    {
+      ip->ip4 = pdr->pdi.ue_addr.ip4;
+      ip4_address_mask_from_width(&mask->ip4, 32);
+    }
+  else if (!is_ip4 && pdr->pdi.ue_addr.flags & IE_UE_IP_ADDRESS_V6)
+    {
+      ip->ip6 = pdr->pdi.ue_addr.ip6;
+      ip6_address_mask_from_width(&mask->ip6, 64);
+    }
+}
+
+static void
+ip_assign_address (int dst, int src, int is_ip4, const upf_pdr_t * pdr, upf_acl_t *acl)
+{
+  ip46_address_t *mask = &acl->mask.src_address + dst;
+  ip46_address_t *ip = &acl->match.src_address + dst;
+  const ipfilter_address_t *addr = &pdr->pdi.acl.src_address + src;
+
+  if (src == IPFILTER_RULE_FIELD_SRC &&
+      !ipfilter_address_cmp_const (addr, ACL_FROM_ANY))
+    ;
+  else if (src == IPFILTER_RULE_FIELD_DST &&
+	   !ipfilter_address_cmp_const (addr, ACL_TO_ASSIGNED))
+    acl_set_ue_ip (ip, mask, is_ip4, pdr);
   else
     {
-      ip4->field[field].value.u32 = 0;
-      ip4->field[field].mask_range.u32 = 0;
+      *ip = addr->address;
+
+      if (is_ip4)
+	ip4_address_mask_from_width(&mask->ip4, addr->mask);
+      else
+	ip6_address_mask_from_width(&mask->ip6, addr->mask);
     }
 }
 
 static void
-ip4_assign_src_address (struct acl4_rule *ip4,
-			int field, const upf_pdr_t * pdr)
+ip_assign_port (int dst, int src, const upf_pdr_t * pdr, upf_acl_t *acl)
 {
-  if (ipfilter_address_cmp_const (&pdr->pdi.acl.src_address, ACL_FROM_ANY) ==
-      0)
-    {
-      ip4->field[field].value.u32 = 0;
-      ip4->field[field].mask_range.u32 = 0;
-    }
-  else
-    {
-      ip4->field[field].value.u32 =
-	clib_net_to_host_u32 (pdr->pdi.acl.src_address.address.ip4.as_u32);
-      ip4->field[field].mask_range.u32 = pdr->pdi.acl.src_address.mask;
-    }
+  u16 *min = &acl->mask.src_port + dst;
+  u16 *max = &acl->match.src_port + dst;
+  const ipfilter_port_t *port = &pdr->pdi.acl.src_port + src;
+
+  *min = port->min;
+  *max = port->max;
 }
 
-static void
-ip4_assign_dst_address (struct acl4_rule *ip4,
-			int field, const upf_pdr_t * pdr)
+static void compile_sdf (int is_ip4, const upf_pdr_t * pdr, upf_acl_t *acl)
 {
-  if (ipfilter_address_cmp_const (&pdr->pdi.acl.dst_address, ACL_TO_ASSIGNED)
-      == 0)
-    acl_set_ue_ip4 (ip4, field, pdr);
-  else
-    {
-      ip4->field[field].value.u32 =
-	clib_net_to_host_u32 (pdr->pdi.acl.dst_address.address.ip4.as_u32);
-      ip4->field[field].mask_range.u32 = pdr->pdi.acl.dst_address.mask;
-    }
-}
+  if (!(pdr->pdi.fields & F_PDI_SDF_FILTER))
+    return;
 
-static void
-ip4_assign_src_port (struct acl4_rule *ip4, int field, const upf_pdr_t * pdr)
-{
-  rte_acl_set_port (&ip4->field[field], &pdr->pdi.acl.src_port);
-}
-
-static void
-ip4_assign_dst_port (struct acl4_rule *ip4, int field, const upf_pdr_t * pdr)
-{
-  rte_acl_set_port (&ip4->field[field], &pdr->pdi.acl.dst_port);
-}
-
-static int
-add_ip4_sdf (struct rte_acl_ctx *ctx, const upf_pdr_t * pdr, u32 pdr_idx)
-{
-  /* *INDENT-OFF* */
-  struct acl4_rule r = {
-    .data.userdata = pdr_idx + 1,	/* Idx could be 0, but rte_acl uses 0 as not found */
-    .data.category_mask = -1,
-    .data.priority = pdr->precedence,
-
-    .field[GTP_TEID_IPV4] = {
-      .value.u8 = 0,
-      .mask_range.u8 = 0,
-    },
-
-    .field[PROTO_FIELD_IPV4] = {
-      .value.u8 = pdr->pdi.acl.proto,
-      .mask_range.u8 = ~0,
-    },
-  };
-  /* *INDENT-ON* */
-
-  if (pdr->pdi.acl.proto == (u8) ~ 0)
-    rte_acl_set_proto (&r.field[PROTO_FIELD_IPV4], 0, 0);
-
-  if ((!acl_is_from_any (&pdr->pdi.acl.src_address) &&
-       !ip46_address_is_ip4 (&pdr->pdi.acl.src_address.address)) ||
-      (!acl_is_to_assigned (&pdr->pdi.acl.dst_address) &&
-       !ip46_address_is_ip4 (&pdr->pdi.acl.dst_address.address)))
-    return 0;
-
-  switch (pdr->pdi.src_intf)
-    {
-    case SRC_INTF_ACCESS:
-      ip4_assign_src_address (&r, DST_FIELD_IPV4, pdr);
-      ip4_assign_dst_address (&r, SRC_FIELD_IPV4, pdr);
-      ip4_assign_src_port (&r, DSTP_FIELD_IPV4, pdr);
-      ip4_assign_dst_port (&r, SRCP_FIELD_IPV4, pdr);
-      break;
-
-    default:
-      ip4_assign_src_address (&r, SRC_FIELD_IPV4, pdr);
-      ip4_assign_dst_address (&r, DST_FIELD_IPV4, pdr);
-      ip4_assign_src_port (&r, SRCP_FIELD_IPV4, pdr);
-      ip4_assign_dst_port (&r, DSTP_FIELD_IPV4, pdr);
-      break;
-    }
-
-  gtp_debug ("PDR %d, IPv4 %s SDF (%p): %U\n", pdr->id,
-	     (pdr->pdi.src_intf == SRC_INTF_ACCESS) ? "UL" : "DL",
-	     ctx, format_acl4, &r);
-  if (rte_acl_add_rules (ctx, (const struct rte_acl_rule *) &r, 1) < 0)
-    rte_exit (EXIT_FAILURE, "IP6 add rules failed\n");
-
-  return 0;
-}
-
-static u32
-ip6_mask (u8 pos, u8 pref_len)
-{
-  if (pref_len >= (pos + 1) * 32)
-    return 32;
-  else
-    return pref_len > (pos * 32) ? pref_len - (pos * 32) : 0;
-}
-
-static void
-acl_set_ue_ip6 (struct acl6_rule *ip6, int field, const upf_pdr_t * pdr)
-{
-  if ((pdr->pdi.fields & F_PDI_UE_IP_ADDR) &&
-      pdr->pdi.ue_addr.flags & IE_UE_IP_ADDRESS_V6)
-    {
-      for (int i = 0; i < 4; i++)
-	{
-	  ip6->field[field + i].value.u32 =
-	    clib_net_to_host_u32 (pdr->pdi.ue_addr.ip6.as_u32[i]);
-	  ip6->field[field + i].mask_range.u32 = ip6_mask (i, 64);
-	}
-    }
-  else
-    {
-      for (int i = 0; i < 4; i++)
-	{
-	  ip6->field[field + i].value.u32 = 0;
-	  ip6->field[field + i].mask_range.u32 = 0;
-	}
-    }
-}
-
-static void
-ip6_assign_src_address (struct acl6_rule *ip6,
-			int field, const upf_pdr_t * pdr)
-{
-  if (ipfilter_address_cmp_const (&pdr->pdi.acl.src_address, ACL_FROM_ANY) ==
-      0)
-    {
-      for (int i = 0; i < 4; i++)
-	{
-	  ip6->field[field + i].value.u32 = 0;
-	  ip6->field[field + i].mask_range.u32 = 0;
-	}
-    }
-  else
-    {
-      for (int i = 0; i < 4; i++)
-	{
-	  ip6->field[field + i].value.u32 =
-	    clib_net_to_host_u32 (pdr->pdi.acl.src_address.address.ip6.
-				  as_u32[i]);
-	  ip6->field[field + i].mask_range.u32 =
-	    ip6_mask (i, pdr->pdi.acl.src_address.mask);
-	}
-    }
-}
-
-static void
-ip6_assign_dst_address (struct acl6_rule *ip6,
-			int field, const upf_pdr_t * pdr)
-{
-  if (ipfilter_address_cmp_const (&pdr->pdi.acl.dst_address, ACL_TO_ASSIGNED)
-      == 0)
-    acl_set_ue_ip6 (ip6, field, pdr);
-  else
-    {
-      for (int i = 0; i < 4; i++)
-	{
-	  /* *INDENT-OFF* */
-	  ip6->field[field + i] = (struct rte_acl_field){
-	    .value.u32 = clib_net_to_host_u32(pdr->pdi.acl.dst_address.address.ip6.as_u32[i]),
-	    .mask_range.u32 = ip6_mask(i, pdr->pdi.acl.dst_address.mask),
-	  };
-	  /* *INDENT-ON* */
-	}
-    }
-}
-
-static void
-ip6_assign_src_port (struct acl6_rule *ip6, int field, const upf_pdr_t * pdr)
-{
-  rte_acl_set_port (&ip6->field[field], &pdr->pdi.acl.src_port);
-}
-
-static void
-ip6_assign_dst_port (struct acl6_rule *ip6, int field, const upf_pdr_t * pdr)
-{
-  rte_acl_set_port (&ip6->field[field], &pdr->pdi.acl.dst_port);
-}
-
-static int
-add_ip6_sdf (struct rte_acl_ctx *ctx, const upf_pdr_t * pdr, u32 pdr_idx)
-{
-  /* *INDENT-OFF* */
-  struct acl6_rule r = {
-    .data.userdata = pdr_idx + 1,	/* Idx could be 0, but rte_acl uses 0 as not found */
-    .data.category_mask = -1,
-    .data.priority = pdr->precedence,
-
-    .field[GTP_TEID_IPV6] = {
-      .value.u32 = 0,
-      .mask_range.u32 = 0,
-    },
-
-    .field[PROTO_FIELD_IPV6] = {
-      .value.u8 = pdr->pdi.acl.proto,
-      .mask_range.u8 = ~0,
-    },
-  };
-  /* *INDENT-ON* */
-
-  if (pdr->pdi.acl.proto == (u8) ~ 0)
-    rte_acl_set_proto (&r.field[PROTO_FIELD_IPV6], 0, 0);
-
-  if ((!acl_is_from_any (&pdr->pdi.acl.src_address) &&
-       ip46_address_is_ip4 (&pdr->pdi.acl.src_address.address)) ||
-      (!acl_is_to_assigned (&pdr->pdi.acl.dst_address) &&
-       ip46_address_is_ip4 (&pdr->pdi.acl.dst_address.address)))
-    return 0;
-
-  switch (pdr->pdi.src_intf)
-    {
-    case SRC_INTF_ACCESS:
-      ip6_assign_src_address (&r, DST1_FIELD_IPV6, pdr);
-      ip6_assign_dst_address (&r, SRC1_FIELD_IPV6, pdr);
-      ip6_assign_src_port (&r, DSTP_FIELD_IPV6, pdr);
-      ip6_assign_dst_port (&r, SRCP_FIELD_IPV6, pdr);
-      break;
-
-    default:
-      ip6_assign_src_address (&r, SRC1_FIELD_IPV6, pdr);
-      ip6_assign_dst_address (&r, DST1_FIELD_IPV6, pdr);
-      ip6_assign_src_port (&r, SRCP_FIELD_IPV6, pdr);
-      ip6_assign_dst_port (&r, DSTP_FIELD_IPV6, pdr);
-      break;
-    }
-
-  gtp_debug ("PDR %d, IPv6 %s SDF (%p): %U\n", pdr->id,
-	     (pdr->pdi.src_intf == SRC_INTF_ACCESS) ? "UL" : "DL",
-	     ctx, format_acl6, &r);
-  if (rte_acl_add_rules (ctx, (const struct rte_acl_rule *) &r, 1) < 0)
-    rte_exit (EXIT_FAILURE, "IP6 add rules failed\n");
-
-  return 0;
-}
-
-static int
-add_wildcard_teid (struct rules *rules, const u8 src_intf,
-		   const pfcp_f_teid_t teid, u32 pdr_idx)
-{
-  gtpu_intf_tunnel_key_t key;
-
-  key.src_intf = src_intf;
-  key.teid = teid.teid;
-
-  hash_set (rules->wildcard_teid, key.as_u64, pdr_idx);
-
-  return 0;
-}
-
-static int
-add_wildcard_ip4_sdf (struct rte_acl_ctx *ctx, const upf_pdr_t * pdr,
-		      u32 pdr_idx)
-{
-  struct acl4_rule r = {
-    .data.userdata = pdr_idx + 1,	/* Idx could be 0, but rte_acl uses 0 as not found */
-    .data.category_mask = -1,
-    .data.priority = pdr->precedence,
-
-    .field[GTP_TEID_IPV4] = {.value.u32 = 0,.mask_range.u32 = 0,},
-    .field[PROTO_FIELD_IPV4] = {.value.u8 = 0,.mask_range.u8 = 0,},
-    .field[SRC_FIELD_IPV4] = {.value.u32 = 0,.mask_range.u32 = 0,},
-    .field[DST_FIELD_IPV4] = {.value.u32 = 0,.mask_range.u32 = 0,},
-    .field[SRCP_FIELD_IPV4] = {.value.u16 = 0,.mask_range.u16 = 0xffff,},
-    .field[DSTP_FIELD_IPV4] = {.value.u16 = 0,.mask_range.u16 = 0xffff,},
-  };
-
-  switch (pdr->pdi.src_intf)
-    {
-    case SRC_INTF_ACCESS:
-      acl_set_ue_ip4 (&r, SRC_FIELD_IPV4, pdr);
-      break;
-
-    default:
-      acl_set_ue_ip4 (&r, DST_FIELD_IPV4, pdr);
-      break;
-    }
-
-  gtp_debug ("PDR %d, IPv4 %s wildcard SDF (%p): %U\n", pdr->id,
-	     (pdr->pdi.src_intf == SRC_INTF_ACCESS) ? "UL" : "DL",
-	     ctx, format_acl4, &r);
-  if (rte_acl_add_rules (ctx, (const struct rte_acl_rule *) &r, 1) < 0)
-    rte_exit (EXIT_FAILURE, "IP4 add rules failed\n");
-
-  return 0;
-}
-
-static int
-add_wildcard_ip6_sdf (struct rte_acl_ctx *ctx, const upf_pdr_t * pdr,
-		      u32 pdr_idx)
-{
-  struct acl6_rule r = {
-    .data.userdata = pdr_idx + 1,	/* Idx could be 0, but rte_acl uses 0 as not found */
-    .data.category_mask = -1,
-    .data.priority = pdr->precedence,
-
-    .field[GTP_TEID_IPV6] = {.value.u32 = 0,.mask_range.u32 = 0,},
-    .field[PROTO_FIELD_IPV6] = {.value.u8 = 0,.mask_range.u8 = 0,},
-    .field[SRC1_FIELD_IPV6] = {.value.u32 = 0,.mask_range.u32 = 0,},
-    .field[SRC2_FIELD_IPV6] = {.value.u32 = 0,.mask_range.u32 = 0,},
-    .field[SRC3_FIELD_IPV6] = {.value.u32 = 0,.mask_range.u32 = 0,},
-    .field[SRC4_FIELD_IPV6] = {.value.u32 = 0,.mask_range.u32 = 0,},
-    .field[DST1_FIELD_IPV6] = {.value.u32 = 0,.mask_range.u32 = 0,},
-    .field[DST2_FIELD_IPV6] = {.value.u32 = 0,.mask_range.u32 = 0,},
-    .field[DST3_FIELD_IPV6] = {.value.u32 = 0,.mask_range.u32 = 0,},
-    .field[DST4_FIELD_IPV6] = {.value.u32 = 0,.mask_range.u32 = 0,},
-    .field[SRCP_FIELD_IPV6] = {.value.u16 = 0,.mask_range.u16 = 0xffff,},
-    .field[DSTP_FIELD_IPV6] = {.value.u16 = 0,.mask_range.u16 = 0xffff,},
-  };
-
-  switch (pdr->pdi.src_intf)
-    {
-    case SRC_INTF_ACCESS:
-      acl_set_ue_ip6 (&r, SRC1_FIELD_IPV6, pdr);
-      break;
-
-    default:
-      acl_set_ue_ip6 (&r, DST1_FIELD_IPV6, pdr);
-      break;
-    }
-
-  gtp_debug ("PDR %d, IPv6 %s wildcard SDF (%p): %U\n", pdr->id,
-	     (pdr->pdi.src_intf == SRC_INTF_ACCESS) ? "UL" : "DL",
-	     ctx, format_acl6, &r);
-  if (rte_acl_add_rules (ctx, (const struct rte_acl_rule *) &r, 1) < 0)
-    rte_exit (EXIT_FAILURE, "IP6 add rules failed\n");
-
-  return 0;
-}
-
-static int
-sx_acl_create (u64 cp_seid, struct rules *rules, int direction)
-{
   /*
-   * Check numa socket enable or disable based on
-   * get or set socketid.
-   */
-  upf_acl_ctx_t *ctx = &rules->sdf[direction];
+  if ((!acl_is_from_any (&pdr->pdi.acl.src_address) &&
+       (!is_ip4 == !ip46_address_is_ip4 (&pdr->pdi.acl.src_address.address))) ||
+      (!acl_is_to_assigned (&pdr->pdi.acl.dst_address) &&
+       (!is_ip4 == !ip46_address_is_ip4 (&pdr->pdi.acl.dst_address.address))))
+    return -1;
+  */
 
-  char name[RTE_ACL_NAMESIZE];
-  struct rte_acl_param ip4acl = {
-    .name = name,
-    .socket_id = 0,
-    .rule_size = RTE_ACL_RULE_SZ (RTE_DIM (ipv4_defs)),
-    .max_rule_num = vec_len (rules->pdr),
-  };
+  acl->match_sdf = 1;
 
-  struct rte_acl_param ip6acl = {
-    .name = name,
-    .socket_id = 0,
-    .rule_size = RTE_ACL_RULE_SZ (RTE_DIM (ipv6_defs)),
-    .max_rule_num = vec_len (rules->pdr),
-  };
-
-  if (rules->flags & SX_SDF_IPV4)
+  if (pdr->pdi.acl.proto == (u8) ~ 0)
     {
-      snprintf (name, sizeof (name), "sx_%" PRIu64 "_sdf_ip4_%d",
-		cp_seid, direction);
-      ctx->ip4 = rte_acl_create (&ip4acl);
-      if (!ctx->ip4)
-	rte_exit (EXIT_FAILURE, "Failed to create ACL context\n");
+      acl->mask.protocol = ~0;
+      acl->match.protocol = pdr->pdi.acl.proto;
     }
 
-  if (rules->flags & SX_SDF_IPV6)
+  switch (pdr->pdi.src_intf)
     {
-      snprintf (name, sizeof (name), "sx_%" PRIu64 "_sdf_ip6_%d",
-		cp_seid, direction);
-      ctx->ip6 = rte_acl_create (&ip6acl);
-      if (!ctx->ip6)
-	rte_exit (EXIT_FAILURE, "Failed to create ACL context\n");
+    case SRC_INTF_ACCESS:
+      ip_assign_address (UPF_ACL_FIELD_DST, IPFILTER_RULE_FIELD_SRC, is_ip4, pdr, acl);
+      ip_assign_address (UPF_ACL_FIELD_SRC, IPFILTER_RULE_FIELD_DST, is_ip4, pdr, acl);
+      ip_assign_port (UPF_ACL_FIELD_DST, IPFILTER_RULE_FIELD_SRC, pdr, acl);
+      ip_assign_port (UPF_ACL_FIELD_SRC, IPFILTER_RULE_FIELD_DST, pdr, acl);
+      break;
+
+    default:
+      ip_assign_address (UPF_ACL_FIELD_SRC, IPFILTER_RULE_FIELD_SRC, is_ip4, pdr, acl);
+      ip_assign_address (UPF_ACL_FIELD_DST, IPFILTER_RULE_FIELD_DST, is_ip4, pdr, acl);
+      ip_assign_port (UPF_ACL_FIELD_DST, IPFILTER_RULE_FIELD_SRC, pdr, acl);
+      ip_assign_port (UPF_ACL_FIELD_SRC, IPFILTER_RULE_FIELD_DST, pdr, acl);
+      break;
     }
-  return 0;
 }
 
 static int
-sx_acl_build (struct rules *rules, int direction)
+compile_ipfilter_rule (int is_ip4, const upf_pdr_t * pdr, upf_acl_t *acl)
 {
-  upf_acl_ctx_t *ctx = &rules->sdf[direction];
+  memset(acl, 0, sizeof(*acl));
 
-  if (ctx->ip4)
-    {
-      struct rte_acl_config cfg = {
-	.num_categories = 1,
-	.num_fields = RTE_DIM (ipv4_defs),
-      };
-      memcpy (&cfg.defs, ipv4_defs, sizeof (ipv4_defs));
+  compile_teid(pdr, acl);
+  compile_sdf(is_ip4, pdr, acl);
+  compile_ue_ip(is_ip4, pdr, acl);
 
-      /* Perform builds */
-      if (rte_acl_build (ctx->ip4, &cfg) != 0)
-	{
-	  // TODO: ctx without rules will fail, find some other way to handle that
-	  gtp_debug ("RTE ACL %s IPv4 build failed, no need to worry!",
-		     direction == UPF_UL ? "UL" : "DL");
-	  rte_acl_free (ctx->ip4);
-	  ctx->ip4 = NULL;
-	}
-      else
-	{
-	  gtp_debug ("RTE ACL %s IPv4 build SUCCEEDED!",
-		     direction == UPF_UL ? "UL" : "DL");
-	  rte_acl_dump (ctx->ip4);
-	}
-    }
-
-  if (ctx->ip6)
-    {
-      struct rte_acl_config cfg = {
-	.num_categories = 1,
-	.num_fields = RTE_DIM (ipv6_defs),
-      };
-      memcpy (&cfg.defs, ipv6_defs, sizeof (ipv6_defs));
-
-      /* Perform builds */
-      if (rte_acl_build (ctx->ip6, &cfg) != 0)
-	{
-	  // TODO: ctx without rules will fail, find some other way to handle that
-	  gtp_debug ("RTE ACL %s IPv6 build failed, no need to worry!",
-		     direction == UPF_UL ? "UL" : "DL");
-	  rte_acl_free (ctx->ip6);
-	  ctx->ip6 = NULL;
-	}
-      else
-	{
-	  rte_acl_dump (ctx->ip6);
-	  gtp_debug ("RTE ACL %s IPv6 build SUCCEEDED!",
-		     direction == UPF_UL ? "UL" : "DL");
-	}
-    }
   return 0;
-}
-
-static void
-sx_acl_free (upf_acl_ctx_t * ctx)
-{
-  rte_acl_free (ctx->ip4);
-  rte_acl_free (ctx->ip6);
 }
 
 static void
@@ -1899,28 +1267,18 @@ rules_add_v6_teid (struct rules *r, const ip6_address_t * addr, u32 teid)
   vec_add1 (r->v6_teid, key);
 }
 
-#define sdf_src_address_type(acl)					\
-  ipfilter_address_cmp_const(&(acl)->src_address, ACL_FROM_ANY) == 0	\
-    ? 0 :								\
-    (ip46_address_is_ip4(&(acl)->src_address.address) ? SX_SDF_IPV4 : SX_SDF_IPV6)
-
-#define sdf_dst_address_type(acl)					\
-  ipfilter_address_cmp_const(&(acl)->dst_address, ACL_TO_ASSIGNED) == 0	\
-    ? 0 :								\
-    (ip46_address_is_ip4(&(acl)->dst_address.address) ? SX_SDF_IPV4 : SX_SDF_IPV6)
-
 static int
 build_sx_rules (upf_session_t * sx)
 {
+  upf_main_t *gtm = &upf_main;
   struct rules *pending = sx_get_rules (sx, SX_PENDING);
-  uint64_t cp_seid = sx->cp_seid;
   upf_pdr_t *pdr;
-
-  pending->flags &= ~(SX_SDF_IPV4 | SX_SDF_IPV6);
 
   vec_foreach (pdr, pending->pdr)
   {
-    printf ("PDR Scan: %d\n", pdr->id);
+    //int direction = (pdr->pdi.src_intf == SRC_INTF_ACCESS) ? UPF_UL : UPF_DL;
+
+    /* create UE IP route from SGi Network Instance into Session */
 
     /*
      * From 3GPP TS 29.244 version 14.3.0, Table 7.5.2.2-2
@@ -1934,44 +1292,36 @@ build_sx_rules (upf_session_t * sx)
 	pdr->pdi.fields & F_PDI_UE_IP_ADDR)
       {
 	ip46_address_fib_t *vrf_ip;
+	u32 fib_index = 0;
+
+	if (pdr->pdi.nwi != ~0)
+	  {
+	    upf_nwi_t *nwi = pool_elt_at_index (gtm->nwis, pdr->pdi.nwi);
+	    fib_index = nwi->vrf;
+	  }
 
 	if (pdr->pdi.ue_addr.flags & IE_UE_IP_ADDRESS_V4)
 	  {
-	    pending->flags |= SX_SDF_IPV4;
-
 	    vec_alloc (pending->vrf_ip, 1);
 	    vrf_ip = vec_end (pending->vrf_ip);
 	    ip46_address_set_ip4 (&vrf_ip->addr, &pdr->pdi.ue_addr.ip4);
-	    vrf_ip->fib_index =
-	      ip4_fib_table_get_index_for_sw_if_index (pdr->pdi.
-						       src_sw_if_index);
+	    vrf_ip->fib_index = fib_index;
 
 	    _vec_len (pending->vrf_ip)++;
 	  }
 
 	if (pdr->pdi.ue_addr.flags & IE_UE_IP_ADDRESS_V6)
 	  {
-	    pending->flags |= SX_SDF_IPV6;
-
 	    vec_alloc (pending->vrf_ip, 1);
 	    vrf_ip = vec_end (pending->vrf_ip);
 	    vrf_ip->addr.ip6 = pdr->pdi.ue_addr.ip6;
-	    vrf_ip->fib_index =
-	      ip6_fib_table_get_index_for_sw_if_index (pdr->pdi.
-						       src_sw_if_index);
+	    vrf_ip->fib_index = fib_index;
 
 	    _vec_len (pending->vrf_ip)++;
 	  }
       }
 
-    if (pdr->pdi.fields & F_PDI_SDF_FILTER)
-      {
-	pending->flags |= sdf_src_address_type (&pdr->pdi.acl);
-	pending->flags |= sdf_dst_address_type (&pdr->pdi.acl);
-      }
-
-    if (pdr->pdi.fields & F_PDI_APPLICATION_ID)
-      pending->flags |= SX_ADR;
+    /* register Local F-TEIDs */
 
     if (pdr->pdi.fields & F_PDI_LOCAL_F_TEID)
       {
@@ -1981,50 +1331,37 @@ build_sx_rules (upf_session_t * sx)
 	if (pdr->pdi.teid.flags & F_TEID_V6)
 	  rules_add_v6_teid (pending, &pdr->pdi.teid.ip6, pdr->pdi.teid.teid);
       }
-  }
-  if (vec_len (pending->pdr) == 0)
-    return 0;
 
-  sx_acl_create (cp_seid, pending, UPF_UL);
-  sx_acl_create (cp_seid, pending, UPF_DL);
-
-  vec_foreach (pdr, pending->pdr)
-  {
-    int direction = (pdr->pdi.src_intf == SRC_INTF_ACCESS) ? UPF_UL : UPF_DL;
-    upf_acl_ctx_t *ctx = &pending->sdf[direction];
-
-    if ((pdr->pdi.fields & F_PDI_APPLICATION_ID))
-      continue;
-
-    if (!(pdr->pdi.fields & F_PDI_SDF_FILTER))
+    if (pdr->pdi.acl.type == IPFILTER_IPV4 || pdr->pdi.acl.type == IPFILTER_WILDCARD)
       {
-	if ((pdr->pdi.fields & F_PDI_LOCAL_F_TEID) &&
-	    !(pdr->pdi.fields & F_PDI_UE_IP_ADDR))
-	  add_wildcard_teid (pending, pdr->pdi.src_intf, pdr->pdi.teid,
-			     pdr - pending->pdr);
+	upf_acl_t *acl;
 
-	if (pdr->pdi.src_intf != SRC_INTF_ACCESS &&
-	    !(pdr->pdi.fields & F_PDI_UE_IP_ADDR))
-	  /* wildcard DL SDF only if UE IP is set */
-	  continue;
+	vec_alloc (pending->v4_acls, 1);
+	acl = vec_end (pending->v4_acls);
+	acl->pdr_idx = pdr - pending->pdr;
+	acl->precedence = pdr->precedence;
 
-	if (pending->flags & SX_SDF_IPV4)
-	  add_wildcard_ip4_sdf (ctx->ip4, pdr, pdr - pending->pdr);
-	if (pending->flags & SX_SDF_IPV6)
-	  add_wildcard_ip6_sdf (ctx->ip6, pdr, pdr - pending->pdr);
-	continue;
+	/* compile PDI into ACL matcher */
+	compile_ipfilter_rule(1 /* is_ip4 */, pdr, acl);
+
+	_vec_len (pending->v4_acls)++;
       }
 
-    if (pending->flags & SX_SDF_IPV4)
-      if (add_ip4_sdf (ctx->ip4, pdr, pdr - pending->pdr) < 0)
-	return -1;
-    if (pending->flags & SX_SDF_IPV6)
-      if (add_ip6_sdf (ctx->ip6, pdr, pdr - pending->pdr) < 0)
-	return -1;
-  }
+    if (pdr->pdi.acl.type == IPFILTER_IPV6 || pdr->pdi.acl.type == IPFILTER_WILDCARD)
+      {
+	upf_acl_t *acl;
 
-  sx_acl_build (pending, UPF_UL);
-  sx_acl_build (pending, UPF_DL);
+	vec_alloc (pending->v6_acls, 1);
+	acl = vec_end (pending->v6_acls);
+	acl->pdr_idx = pdr - pending->pdr;
+	acl->precedence = pdr->precedence;
+
+	/* compile PDI into ACL matcher */
+	compile_ipfilter_rule(0 /* is_ip4 */, pdr, acl);
+
+	_vec_len (pending->v6_acls)++;
+      }
+  }
 
   return 0;
 }
@@ -2066,11 +1403,10 @@ sx_update_apply (upf_session_t * sx)
       pending->v6_teid = active->v6_teid;
       active->v6_teid = NULL;
 
-      pending->wildcard_teid = active->wildcard_teid;
-      active->wildcard_teid = NULL;
-
-      memcpy (&pending->sdf, &active->sdf, sizeof (active->sdf));
-      memset (&active->sdf, 0, sizeof (active->sdf));
+      pending->v4_acls = active->v4_acls;
+      active->v4_acls = NULL;
+      pending->v6_acls = active->v6_acls;
+      active->v6_acls = NULL;
 
       pending->flags = active->flags;
     }
@@ -2802,30 +2138,6 @@ format_pfcp_endpoint (u8 * s, va_list * args)
 	      ep->key.fib_index);
 
   return s;
-}
-
-void
-sx_session_dump_tbls ()
-{
-#if 0
-  //TODO: implement
-  const void *next_key;
-  void *next_data;
-  uint32_t iter;
-
-  printf ("Sx Session Hash:\n");
-  iter = 0;
-  while (rte_hash_iterate (rte_sx_hash, &next_key, &next_data, &iter) >= 0)
-    printf ("  CP F-SEID: %" PRIu64 " @ %p\n", *(uint64_t *) next_key,
-	    next_data);
-
-  printf ("Sx TEID Hash:\n");
-  iter = 0;
-  while (rte_hash_iterate (rte_sx_teid_hash, &next_key, &next_data, &iter) >=
-	 0)
-    printf ("  CP F-SEID: %u (0x%08x) @ %p\n", *(uint32_t *) next_key,
-	    *(uint32_t *) next_key, next_data);
-#endif
 }
 
 /*

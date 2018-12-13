@@ -337,10 +337,9 @@ typedef struct
       u32 teid;
       u16 data_offset;
       u8 flags;
-      u8 src_intf;
+      u8 is_reverse;
       u32 pdr_idx;
       u32 flow_id;
-      u8 flow_direction;
     } gtpu;
 
     u32 unused[6];
