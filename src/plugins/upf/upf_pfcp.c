@@ -2291,12 +2291,12 @@ urr_increment_and_check_counter (u64 * packets, u64 * bytes, u64 * consumed,
   int r = URR_OK;
 
   if (quota != 0 &&
-      unlikely (*consumed < quota && *consumed + n_bytes >= quota))
+      PREDICT_FALSE (*consumed < quota && *consumed + n_bytes >= quota))
     r |= URR_QUOTA_EXHAUSTED;
   *consumed += n_bytes;
 
   if (threshold != 0 &&
-      unlikely (*bytes < threshold && *bytes + n_bytes >= threshold))
+      PREDICT_FALSE (*bytes < threshold && *bytes + n_bytes >= threshold))
     r |= URR_THRESHOLD_REACHED;
   *bytes += n_bytes;
 
@@ -2348,17 +2348,17 @@ process_urrs (vlib_main_t * vm, upf_session_t * sess,
 	  urr_incr_and_check (urr->volume, total,
 			      vlib_buffer_length_in_chain (vm, b));
 
-	if (unlikely (r & URR_QUOTA_EXHAUSTED))
+	if (PREDICT_FALSE (r & URR_QUOTA_EXHAUSTED))
 	  urr->status |= URR_OVER_QUOTA;
       }
 
-    if (unlikely (urr->status & URR_OVER_QUOTA))
+    if (PREDICT_FALSE (urr->status & URR_OVER_QUOTA))
       next = UPF_PROCESS_NEXT_DROP;
   }
 
   clib_spinlock_unlock (&sess->lock);
 
-  if (unlikely (r != URR_OK))
+  if (PREDICT_FALSE (r != URR_OK))
     upf_pfcp_server_session_usage_report (sess);
 
   return next;
