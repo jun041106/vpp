@@ -59,8 +59,6 @@ void sx_update_finish (upf_session_t * sx);
 
 upf_session_t *sx_lookup (uint64_t sess_id);
 
-void sx_session_dump_tbls (void);
-
 static inline struct rules *sx_get_rules (upf_session_t * sx, int rules)
 {
   return &sx->rules[sx->active ^ rules];

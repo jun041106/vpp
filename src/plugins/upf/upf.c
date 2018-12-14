@@ -424,7 +424,7 @@ done:
 /* *INDENT-OFF* */
 VLIB_CLI_COMMAND (upf_nwi_add_del_command, static) =
 {
-  .path = "upf nwi name",
+  .path = "upf nwi",
   .short_help =
   "upf nwi name <name> [vrf <table-id>] [del]",
   .function = upf_nwi_add_del_command_fn,

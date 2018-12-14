@@ -54,6 +54,13 @@ typedef enum
   FT_NEXT_N_NEXT
 } flowtable_next_t;
 
+typedef enum
+{
+  FT_ORIGIN = 0,
+  FT_REVERSE,
+  FT_ORDER_MAX
+} flow_direction_t;
+
 /* key */
 typedef struct
 {
@@ -61,17 +68,9 @@ typedef struct
   {
     struct
     {
-      struct
-      {
-	ip46_address_t src;
-	ip46_address_t dst;
-      } ip;
+      ip46_address_t ip[FT_ORDER_MAX];
       u32 session_id;
-      struct
-      {
-	u16 src;
-	u16 dst;
-      } port;
+      u16 port[FT_ORDER_MAX];
       u8 proto;
     };
     u64 key[6];
@@ -90,13 +89,6 @@ typedef struct
   u32 pkts;
   u64 bytes;
 } flow_stats_t;
-
-typedef enum
-{
-  FT_FORWARD = 0,
-  FT_REVERSE,
-  FT_DIRECTION_MAX
-} flow_direction_t;
 
 typedef enum
 {
@@ -120,7 +112,7 @@ typedef struct flow_entry
   u16 tcp_state;
 
   /* stats */
-  flow_stats_t stats[FT_DIRECTION_MAX];
+  flow_stats_t stats[FT_ORDER_MAX];
 
   /* timers */
   u32 expire;			/* in seconds */
@@ -129,8 +121,8 @@ typedef struct flow_entry
 
   /* UPF data */
   u32 application_id;		/* L7 app index */
-  u32 pdr_id[2];		/* PDRs */
-  u32 next[2];
+  u32 pdr_id[FT_ORDER_MAX];	/* PDRs */
+  u32 next[FT_ORDER_MAX];
 } flow_entry_t;
 
 /* Timers (in seconds) */
@@ -208,11 +200,6 @@ flowtable_lifetime_get (flowtable_timeout_type_t type)
   return (type >= FT_TIMEOUT_TYPE_MAX) ? ~0 : fm->timer_lifetime[type];
 }
 
-int
-flowtable_update (ip46_address_t ip_src, ip46_address_t ip_dst,
-		  u8 ip_upper_proto, u16 port_src, u16 port_dst,
-		  u16 lifetime);
-
 flow_entry_t *flowtable_entry_lookup_create (flowtable_main_t * fm,
 					     flowtable_main_per_cpu_t * fmt,
 					     BVT (clib_bihash_kv) * kv,
@@ -233,21 +220,12 @@ parse_packet_protocol (udp_header_t * udp, uword is_reverse, flow_key_t * key)
   if (key->proto == IP_PROTOCOL_UDP || key->proto == IP_PROTOCOL_TCP)
     {
       /* tcp and udp ports have the same offset */
-      if (is_reverse)
-	{
-	  key->port.src = udp->src_port;
-	  key->port.dst = udp->dst_port;
-	}
-      else
-	{
-	  key->port.src = udp->dst_port;
-	  key->port.dst = udp->src_port;
-	}
+      key->port[FT_ORIGIN  ^ is_reverse] = udp->src_port;
+      key->port[FT_REVERSE ^ is_reverse] = udp->dst_port;
     }
   else
     {
-      key->port.src = 0;
-      key->port.dst = 0;
+      key->port[FT_ORIGIN] = key->port[FT_REVERSE] = 0;
     }
 }
 
@@ -256,17 +234,12 @@ parse_ip4_packet (ip4_header_t * ip4, uword * is_reverse, flow_key_t * key)
 {
   key->proto = ip4->protocol;
 
-  if (ip4_address_compare (&ip4->src_address, &ip4->dst_address) < 0)
-    {
-      ip46_address_set_ip4 (&key->ip.src, &ip4->src_address);
-      ip46_address_set_ip4 (&key->ip.dst, &ip4->dst_address);
-      *is_reverse = 1;
-    }
-  else
-    {
-      ip46_address_set_ip4 (&key->ip.src, &ip4->dst_address);
-      ip46_address_set_ip4 (&key->ip.dst, &ip4->src_address);
-    }
+  *is_reverse =
+    (ip4_address_compare (&ip4->src_address, &ip4->dst_address) < 0) ?
+    FT_REVERSE : FT_ORIGIN;
+
+  ip46_address_set_ip4 (&key->ip[FT_ORIGIN  ^ *is_reverse], &ip4->src_address);
+  ip46_address_set_ip4 (&key->ip[FT_REVERSE ^ *is_reverse], &ip4->dst_address);
 
   parse_packet_protocol ((udp_header_t *) ip4_next_header (ip4), *is_reverse,
 			 key);
@@ -277,17 +250,12 @@ parse_ip6_packet (ip6_header_t * ip6, uword * is_reverse, flow_key_t * key)
 {
   key->proto = ip6->protocol;
 
-  if (ip6_address_compare (&ip6->src_address, &ip6->dst_address) < 0)
-    {
-      ip46_address_set_ip6 (&key->ip.src, &ip6->src_address);
-      ip46_address_set_ip6 (&key->ip.dst, &ip6->dst_address);
-      *is_reverse = 1;
-    }
-  else
-    {
-      ip46_address_set_ip6 (&key->ip.src, &ip6->dst_address);
-      ip46_address_set_ip6 (&key->ip.dst, &ip6->src_address);
-    }
+  *is_reverse =
+    (ip6_address_compare (&ip6->src_address, &ip6->dst_address) < 0) ?
+    FT_REVERSE : FT_ORIGIN;
+
+  ip46_address_set_ip6 (&key->ip[FT_ORIGIN  ^ *is_reverse], &ip6->src_address);
+  ip46_address_set_ip6 (&key->ip[FT_REVERSE ^ *is_reverse], &ip6->dst_address);
 
   parse_packet_protocol ((udp_header_t *) ip6_next_header (ip6), *is_reverse,
 			 key);

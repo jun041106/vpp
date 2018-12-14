@@ -344,7 +344,6 @@ build_user_plane_ip_resource_information(pfcp_user_plane_ip_resource_information
   upf_upip_res_t * res;
 
   /* *INDENT-OFF* */
-
   pool_foreach (res, gtm->upip_res,
   ({
     pfcp_user_plane_ip_resource_information_t *r;
@@ -356,12 +355,16 @@ build_user_plane_ip_resource_information(pfcp_user_plane_ip_resource_information
       {
 	upf_nwi_t *nwi = pool_elt_at_index(gtm->nwis, res->nwi);
 
-	r->flags |= USER_PLANE_IP_RESOURCE_INFORMATION_ASSOCNI;
+	r->flags |= USER_PLANE_IP_RESOURCE_INFORMATION_ASSONI;
 	r->network_instance = vec_dup(nwi->name);
       }
 
-    r->flags |= (res->intf != ~0) ? USER_PLANE_IP_RESOURCE_INFORMATION_ASSOCSI : 0;
-    r->source_intf = res->intf;
+    if (res->intf != (u8)~0)
+      {
+
+	r->flags |= USER_PLANE_IP_RESOURCE_INFORMATION_ASSOSI;
+	r->source_intf = res->intf;
+      }
 
     if (res->mask != 0)
       {
@@ -1042,7 +1045,7 @@ handle_remove_pdr (upf_session_t * sess, pfcp_remove_pdr_t * remove_pdr,
 }
 
 static void
-ip_udp_gtpu_rewrite (upf_far_forward_t * ff)
+ip_udp_gtpu_rewrite (upf_far_forward_t * ff, int is_ip4)
 {
   union
   {
@@ -1052,8 +1055,6 @@ ip_udp_gtpu_rewrite (upf_far_forward_t * ff)
   } r =
   {
   .rw = 0};
-  u8 is_ip4 =
-    ! !(ff->outer_header_creation.description & OUTER_HEADER_CREATION_IP4);
   int len = is_ip4 ? sizeof *r.h4 : sizeof *r.h6;
   u32 sw_if_index = ff->dst_sw_if_index;
 
@@ -1110,6 +1111,41 @@ ip_udp_gtpu_rewrite (upf_far_forward_t * ff)
   return;
 }
 
+/* from src/vnet/ip/ping.c */
+static u32
+upf_ip46_fib_index_from_table_id (u32 table_id, int is_ip4)
+{
+  u32 fib_index = is_ip4 ?
+    ip4_fib_index_from_table_id (table_id) :
+    ip6_fib_index_from_table_id (table_id);
+  return fib_index;
+}
+
+/* from src/vnet/ip/ping.c */
+static fib_node_index_t
+upf_ip46_fib_table_lookup_host (u32 fib_index, ip46_address_t * pa46, int is_ip4)
+{
+  fib_node_index_t fib_entry_index = is_ip4 ?
+    ip4_fib_table_lookup (ip4_fib_get (fib_index), &pa46->ip4, 32) :
+    ip6_fib_table_lookup (fib_index, &pa46->ip6, 128);
+  return fib_entry_index;
+}
+
+/* from src/vnet/ip/ping.c */
+static u32
+upf_ip46_get_resolving_interface (u32 fib_index, ip46_address_t * pa46,
+			      int is_ip4)
+{
+  u32 sw_if_index = ~0;
+  if (~0 != fib_index)
+    {
+      fib_node_index_t fib_entry_index;
+      fib_entry_index = ip46_fib_table_lookup_host (fib_index, pa46, is_ip4);
+      sw_if_index = fib_entry_get_resolving_interface (fib_entry_index);
+    }
+  return sw_if_index;
+}
+
 static int
 handle_create_far (upf_session_t * sess, pfcp_create_far_t * create_far,
 		   struct pfcp_group *grp,
@@ -1128,6 +1164,7 @@ handle_create_far (upf_session_t * sess, pfcp_create_far_t * create_far,
     create = clib_mem_alloc_no_fail (sizeof (*create));
     memset (create, 0, sizeof (*create));
     create->forward.nwi = ~0;
+    create->forward.dst_sw_if_index = ~0;
 
     create->id = far->far_id;
     create->apply_action = far->apply_action;
@@ -1148,6 +1185,7 @@ handle_create_far (upf_session_t * sess, pfcp_create_far_t * create_far,
 		break;
 	      }
 
+	    create->forward.table_id = nwi->vrf;
 	    create->forward.nwi = nwi - gtm->nwis;
 	  }
 
@@ -1167,11 +1205,19 @@ handle_create_far (upf_session_t * sess, pfcp_create_far_t * create_far,
 	if (ISSET_BIT (far->forwarding_parameters.grp.fields,
 		       FORWARDING_PARAMETERS_OUTER_HEADER_CREATION))
 	  {
+	    u32 fib_index;
+	    int is_ip4 =
+	      ! !(ff->outer_header_creation.description & OUTER_HEADER_CREATION_IP4);
+
 	    create->forward.flags |= FAR_F_OUTER_HEADER_CREATION;
 	    create->forward.outer_header_creation =
 	      far->forwarding_parameters.outer_header_creation;
 
-	    ip_udp_gtpu_rewrite (&create->forward);
+	    fib_index = upf_ip46_fib_index_from_table_id (create->forward.table_id, is_ip4);
+	    create->forward.dst_sw_if_index =
+	      upf_ip46_get_resolving_interface (fib_index, pa46, is_ip4);
+
+	    ip_udp_gtpu_rewrite (&create->forward, is_ip4);
 	  }
 	//TODO: transport_level_marking
 	//TODO: forwarding_policy
@@ -1242,10 +1288,14 @@ handle_update_far (upf_session_t * sess, pfcp_update_far_t * update_far,
 		    failed_rule_id->id = far->far_id;
 		    break;
 		  }
+		update->forward.table_id = nwi->vrf;
 		update->forward.nwi = nwi - gtm->nwis;
 	      }
 	    else
-	      update->forward.nwi = ~0;
+	      {
+		update->forward.table_id = 0;
+		update->forward.nwi = ~0;
+	      }
 	  }
 
 	update->forward.dst_intf =
@@ -1264,6 +1314,10 @@ handle_update_far (upf_session_t * sess, pfcp_update_far_t * update_far,
 	if (ISSET_BIT (far->update_forwarding_parameters.grp.fields,
 		       UPDATE_FORWARDING_PARAMETERS_OUTER_HEADER_CREATION))
 	  {
+	    u32 fib_index;
+	    int is_ip4 =
+	      ! !(ff->outer_header_creation.description & OUTER_HEADER_CREATION_IP4);
+
 	    if (ISSET_BIT (far->update_forwarding_parameters.grp.fields,
 			   UPDATE_FORWARDING_PARAMETERS_SXSMREQ_FLAGS) &&
 		far->update_forwarding_parameters.
@@ -1274,7 +1328,11 @@ handle_update_far (upf_session_t * sess, pfcp_update_far_t * update_far,
 	    update->forward.outer_header_creation =
 	      far->update_forwarding_parameters.outer_header_creation;
 
-	    ip_udp_gtpu_rewrite (&update->forward);
+	    fib_index = upf_ip46_fib_index_from_table_id (update->forward.table_id, is_ip4);
+	    create->forward.dst_sw_if_index =
+	      upf_ip46_get_resolving_interface (fib_index, pa46, is_ip4);
+
+	    ip_udp_gtpu_rewrite (&update->forward, is_ip4);
 	  }
 	//TODO: transport_level_marking
 	//TODO: forwarding_policy
@@ -1905,11 +1963,6 @@ handle_session_establishment_request (sx_msg_t * req,
   gtp_debug ("Appy: %d\n", r);
 
   sx_update_finish (sess);
-
-  gtp_debug ("-------------------------------------\n");
-  sx_session_dump_tbls ();
-
-  gtp_debug ("-------------------------------------\n");
 
 out_send_resp:
   if (r == 0)

@@ -32,6 +32,8 @@
 #include <upf/upf_pfcp.h>
 #include <upf/upf_http_redirect_server.h>
 
+#undef CLIB_DEBUG
+#define CLIB_DEBUG 1
 #if (CLIB_DEBUG > 0)
 #define gtp_debug clib_warning
 #else
@@ -247,7 +249,8 @@ upf_get_application_rule (vlib_main_t * vm, vlib_buffer_t * b,
   clib_warning ("New PDR: %p %u (idx %u)\n", adr, adr->id,
 		vnet_buffer (b)->gtpu.pdr_idx);
 
-  flow->next[FT_REVERSE] = FT_NEXT_PROCESS;
+  /* switch return traffic to processing node */
+  flow->next[flow->is_reverse ^ FT_REVERSE] = FT_NEXT_PROCESS;
 }
 
 always_inline int
@@ -439,10 +442,14 @@ upf_classify (vlib_main_t * vm, vlib_node_runtime_t * node,
 	  else if (is_forward)
 	    upf_application_detection (vm, b, flow, active, is_ip4);
 	  else if (!is_forward && flow->application_id != ~0)
-	    upf_get_application_rule (vm, b, flow, active, is_ip4);
+	    {
+	      clib_warning("Reverse Flow and AppId %u\n", flow->application_id);
+	      upf_get_application_rule (vm, b, flow, active, is_ip4);
+	    }
 	  else if (flow->stats[0].bytes > 4096 && flow->stats[1].bytes > 4096)
 	    {
 	      /* stop flow classification after 4k in each direction */
+	      clib_warning("Stopping Flow Classify after 4k");
 	      flow->next[0] = flow->next[1] = FT_NEXT_PROCESS;
 	    }
 

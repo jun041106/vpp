@@ -3172,13 +3172,13 @@ decode_user_plane_ip_resource_information (u8 * data, u16 length, void *p)
       length -= 16;
     }
 
-  if (flags & USER_PLANE_IP_RESOURCE_INFORMATION_ASSOCNI)
+  if (flags & USER_PLANE_IP_RESOURCE_INFORMATION_ASSONI)
     {
       vec_reset_length (v->network_instance);
       vec_add (v->network_instance, data, length);
     }
 
-  if (flags & USER_PLANE_IP_RESOURCE_INFORMATION_ASSOCSI)
+  if (flags & USER_PLANE_IP_RESOURCE_INFORMATION_ASSOSI)
       v->source_intf = get_u8(data) & 0x0f;
 
   return 0;
@@ -3193,7 +3193,7 @@ encode_user_plane_ip_resource_information (void *p, u8 ** vec)
   flags = v->flags & USER_PLANE_IP_RESOURCE_INFORMATION_MASK;
   flags |= (v->teid_range_indication & 0x07) << 2;
   flags |=
-    v->network_instance ? USER_PLANE_IP_RESOURCE_INFORMATION_ASSOCNI : 0;
+    v->network_instance ? USER_PLANE_IP_RESOURCE_INFORMATION_ASSONI : 0;
 
   put_u8 (*vec, flags);
 
@@ -3209,7 +3209,7 @@ encode_user_plane_ip_resource_information (void *p, u8 ** vec)
   if (v->network_instance)
     vec_append (*vec, v->network_instance);
 
-  if (v->flags & USER_PLANE_IP_RESOURCE_INFORMATION_ASSOCSI)
+  if (v->flags & USER_PLANE_IP_RESOURCE_INFORMATION_ASSOSI)
     put_u8(*vec, v->source_intf & 0x0f);
 
   return 0;

@@ -27,49 +27,6 @@
 
 vlib_node_registration_t upf_flow_node;
 
-int
-flowtable_update (ip46_address_t ip_src, ip46_address_t ip_dst,
-		  u8 ip_upper_proto, u16 port_src, u16 port_dst, u16 lifetime)
-{
-  BVT (clib_bihash_kv) kv;
-  flowtable_main_t *fm = &flowtable_main;
-  vlib_thread_main_t *tm = vlib_get_thread_main ();
-  flow_key_t *k;
-  uword cpu_index;
-  u64 hash;
-
-  k = (flow_key_t *) & kv.key;
-  k->ip.src = ip_src;
-  k->ip.dst = ip_dst;
-  k->port.src = port_src;
-  k->port.dst = port_dst;
-  k->proto = ip_upper_proto;
-
-  hash = BV (clib_bihash_hash) (&kv);
-
-  /* TODO: recover handoff dispatch fun to get the correct node index */
-  for (cpu_index = 0; cpu_index < tm->n_vlib_mains; cpu_index++)
-    {
-      flowtable_main_per_cpu_t *fmt = &fm->per_cpu[cpu_index];
-      if (fmt == NULL)
-	continue;
-
-      if (PREDICT_TRUE (BV (clib_bihash_search_inline_with_hash)
-			(&fmt->flows_ht, hash, &kv) == 0))
-	{
-	  flow_entry_t *flow = pool_elt_at_index (fm->flows, kv.value);
-	  if (lifetime != (u16) ~ 0)
-	    {
-	      ASSERT (lifetime < TIMER_MAX_LIFETIME);
-	      flow->lifetime = lifetime;
-	    }
-	  return 0;
-	}
-    }
-
-  return -1;
-}
-
 always_inline void
 flow_entry_cache_fill (flowtable_main_t * fm, flowtable_main_per_cpu_t * fmt)
 {
@@ -214,7 +171,7 @@ flowtable_lifetime_calculate (flowtable_main_t * fm, flow_key_t const *key)
       return fm->timer_lifetime[FT_TIMEOUT_TYPE_TCP];
 
     default:
-      return ip46_address_is_ip4 (&key->ip.src) ?
+      return ip46_address_is_ip4 (&key->ip[FT_ORIGIN]) ?
 	fm->timer_lifetime[FT_TIMEOUT_TYPE_IPV4] :
 	fm->timer_lifetime[FT_TIMEOUT_TYPE_IPV6];
     }
@@ -376,10 +333,10 @@ format_flow_key (u8 * s, va_list * args)
 
   return format (s, "proto 0x%x, %U:%u <-> %U:%u, id %llx",
 		 key->proto,
-		 format_ip46_address, &key->ip.src, IP46_TYPE_ANY,
-		 clib_net_to_host_u16 (key->port.src),
-		 format_ip46_address, &key->ip.dst, IP46_TYPE_ANY,
-		 clib_net_to_host_u16 (key->port.dst), key->session_id);
+		 format_ip46_address, &key->ip[FT_ORIGIN], IP46_TYPE_ANY,
+		 clib_net_to_host_u16 (key->port[FT_ORIGIN]),
+		 format_ip46_address, &key->ip[FT_REVERSE], IP46_TYPE_ANY,
+		 clib_net_to_host_u16 (key->port[FT_REVERSE]), key->session_id);
 }
 
 u8 *
@@ -404,9 +361,9 @@ format_flow (u8 * s, va_list * args)
 		 "app %v, lifetime %u",
 		 format_flow_key, &flow->key,
 		 flow->stats[is_reverse].pkts,
-		 flow->stats[is_reverse ^ 1].pkts,
+		 flow->stats[is_reverse ^ FT_REVERSE].pkts,
 		 flow->pdr_id[is_reverse],
-		 flow->pdr_id[is_reverse ^ 1], app_name, flow->lifetime);
+		 flow->pdr_id[is_reverse ^ FT_REVERSE], app_name, flow->lifetime);
 }
 
 static clib_error_t *

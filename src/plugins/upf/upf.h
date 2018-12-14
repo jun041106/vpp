@@ -343,6 +343,7 @@ typedef struct
 #define DST_INTF_SGI_LAN	2
 #define DST_INTF_CP		3
 #define DST_INTF_LI		4
+  u32 table_id;
   u32 dst_sw_if_index;
   uword nwi;
 
