@@ -264,6 +264,11 @@ ip4_address_is_equal_masked (const ip4_address_t * a,
 			     const ip4_address_t * b,
 			     const ip4_address_t * mask)
 {
+  clib_warning("IP: %U/%U, %U\n",
+	       format_ip4_address, a,
+	       format_ip4_address, b,
+	       format_ip4_address, mask);
+
   return (a->as_u32 & mask->as_u32) == (b->as_u32 & mask->as_u32);
 }
 
@@ -275,6 +280,8 @@ upf_acl_classify_one (vlib_main_t * vm, u32 teid, u8 * data, u8 is_ip4, upf_acl_
   if (!!is_ip4 != !!acl->is_ip4)
     return 0;
 
+  clib_warning ("TEID %08x, Match %08x, ACL %08x\n",
+		teid, acl->match_teid, acl->teid);
   if (acl->match_teid && teid != acl->teid)
     return 0;
 
@@ -285,16 +292,25 @@ upf_acl_classify_one (vlib_main_t * vm, u32 teid, u8 * data, u8 is_ip4, upf_acl_
       switch (acl->match_ue_ip)
 	{
 	case UPF_ACL_UL:
+	  clib_warning("UL: UE %U, Src: %U\n",
+		       format_ip4_address, &acl->ue_ip.ip4,
+		       format_ip4_address, &ip4h->src_address);
 	  if (!ip4_address_is_equal(&acl->ue_ip.ip4, &ip4h->src_address))
 	    return 0;
 	  break;
 	case UPF_ACL_DL:
+	  clib_warning("DL: UE %U, Dst: %U\n",
+		       format_ip4_address, &acl->ue_ip.ip4,
+		       format_ip4_address, &ip4h->dst_address);
 	  if (!ip4_address_is_equal(&acl->ue_ip.ip4, &ip4h->dst_address))
 	    return 0;
 	  break;
 	default:
 	  break;
 	}
+
+      clib_warning("Protocol: 0x%04x/0x%04x, 0x%04x\n",
+		   acl->match.protocol, acl->mask.protocol, ip4h->protocol);
 
       if ((ip4h->protocol & acl->mask.protocol) != (acl->match.protocol & acl->mask.protocol))
 	return 0;
@@ -363,6 +379,8 @@ upf_acl_classify (vlib_main_t * vm, vlib_buffer_t * b, flow_entry_t * flow,
   vnet_buffer (b)->gtpu.pdr_idx = ~0;
 
   acl_vec = is_ip4 ? active->v4_acls : active->v6_acls;
+  clib_warning ("TEID %08x, ACLs %p (%u)\n", teid, acl_vec, vec_len(acl_vec));
+
   vec_foreach (acl, acl_vec)
   {
     if (acl->precedence < precedence &&
@@ -439,6 +457,9 @@ upf_classify (vlib_main_t * vm, vlib_node_runtime_t * node,
 	  is_reverse = vnet_buffer (b)->gtpu.is_reverse;
 	  is_forward = (is_reverse == flow->is_reverse) ? 1 : 0;
 	  vnet_buffer (b)->gtpu.pdr_idx = flow->pdr_id[is_reverse];
+
+	  clib_warning ("is_rev %u, is_fwd %d, pdr_idx %x\n",
+			is_reverse, is_forward, flow->pdr_id[is_reverse]);
 
 	  if (vnet_buffer (b)->gtpu.pdr_idx == ~0)
 	    next = upf_acl_classify (vm, b, flow, active, is_ip4);

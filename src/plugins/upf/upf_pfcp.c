@@ -629,6 +629,7 @@ make_pending_pdr (upf_session_t * sx)
     {
       size_t i;
 
+      clib_warning("Pending V4_ACLS: %p\n", pending->v4_acls);
       pending->pdr = vec_dup (active->pdr);
       vec_foreach_index (i, active->pdr)
       {
@@ -1254,6 +1255,7 @@ compile_ipfilter_rule (int is_ip4, const upf_pdr_t * pdr, u32 pdr_idx, upf_acl_t
   compile_sdf(is_ip4, pdr, acl);
   compile_ue_ip(is_ip4, pdr, acl);
 
+  clib_warning("ACL: ip4 %u, %U\n", is_ip4, format_upf_acl, acl);
   return 0;
 }
 
