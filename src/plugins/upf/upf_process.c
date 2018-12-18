@@ -262,17 +262,13 @@ upf_process (vlib_main_t * vm, vlib_node_runtime_t * node,
 			  b->flags &= ~(VNET_BUFFER_F_OFFLOAD_TCP_CKSUM |
 					VNET_BUFFER_F_OFFLOAD_UDP_CKSUM |
 					VNET_BUFFER_F_OFFLOAD_IP_CKSUM);
-			  vnet_buffer (b)->sw_if_index[VLIB_TX] =
-			    ip4_fib_table_get_index_for_sw_if_index
-			    (far->forward.dst_sw_if_index);
+			  vnet_buffer (b)->sw_if_index[VLIB_TX] = far->forward.table_id;
 			}
 		      else
 			{
 			  b->flags &= ~(VNET_BUFFER_F_OFFLOAD_TCP_CKSUM |
 					VNET_BUFFER_F_OFFLOAD_UDP_CKSUM);
-			  vnet_buffer (b)->sw_if_index[VLIB_TX] =
-			    ip6_fib_table_get_index_for_sw_if_index
-			    (far->forward.dst_sw_if_index);
+			  vnet_buffer (b)->sw_if_index[VLIB_TX] = far->forward.table_id;
 			}
 		      next = UPF_PROCESS_NEXT_IP_INPUT;
 		    }

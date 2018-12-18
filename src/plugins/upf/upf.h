@@ -263,7 +263,7 @@ typedef struct
   u32 db_id;
 } adr_rule_t;
 
-typedef union
+typedef struct
 {
   u8 protocol;
   ip46_address_t src_address;
@@ -277,6 +277,7 @@ typedef struct
   u32 pdr_idx;
   u32 precedence;
 
+  int is_ip4:1;
   int match_teid:1;
   int match_ue_ip:3;
   int match_sdf:1;

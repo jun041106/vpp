@@ -538,18 +538,10 @@ peer_addr_ref (const upf_far_forward_t * fwd)
 
   memset (&key, 0, sizeof (key));
 
-  if (is_ip4)
-    {
-      ip46_address_set_ip4 (&key.addr, &fwd->outer_header_creation.ip4);
-      key.fib_index =
-	ip4_fib_table_get_index_for_sw_if_index (fwd->dst_sw_if_index);
-    }
-  else
-    {
-      key.addr.ip6 = fwd->outer_header_creation.ip6;
-      key.fib_index =
-	ip6_fib_table_get_index_for_sw_if_index (fwd->dst_sw_if_index);
-    }
+  key.addr = fwd->outer_header_creation.ip;
+  key.fib_index = (is_ip4) ?
+    ip4_fib_table_get_index_for_sw_if_index (fwd->dst_sw_if_index) :
+    ip6_fib_table_get_index_for_sw_if_index (fwd->dst_sw_if_index);
 
   peer = hash_get_mem (gtm->peer_index_by_ip, &key);
   if (peer)
@@ -602,18 +594,10 @@ peer_addr_unref (const upf_far_forward_t * fwd)
 
   memset (&key, 0, sizeof (key));
 
-  if (is_ip4)
-    {
-      ip46_address_set_ip4 (&key.addr, &fwd->outer_header_creation.ip4);
-      key.fib_index =
-	ip4_fib_table_get_index_for_sw_if_index (fwd->dst_sw_if_index);
-    }
-  else
-    {
-      key.addr.ip6 = fwd->outer_header_creation.ip6;
-      key.fib_index =
-	ip6_fib_table_get_index_for_sw_if_index (fwd->dst_sw_if_index);
-    }
+  key.addr = fwd->outer_header_creation.ip;
+  key.fib_index = (is_ip4) ?
+    ip4_fib_table_get_index_for_sw_if_index (fwd->dst_sw_if_index) :
+    ip6_fib_table_get_index_for_sw_if_index (fwd->dst_sw_if_index);
 
   peer = hash_get_mem (gtm->peer_index_by_ip, &key);
   ASSERT (peer);
@@ -1097,6 +1081,24 @@ sx_add_del_v6_teid (const void *teid, void *si, int is_add)
   clib_bihash_add_del_24_8 (&gtm->v6_tunnel_by_key, &kv, is_add);
 }
 
+u8 * format_upf_acl (u8 * s, va_list * args)
+{
+  upf_acl_t *acl = va_arg (*args, upf_acl_t *);
+
+  return format(s, "%u: %u, (%u/%u/%u/%u) TEID 0x%08x, UE-IP %U, %u/%u, %U/%U:%u-%u <-> %U/%U:%u-%u",
+		acl->pdr_idx, acl->precedence,
+		!!acl->is_ip4, !!acl->match_teid, !!acl->match_ue_ip, !!acl->match_sdf,
+		acl->teid,
+		format_ip46_address, &acl->ue_ip, IP46_TYPE_ANY,
+		acl->match.protocol, acl->mask.protocol,
+		format_ip46_address, &acl->match.src_address, IP46_TYPE_ANY,
+		format_ip46_address, &acl->mask.src_address, IP46_TYPE_ANY,
+		acl->mask.src_port, acl->match.src_port,
+		format_ip46_address, &acl->match.dst_address, IP46_TYPE_ANY,
+		format_ip46_address, &acl->mask.dst_address, IP46_TYPE_ANY,
+		acl->mask.dst_port, acl->match.dst_port);
+}
+
 /* Maybe should be moved into the core somewhere */
 always_inline void
 ip4_address_mask_from_width (ip4_address_t * a, u32 width)
@@ -1133,13 +1135,13 @@ compile_ue_ip (int is_ip4, const upf_pdr_t * pdr, upf_acl_t *acl)
     {
       acl->match_ue_ip =
 	(pdr->pdi.src_intf == SRC_INTF_ACCESS) ? UPF_ACL_UL : UPF_ACL_DL;
-      acl->ue_ip.ip4 = pdr->pdi.ue_addr.ip4;
+      ip46_address_set_ip4(&acl->ue_ip, &pdr->pdi.ue_addr.ip4);
     }
   else if (!is_ip4 && pdr->pdi.ue_addr.flags & IE_UE_IP_ADDRESS_V6)
     {
       acl->match_ue_ip =
 	(pdr->pdi.src_intf == SRC_INTF_ACCESS) ? UPF_ACL_UL : UPF_ACL_DL;
-      acl->ue_ip.ip6 = pdr->pdi.ue_addr.ip6;
+      ip46_address_set_ip6(&acl->ue_ip, &pdr->pdi.ue_addr.ip6);
     }
 }
 
@@ -1151,12 +1153,13 @@ acl_set_ue_ip (ip46_address_t *ip, ip46_address_t *mask, int is_ip4, const upf_p
 
   if (is_ip4 && pdr->pdi.ue_addr.flags & IE_UE_IP_ADDRESS_V4)
     {
-      ip->ip4 = pdr->pdi.ue_addr.ip4;
+      ip46_address_set_ip4(ip, &pdr->pdi.ue_addr.ip4);
+      ip46_address_mask_ip4(mask);
       ip4_address_mask_from_width(&mask->ip4, 32);
     }
   else if (!is_ip4 && pdr->pdi.ue_addr.flags & IE_UE_IP_ADDRESS_V6)
     {
-      ip->ip6 = pdr->pdi.ue_addr.ip6;
+      ip46_address_set_ip6(ip, &pdr->pdi.ue_addr.ip6);
       ip6_address_mask_from_width(&mask->ip6, 64);
     }
 }
@@ -1179,7 +1182,10 @@ ip_assign_address (int dst, int src, int is_ip4, const upf_pdr_t * pdr, upf_acl_
       *ip = addr->address;
 
       if (is_ip4)
-	ip4_address_mask_from_width(&mask->ip4, addr->mask);
+	{
+	  ip46_address_mask_ip4(mask);
+	  ip4_address_mask_from_width(&mask->ip4, addr->mask);
+	}
       else
 	ip6_address_mask_from_width(&mask->ip6, addr->mask);
     }
@@ -1211,7 +1217,7 @@ static void compile_sdf (int is_ip4, const upf_pdr_t * pdr, upf_acl_t *acl)
 
   acl->match_sdf = 1;
 
-  if (pdr->pdi.acl.proto == (u8) ~ 0)
+  if (pdr->pdi.acl.proto != (u8) ~ 0)
     {
       acl->mask.protocol = ~0;
       acl->match.protocol = pdr->pdi.acl.proto;
@@ -1236,9 +1242,13 @@ static void compile_sdf (int is_ip4, const upf_pdr_t * pdr, upf_acl_t *acl)
 }
 
 static int
-compile_ipfilter_rule (int is_ip4, const upf_pdr_t * pdr, upf_acl_t *acl)
+compile_ipfilter_rule (int is_ip4, const upf_pdr_t * pdr, u32 pdr_idx, upf_acl_t *acl)
 {
   memset(acl, 0, sizeof(*acl));
+
+  acl->is_ip4 = is_ip4;
+  acl->pdr_idx = pdr_idx;
+  acl->precedence = pdr->precedence;
 
   compile_teid(pdr, acl);
   compile_sdf(is_ip4, pdr, acl);
@@ -1340,11 +1350,9 @@ build_sx_rules (upf_session_t * sx)
 
 	vec_alloc (pending->v4_acls, 1);
 	acl = vec_end (pending->v4_acls);
-	acl->pdr_idx = pdr - pending->pdr;
-	acl->precedence = pdr->precedence;
 
 	/* compile PDI into ACL matcher */
-	compile_ipfilter_rule(1 /* is_ip4 */, pdr, acl);
+	compile_ipfilter_rule(1 /* is_ip4 */, pdr, pdr - pending->pdr, acl);
 
 	_vec_len (pending->v4_acls)++;
       }
@@ -1355,11 +1363,9 @@ build_sx_rules (upf_session_t * sx)
 
 	vec_alloc (pending->v6_acls, 1);
 	acl = vec_end (pending->v6_acls);
-	acl->pdr_idx = pdr - pending->pdr;
-	acl->precedence = pdr->precedence;
 
 	/* compile PDI into ACL matcher */
-	compile_ipfilter_rule(0 /* is_ip4 */, pdr, acl);
+	compile_ipfilter_rule(0 /* is_ip4 */, pdr, pdr - pending->pdr, acl);
 
 	_vec_len (pending->v6_acls)++;
       }
@@ -1426,14 +1432,14 @@ sx_update_apply (upf_session_t * sx)
 	      & OUTER_HEADER_CREATION_GTP_IP4)
 	    {
 	      rules_add_v4_teid (pending,
-				 &far->forward.outer_header_creation.ip4,
+				 &far->forward.outer_header_creation.ip.ip4,
 				 far->forward.outer_header_creation.teid);
 	    }
 	  else if (far->forward.outer_header_creation.description
 		   & OUTER_HEADER_CREATION_GTP_IP6)
 	    {
 	      rules_add_v6_teid (pending,
-				 &far->forward.outer_header_creation.ip6,
+				 &far->forward.outer_header_creation.ip.ip6,
 				 far->forward.outer_header_creation.teid);
 	    }
 	}

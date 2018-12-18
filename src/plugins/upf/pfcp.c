@@ -2188,11 +2188,8 @@ format_outer_header_creation (u8 * s, va_list * args)
   if (v->description & OUTER_HEADER_CREATION_GTP)
     s = format (s, ",TEID:%08x", v->teid);
 
-  if (v->description & OUTER_HEADER_CREATION_IP4)
-    s = format (s, ",IP:%U", format_ip4_address, &v->ip4);
-
-  if (v->description & OUTER_HEADER_CREATION_IP6)
-    s = format (s, ",IP:%U", format_ip6_address, &v->ip6);
+  if (v->description & (OUTER_HEADER_CREATION_IP4 | OUTER_HEADER_CREATION_IP6))
+    s = format (s, ",IP:%U", format_ip46_address, &v->ip, IP46_TYPE_ANY);
 
   if (v->description & OUTER_HEADER_CREATION_UDP)
     s = format (s, ",Port:%d", v->port);
@@ -2235,7 +2232,7 @@ decode_outer_header_creation (u8 * data, u16 length, void *p)
     {
       if (length < 4)
 	return PFCP_CAUSE_INVALID_LENGTH;
-      get_ip4 (v->ip4, data);
+      get_ip46_ip4 (v->ip, data);
       length -= 4;
     }
 
@@ -2243,7 +2240,7 @@ decode_outer_header_creation (u8 * data, u16 length, void *p)
     {
       if (length < 16)
 	return PFCP_CAUSE_INVALID_LENGTH;
-      get_ip6 (v->ip6, data);
+      get_ip46_ip6 (v->ip, data);
       length -= 16;
     }
 
@@ -2268,10 +2265,10 @@ encode_outer_header_creation (void *p, u8 ** vec)
     put_u32 (*vec, v->teid);
 
   if (v->description & OUTER_HEADER_CREATION_IP4)
-    put_ip4 (*vec, v->ip4);
+    put_ip46_ip4 (*vec, v->ip);
 
   if (v->description & OUTER_HEADER_CREATION_IP6)
-    put_ip6 (*vec, v->ip6);
+    put_ip46_ip6 (*vec, v->ip);
 
   if (v->description & OUTER_HEADER_CREATION_UDP)
     put_u16 (*vec, v->port);

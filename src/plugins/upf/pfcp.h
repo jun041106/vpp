@@ -540,8 +540,7 @@ typedef struct
   (OUTER_HEADER_CREATION_GTP_IP6 | OUTER_HEADER_CREATION_UDP_IP6)
 
   u32 teid;
-  ip4_address_t ip4;
-  ip6_address_t ip6;
+  ip46_address_t ip;
   u16 port;
 } pfcp_outer_header_creation_t;
 

@@ -34,6 +34,8 @@
 #include <vppinfra/types.h>
 #include <vppinfra/vec.h>
 #include <vppinfra/format.h>
+#include <vnet/fib/ip4_fib.h>
+#include <vnet/fib/ip6_fib.h>
 #include <vnet/ip/ip6_hop_by_hop.h>
 
 #include "pfcp.h"
@@ -1074,7 +1076,7 @@ ip_udp_gtpu_rewrite (upf_far_forward_t * ff, int is_ip4)
 
       ip->src_address =
 	*(ip4_address_t *) ip_interface_get_first_ip (sw_if_index, 1);
-      ip->dst_address = ff->outer_header_creation.ip4;
+      ip->dst_address = ff->outer_header_creation.ip.ip4;
 
       /* we fix up the ip4 header length and checksum after-the-fact */
       ip->checksum = ip4_header_checksum (ip);
@@ -1091,7 +1093,7 @@ ip_udp_gtpu_rewrite (upf_far_forward_t * ff, int is_ip4)
 
       ip->src_address =
 	*(ip6_address_t *) ip_interface_get_first_ip (sw_if_index, 0);
-      ip->dst_address = ff->outer_header_creation.ip6;
+      ip->dst_address = ff->outer_header_creation.ip.ip6;
     }
 
   /* UDP header, randomize src port on something, maybe? */
@@ -1140,7 +1142,7 @@ upf_ip46_get_resolving_interface (u32 fib_index, ip46_address_t * pa46,
   if (~0 != fib_index)
     {
       fib_node_index_t fib_entry_index;
-      fib_entry_index = ip46_fib_table_lookup_host (fib_index, pa46, is_ip4);
+      fib_entry_index = upf_ip46_fib_table_lookup_host (fib_index, pa46, is_ip4);
       sw_if_index = fib_entry_get_resolving_interface (fib_entry_index);
     }
   return sw_if_index;
@@ -1205,9 +1207,11 @@ handle_create_far (upf_session_t * sess, pfcp_create_far_t * create_far,
 	if (ISSET_BIT (far->forwarding_parameters.grp.fields,
 		       FORWARDING_PARAMETERS_OUTER_HEADER_CREATION))
 	  {
+	    pfcp_outer_header_creation_t *ohc =
+	      &far->forwarding_parameters.outer_header_creation;
 	    u32 fib_index;
 	    int is_ip4 =
-	      ! !(ff->outer_header_creation.description & OUTER_HEADER_CREATION_IP4);
+	      ! !(ohc->description & OUTER_HEADER_CREATION_IP4);
 
 	    create->forward.flags |= FAR_F_OUTER_HEADER_CREATION;
 	    create->forward.outer_header_creation =
@@ -1215,7 +1219,7 @@ handle_create_far (upf_session_t * sess, pfcp_create_far_t * create_far,
 
 	    fib_index = upf_ip46_fib_index_from_table_id (create->forward.table_id, is_ip4);
 	    create->forward.dst_sw_if_index =
-	      upf_ip46_get_resolving_interface (fib_index, pa46, is_ip4);
+	      upf_ip46_get_resolving_interface (fib_index, &ohc->ip, is_ip4);
 
 	    ip_udp_gtpu_rewrite (&create->forward, is_ip4);
 	  }
@@ -1314,9 +1318,11 @@ handle_update_far (upf_session_t * sess, pfcp_update_far_t * update_far,
 	if (ISSET_BIT (far->update_forwarding_parameters.grp.fields,
 		       UPDATE_FORWARDING_PARAMETERS_OUTER_HEADER_CREATION))
 	  {
+	    pfcp_outer_header_creation_t *ohc =
+	      &far->update_forwarding_parameters.outer_header_creation;
 	    u32 fib_index;
 	    int is_ip4 =
-	      ! !(ff->outer_header_creation.description & OUTER_HEADER_CREATION_IP4);
+	      ! !(ohc->description & OUTER_HEADER_CREATION_IP4);
 
 	    if (ISSET_BIT (far->update_forwarding_parameters.grp.fields,
 			   UPDATE_FORWARDING_PARAMETERS_SXSMREQ_FLAGS) &&
@@ -1325,12 +1331,11 @@ handle_update_far (upf_session_t * sess, pfcp_update_far_t * update_far,
 	      sx_send_end_marker (sess, far->far_id);
 
 	    update->forward.flags |= FAR_F_OUTER_HEADER_CREATION;
-	    update->forward.outer_header_creation =
-	      far->update_forwarding_parameters.outer_header_creation;
+	    update->forward.outer_header_creation = *ohc;
 
 	    fib_index = upf_ip46_fib_index_from_table_id (update->forward.table_id, is_ip4);
-	    create->forward.dst_sw_if_index =
-	      upf_ip46_get_resolving_interface (fib_index, pa46, is_ip4);
+	    update->forward.dst_sw_if_index =
+	      upf_ip46_get_resolving_interface (fib_index, &ohc->ip, is_ip4);
 
 	    ip_udp_gtpu_rewrite (&update->forward, is_ip4);
 	  }

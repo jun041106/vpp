@@ -272,7 +272,10 @@ upf_acl_classify_one (vlib_main_t * vm, u32 teid, u8 * data, u8 is_ip4, upf_acl_
 {
   udp_header_t *proto_hdr;
 
-  if (teid != 0 && acl->match_teid && teid != acl->teid)
+  if (!!is_ip4 != !!acl->is_ip4)
+    return 0;
+
+  if (acl->match_teid && teid != acl->teid)
     return 0;
 
   if (is_ip4)
@@ -282,18 +285,18 @@ upf_acl_classify_one (vlib_main_t * vm, u32 teid, u8 * data, u8 is_ip4, upf_acl_
       switch (acl->match_ue_ip)
 	{
 	case UPF_ACL_UL:
-	  if (ip4_address_is_equal(&acl->ue_ip.ip4, &ip4h->src_address))
+	  if (!ip4_address_is_equal(&acl->ue_ip.ip4, &ip4h->src_address))
 	    return 0;
 	  break;
 	case UPF_ACL_DL:
-	  if (ip4_address_is_equal(&acl->ue_ip.ip4, &ip4h->dst_address))
+	  if (!ip4_address_is_equal(&acl->ue_ip.ip4, &ip4h->dst_address))
 	    return 0;
 	  break;
 	default:
 	  break;
 	}
 
-      if ((ip4h->protocol & acl->mask.protocol) != acl->match.protocol)
+      if ((ip4h->protocol & acl->mask.protocol) != (acl->match.protocol & acl->mask.protocol))
 	return 0;
 
       if (!ip4_address_is_equal_masked(&ip4h->src_address,
@@ -313,16 +316,16 @@ upf_acl_classify_one (vlib_main_t * vm, u32 teid, u8 * data, u8 is_ip4, upf_acl_
       switch (acl->match_ue_ip)
 	{
 	case UPF_ACL_UL:
-	  if (ip6_address_is_equal(&acl->ue_ip.ip6, &ip6h->src_address))
+	  if (!ip6_address_is_equal(&acl->ue_ip.ip6, &ip6h->src_address))
 	    return 0;
 	  break;
 	case UPF_ACL_DL:
-	  if (ip6_address_is_equal(&acl->ue_ip.ip6, &ip6h->dst_address))
+	  if (!ip6_address_is_equal(&acl->ue_ip.ip6, &ip6h->dst_address))
 	    return 0;
 	  break;
 	}
 
-      if ((ip6h->protocol & acl->mask.protocol) != acl->match.protocol)
+      if ((ip6h->protocol & acl->mask.protocol) != (acl->match.protocol & acl->mask.protocol))
 	return 0;
 
       if (!ip6_address_is_equal_masked(&ip6h->src_address,
