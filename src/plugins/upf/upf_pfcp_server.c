@@ -41,6 +41,8 @@
 #define TW_SECS_PER_CLOCK 10e-3                /* 10ms */
 #define TW_CLOCKS_PER_SECOND (1 / TW_SECS_PER_CLOCK)
 
+#undef CLIB_DEBUG
+#define CLIB_DEBUG 0
 #if CLIB_DEBUG > 0
 #define gtp_debug clib_warning
 #else
