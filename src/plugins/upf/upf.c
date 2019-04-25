@@ -1410,6 +1410,7 @@ upf_init (vlib_main_t * vm)
   if (error)
     return error;
 
+  ASSERT ( 1 == 2 );
   return sx_server_main_init (vm);
 }
 
